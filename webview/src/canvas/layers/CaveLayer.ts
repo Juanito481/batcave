@@ -238,4 +238,38 @@ export function drawCaveEnvironment(rc: RenderContext): void {
 
   // ── Wall details (pipes, LED strip, panels) ──
   drawWallDetails(ctx, zt, zoom, wallH, width, height, rc.now, rc.world);
+
+  // ── Bat Signal (context 100%) ──
+  if (rc.world.isBatSignalActive()) {
+    drawBatSignal(ctx, width, wallH, zoom);
+  }
+}
+
+function drawBatSignal(
+  ctx: CanvasRenderingContext2D,
+  width: number, wallH: number, zoom: number,
+): void {
+  // Light circle on ceiling.
+  const cx = Math.floor(width / 2);
+  const cy = Math.floor(wallH * 0.4);
+  const r = zoom * 12;
+  ctx.fillStyle = "#1a1a30";
+  ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+
+  // Bat silhouette (negative space) — pixel art.
+  const s = Math.max(1, zoom);
+  ctx.fillStyle = "#0a0a12";
+  // Body.
+  ctx.fillRect(cx - s * 2, cy - s, s * 4, s * 3);
+  // Head.
+  ctx.fillRect(cx - s, cy - s * 2, s * 2, s);
+  // Ears.
+  ctx.fillRect(cx - s * 2, cy - s * 3, s, s);
+  ctx.fillRect(cx + s, cy - s * 3, s, s);
+  // Left wing.
+  ctx.fillRect(cx - s * 6, cy - s, s * 4, s * 2);
+  ctx.fillRect(cx - s * 7, cy, s * 2, s);
+  // Right wing.
+  ctx.fillRect(cx + s * 2, cy - s, s * 4, s * 2);
+  ctx.fillRect(cx + s * 5, cy, s * 2, s);
 }

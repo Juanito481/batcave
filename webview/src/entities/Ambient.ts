@@ -3,6 +3,8 @@
  * Draws behind characters/furniture to add depth to the Bat Cave.
  */
 
+import { bus } from "../systems/EventBus";
+
 // --- Flying bats ---
 
 interface Bat {
@@ -206,6 +208,7 @@ export class Ambient {
         if (drip.y >= this.wH - 4) {
           drip.splashTimer = 0;
           drip.y = this.wH - 4;
+          bus.emit("sound:play", { id: "drip", volume: 0.5 });
         }
       } else {
         // Splash animation.

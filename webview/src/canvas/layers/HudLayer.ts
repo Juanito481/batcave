@@ -103,10 +103,13 @@ function drawSpeechBubbles(rc: RenderContext): void {
   ctx.font = `${fontSize}px ${font}`;
   ctx.textAlign = "center";
 
-  // Alfred bubble (show state when not idle).
+  // Alfred bubble (show state or quip).
   const alf = world.alfred;
   const alfredState = world.getAlfredState();
-  if (alfredState !== "idle") {
+  const quip = world.getCurrentQuip();
+  if (quip) {
+    drawBubble(ctx, alf.x, alf.y - zoom * 20, quip, zoom, fontSize);
+  } else if (alfredState !== "idle") {
     const tool = world.getCurrentTool();
     const text = tool ? tool.toLowerCase() : alfredState;
     drawBubble(ctx, alf.x, alf.y - zoom * 20, text, zoom, fontSize);

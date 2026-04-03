@@ -66,6 +66,28 @@ export class BatCaveWorld {
   // Event log (for timeline).
   private eventLog: { type: string; label: string; timestamp: number }[] = [];
 
+  // Alfred quips.
+  private quipTimer = 0;
+  private currentQuip: string | null = null;
+  private quipDisplayTimer = 0;
+  private static readonly QUIPS = [
+    "Shall I prepare the next commit, sir?",
+    "The cave is quiet tonight.",
+    "Your context window is impeccable, sir.",
+    "I've tidied the staging area, sir.",
+    "Might I suggest a well-placed refactor?",
+    "The agents are standing by, sir.",
+    "Another fine session, if I may say so.",
+    "Shall I fetch the test suite, sir?",
+  ];
+
+  // Bat Signal (context 100%).
+  private batSignalTimer = 0;
+  private batSignalShown = false;
+
+  // Write clicks timer.
+  private writeClickTimer = 0;
+
   // Layout.
   private worldWidth = 400;
   private worldHeight = 300;
@@ -275,6 +297,7 @@ export class BatCaveWorld {
           sessionStartedAt: event.sessionStartedAt as number,
           contextFillPct: event.contextFillPct as number,
         };
+        this.checkBatSignal();
         break;
     }
   }
@@ -310,6 +333,21 @@ export class BatCaveWorld {
       this.currentToolTimer -= deltaMs;
       if (this.currentToolTimer <= 0) {
         this.currentTool = null;
+      }
+    }
+    // Alfred quips (every 30-50s when idle).
+    this.updateQuips(deltaMs);
+    // Write clicks during writing state.
+    this.updateWriteClicks(deltaMs);
+    // Bat Signal decay.
+    if (this.batSignalTimer > 0) {
+      this.batSignalTimer -= deltaMs;
+    }
+    // Quip display decay.
+    if (this.quipDisplayTimer > 0) {
+      this.quipDisplayTimer -= deltaMs;
+      if (this.quipDisplayTimer <= 0) {
+        this.currentQuip = null;
       }
     }
   }
@@ -360,6 +398,14 @@ export class BatCaveWorld {
 
   getEventLog(): { type: string; label: string; timestamp: number }[] {
     return this.eventLog;
+  }
+
+  getCurrentQuip(): string | null {
+    return this.currentQuip;
+  }
+
+  isBatSignalActive(): boolean {
+    return this.batSignalTimer > 0;
   }
 
   private logEvent(type: string, label: string): void {
@@ -429,6 +475,46 @@ export class BatCaveWorld {
     const path = this.pathfinder.findPath(char.x, char.y, tx, ty);
     if (path.length > 0) {
       char.moveAlongPath(path);
+    }
+  }
+
+  // ── Alfred quips ─────────────────────────────────────────
+
+  private updateQuips(dt: number): void {
+    if (this.alfredState !== "idle" || this.currentQuip) return;
+    this.quipTimer += dt;
+    // Quip every 30-50s of idle.
+    const threshold = 30000 + (Date.now() % 20000);
+    if (this.quipTimer >= threshold) {
+      this.quipTimer = 0;
+      const idx = Math.floor(Math.random() * BatCaveWorld.QUIPS.length);
+      this.currentQuip = BatCaveWorld.QUIPS[idx];
+      this.quipDisplayTimer = 4000;
+    }
+  }
+
+  // ── Write clicks ─────────────────────────────────────────
+
+  private updateWriteClicks(dt: number): void {
+    if (this.alfredState !== "writing") return;
+    this.writeClickTimer += dt;
+    const interval = 100 + Math.random() * 200;
+    if (this.writeClickTimer >= interval) {
+      this.writeClickTimer = 0;
+      bus.emit("sound:play", { id: "write-click" });
+    }
+  }
+
+  // ── Bat Signal ───────────────────────────────────────────
+
+  private checkBatSignal(): void {
+    const pct = this.usageStats?.contextFillPct ?? 0;
+    if (pct >= 100 && !this.batSignalShown) {
+      this.batSignalShown = true;
+      this.batSignalTimer = 10000;
+    }
+    if (pct < 100) {
+      this.batSignalShown = false;
     }
   }
 }
