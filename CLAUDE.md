@@ -1,29 +1,91 @@
 # CLAUDE.md — Bat Cave
 
-VSCode extension — pixel art visualization of Claude Code activity.
+VSCode extension — pixel art visualization of Claude Code activity in a Batman-themed cave.
 
 ## Stack
 - **Extension host**: TypeScript, esbuild, Node.js
 - **Webview**: React 19, Canvas 2D, Vite
 - **Activity source**: Claude Code JSONL transcripts (`~/.claude/projects/`)
+- **Sound**: Web Audio API (procedural oscillator synthesis, no audio files)
 
 ## Architecture
-- Extension polls JSONL files every 500ms via ActivityMonitor
-- Events forwarded to webview via postMessage
-- Webview renders pixel art via Canvas 2D (imageSmoothingEnabled=false)
-- Game loop: requestAnimationFrame with delta-time clamping
+
+```
+src/
+  extension.ts          — WebviewViewProvider, lifecycle, commands, settings bridge
+  activity-monitor.ts   — JSONL polling (500ms), event parsing, agent identification
+  types.ts              — re-export from shared/
+
+shared/
+  types.ts              — single source of truth: AgentMeta, UsageStats, BatCaveEvent, AGENTS
+
+webview/src/
+  App.tsx               — React root, canvas setup, resize observer, message handler
+  canvas/
+    Renderer.ts         — thin orchestrator, owns ParticleSystem + SoundSystem
+    GameLoop.ts         — requestAnimationFrame with delta-time clamping (100ms max)
+    SpriteGenerator.ts  — procedural 16x32 pixel-art sprites, palette-based
+    layers/
+      render-context.ts — RenderContext interface, shared palette P, seed(), outlineRect()
+      CaveLayer.ts      — floor tiles, wall tiles, stalactites, stalagmites, time-of-day tint, Bat Signal
+      FurnitureLayer.ts — Batcomputer (state-reactive screens), server rack, workbench, display panel, chair, etc.
+      HudLayer.ts       — tool icons, speech bubbles (incl. quips), timeline strip, HUD panel
+  systems/
+    EventBus.ts         — typed pub/sub singleton (bus), decouples systems
+    ParticleSystem.ts   — pool-based (200 max), 5 presets, opaque pixel-art, no alpha
+    SoundSystem.ts      — procedural oscillator sounds, muted by default
+  entities/
+    Character.ts        — animated sprite entity, waypoint movement, enter/exit lifecycle
+    Ambient.ts          — bats, water drips (with sound), dust motes, screen glow
+  world/
+    BatCave.ts          — world state, event handling, agent lifecycle, idle behaviors, quips, Bat Signal
+    Pathfinder.ts       — BFS grid-based, 8-directional, no corner-cutting
+  helpers/
+    color.ts            — darken, lighten, hexToRgb, rgbToHex, clamp
+```
+
+## Characters
+- **Alfred (Claude)** — butler, palette: dark tailcoat + white accent. Permanent.
+- **Giovanni (Batman)** — cowl, palette: grey/black + accent blue #1E7FD8. Permanent. Goes to Batcomputer periodically.
+- **13 Scacchiera agents** — appear/disappear when invoked via Skill/Agent tools.
+
+## Systems
+- **EventBus**: `bus.emit("particle:spawn", ...)`, `bus.emit("sound:play", ...)`. All state changes in BatCave emit events.
+- **ParticleSystem**: presets — `tool-spark` (orange), `agent-enter` (green), `agent-exit` (red), `write-glow`, `think-pulse` (blue). Pool of 200, zero GC.
+- **SoundSystem**: `drip`, `tool-click`, `agent-chime`, `agent-exit`, `think-chime`, `write-click`. All synthesized via OscillatorNode. Muted by default, toggle via command or `batcave.soundEnabled` setting.
+
+## Behaviors
+- **Alfred quips**: 8 butler phrases, shown every 30-50s idle, 4s display.
+- **Giovanni at Batcomputer**: walks to chair every 15-25s, works 6s, wanders away.
+- **Bat Signal**: projects bat silhouette on ceiling when context hits 100%.
+- **Context pressure**: drip frequency scales from 2500ms (0%) to 800ms (100%).
+- **Time-of-day**: warm amber tint daytime (10-16h), cool blue nighttime (21-5h).
+- **Batcomputer screens**: blue=thinking, green=writing, dim=idle. Labels change per state.
+- **Idle wandering**: pathfinder-based, 4-8s interval.
+
+## Commands
+- `Bat Cave: Show` — focus the panel
+- `Bat Cave: Reset View` — reset world state and restart monitor
+- `Bat Cave: Toggle Sound` — enable/disable procedural audio
+
+## Settings
+- `batcave.soundEnabled` (boolean, default: false)
+- `batcave.soundVolume` (0-100, default: 15)
 
 ## Rules
 - All rendering must be pixel-perfect — never enable image smoothing
 - Sprites are 16x32px base size, scaled by integer zoom factor
-- Color palette: dark cave (#0a0a12 bg), Alfred blue (#1E7FD8 accent), Claude terracotta (#D97757)
+- Color palette: dark cave (#0a0a12 bg), accent blue (#1E7FD8), no rgba in ambient layer
 - No external game engines — vanilla Canvas 2D only
+- No external audio files — all sound synthesized via Web Audio oscillators
 - Extension must work with zero configuration — auto-discovers Claude Code transcripts
 - Never modify Claude Code files — read only
+- Particles use opaque palette colors, no globalAlpha (flicker fade instead)
+- Use ctx.save()/restore() around any globalAlpha changes
 
 ## Build
 ```bash
-npm run dev    # Watch mode
+npm run dev    # Watch mode (concurrent ext + webview)
 npm run build  # Production build
 npm run package # .vsix
 ```
