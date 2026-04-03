@@ -48,6 +48,10 @@ export function App() {
         world.setConfig(msg.payload);
       } else if (msg.command === "reset") {
         world.reset();
+      } else if (msg.command === "sound-settings") {
+        const sound = renderer.getSoundSystem();
+        sound.setEnabled(msg.payload.enabled);
+        sound.setVolume(msg.payload.volume / 100);
       }
     };
     window.addEventListener("message", handleMessage);

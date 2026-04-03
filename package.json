@@ -47,8 +47,29 @@
       {
         "command": "batcave.reset",
         "title": "Bat Cave: Reset View"
+      },
+      {
+        "command": "batcave.toggleSound",
+        "title": "Bat Cave: Toggle Sound"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Bat Cave",
+      "properties": {
+        "batcave.soundEnabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable procedural sound effects in the Bat Cave"
+        },
+        "batcave.soundVolume": {
+          "type": "number",
+          "default": 15,
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Sound volume (0-100)"
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run build",

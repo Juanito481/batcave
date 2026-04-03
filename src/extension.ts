@@ -91,6 +91,27 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
     this.view?.webview.postMessage(msg);
   }
 
+  sendSoundSettings(): void {
+    if (!this.view || !this.webviewReady) return;
+    const config = vscode.workspace.getConfiguration("batcave");
+    this.view.webview.postMessage({
+      command: "sound-settings",
+      payload: {
+        enabled: config.get<boolean>("soundEnabled", false),
+        volume: config.get<number>("soundVolume", 15),
+      },
+    });
+  }
+
+  toggleSound(): void {
+    const config = vscode.workspace.getConfiguration("batcave");
+    const current = config.get<boolean>("soundEnabled", false);
+    config.update("soundEnabled", !current, vscode.ConfigurationTarget.Global).then(() => {
+      this.sendSoundSettings();
+      vscode.window.showInformationMessage(`Bat Cave: Sound ${!current ? "ON" : "OFF"}`);
+    });
+  }
+
   private sendConfig(): void {
     const workspaceName =
       vscode.workspace.workspaceFolders?.[0]?.name || "unknown";
@@ -101,6 +122,7 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
         agents: AGENTS,
       },
     });
+    this.sendSoundSettings();
   }
 
   private getHtml(webview: vscode.Webview): string {
@@ -160,6 +182,21 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand("batcave.reset", () => {
       provider.reset();
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("batcave.toggleSound", () => {
+      provider.toggleSound();
+    })
+  );
+
+  // Forward config changes to webview.
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration("batcave")) {
+        provider.sendSoundSettings();
+      }
     })
   );
 }
