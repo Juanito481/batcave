@@ -193,7 +193,7 @@ export class Character {
     // Ground shadow — pixel-art stacked rects (no ellipse API, opaque palette).
     const sz = Math.max(1, zoom);
     const cx = Math.floor(this.x);
-    const sy2 = Math.floor(this.y);
+    const sy2 = Math.floor(this.y) - sz * 2;
     // Outer ring (wider, dimmer).
     ctx.fillStyle = "#0a0816";
     ctx.fillRect(cx - sz * 5, sy2, sz * 10, sz);
