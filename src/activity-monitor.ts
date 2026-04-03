@@ -31,6 +31,9 @@ export class ActivityMonitor {
   private activeAgents = new Set<string>();
   private toolToAgent = new Map<string, string>(); // tool_use_id → agentId
   private lastState: "idle" | "thinking" | "writing" = "idle";
+  private rescanTimer = 0;
+  private static readonly RESCAN_INTERVAL_MS = 5000;
+  private static readonly ESTIMATED_MAX_MESSAGES = 80;
 
   constructor(onEvent: (event: BatCaveEvent) => void) {
     this.onEvent = onEvent;
@@ -94,8 +97,12 @@ export class ActivityMonitor {
   }
 
   private poll(): void {
-    // Re-check for newer transcript files periodically.
-    this.findActiveTranscript();
+    // Re-check for newer transcript files every 5s (not every poll cycle).
+    this.rescanTimer += POLL_INTERVAL_MS;
+    if (this.rescanTimer >= ActivityMonitor.RESCAN_INTERVAL_MS) {
+      this.rescanTimer = 0;
+      this.findActiveTranscript();
+    }
 
     if (!this.currentFile) return;
 
@@ -294,7 +301,8 @@ export class ActivityMonitor {
       agentsSpawnedThisSession: this.agentsSpawnedCount,
       activeModel: "claude-opus-4-6",
       sessionStartedAt: this.sessionStartedAt,
-      contextFillPct: Math.min(100, Math.round((this.messagesCount / 80) * 100)),
+      // Rough estimate: ~80 assistant messages fills the 200k context window.
+      contextFillPct: Math.min(100, Math.round((this.messagesCount / ActivityMonitor.ESTIMATED_MAX_MESSAGES) * 100)),
     });
   }
 }

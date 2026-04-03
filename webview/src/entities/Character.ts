@@ -190,18 +190,18 @@ export class Character {
 
     ctx.globalAlpha = this.opacity;
 
-    // Ground shadow (ellipse drawn on canvas, not in sprite).
-    const shadowW = Math.floor(zoom * 7);
-    const shadowH = Math.max(2, Math.floor(zoom * 1.5));
-    ctx.fillStyle = "#06040e";
-    ctx.beginPath();
-    ctx.ellipse(this.x, this.y, shadowW, shadowH, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // Softer outer ring.
+    // Ground shadow — pixel-art stacked rects (no ellipse API, opaque palette).
+    const sz = Math.max(1, zoom);
+    const cx = Math.floor(this.x);
+    const sy2 = Math.floor(this.y);
+    // Outer ring (wider, dimmer).
     ctx.fillStyle = "#0a0816";
-    ctx.beginPath();
-    ctx.ellipse(this.x, this.y, shadowW + zoom, shadowH + Math.max(1, Math.floor(zoom * 0.5)), 0, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.fillRect(cx - sz * 5, sy2, sz * 10, sz);
+    ctx.fillRect(cx - sz * 4, sy2 - sz, sz * 8, sz);
+    ctx.fillRect(cx - sz * 4, sy2 + sz, sz * 8, sz);
+    // Inner core (narrower, darker).
+    ctx.fillStyle = "#06040e";
+    ctx.fillRect(cx - sz * 3, sy2, sz * 6, sz);
 
     // Sprite.
     if (this.flipped) {

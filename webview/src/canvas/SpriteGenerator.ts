@@ -10,36 +10,13 @@
  * No external PNG files — all art is computed at init.
  */
 
+import { darken, lighten } from "../helpers/color";
+
 export interface SpriteSheet {
   canvas: OffscreenCanvas;
   frameWidth: number;
   frameHeight: number;
   animations: Record<string, { row: number; frames: number; speed: number }>;
-}
-
-// ── Color utilities ──────────────────────────────────────
-
-function clamp(v: number): number {
-  return Math.max(0, Math.min(255, Math.round(v)));
-}
-
-function hexToRgb(hex: string): [number, number, number] {
-  const n = parseInt(hex.slice(1), 16);
-  return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
-}
-
-function rgbToHex(r: number, g: number, b: number): string {
-  return "#" + ((1 << 24) | (clamp(r) << 16) | (clamp(g) << 8) | clamp(b)).toString(16).slice(1);
-}
-
-function darken(hex: string, amount: number): string {
-  const [r, g, b] = hexToRgb(hex);
-  return rgbToHex(r * (1 - amount), g * (1 - amount), b * (1 - amount));
-}
-
-function lighten(hex: string, amount: number): string {
-  const [r, g, b] = hexToRgb(hex);
-  return rgbToHex(r + (255 - r) * amount, g + (255 - g) * amount, b + (255 - b) * amount);
 }
 
 // ── Outline & ground shadow (near-black with warm cave tint) ─
@@ -90,9 +67,13 @@ function deriveShades(p: CharacterPalette): DerivedShades {
 // ── Character palettes ───────────────────────────────────
 
 const PALETTES: Record<string, CharacterPalette> = {
-  claude: {
-    skin: "#E8A080", hair: "#C06040", shirt: "#D97757",
-    pants: "#B85A3A", accent: "#FFFFFF", eyes: "#1a1a2e",
+  alfred: {
+    skin: "#E8C0A0", hair: "#4A4A5A", shirt: "#1A1A2A",
+    pants: "#101820", accent: "#FFFFFF", eyes: "#1a1a2e",
+  },
+  giovanni: {
+    skin: "#E8C0A0", hair: "#101820", shirt: "#2A2A3A",
+    pants: "#1A1A2A", accent: "#1E7FD8", eyes: "#FFFFFF",
   },
   king: {
     skin: "#F0D0A0", hair: "#FFD700", shirt: "#4A0E6B",
@@ -188,6 +169,10 @@ const LEGS_STRIDE = [
 ];
 
 const ACCESSORY_TEMPLATES: Record<string, string[]> = {
+  giovanni: [
+    "..A.AAAA.A..",
+    "..AAAAAAAA..",
+  ],
   king: [
     "..A.AAAA.A..",
     "...AAAAAA...",
