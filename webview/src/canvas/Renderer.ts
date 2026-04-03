@@ -104,6 +104,12 @@ export class Renderer {
     // ── Ambient (behind furniture) ──
     this.world.getAmbient().draw(ctx, zoom);
 
+    // ── Stalagmites (from floor, before furniture) ──
+    this.drawStalagmites(ctx, cols, zt, zoom);
+
+    // ── Wall details (pipes, LED strip, panels) ──
+    this.drawWallDetails(ctx, zt, zoom, wallH);
+
     // ── Furniture ──
     const bcTilesW = Math.min(5, cols - 2);
     const bcW = zt * bcTilesW;
@@ -115,6 +121,9 @@ export class Renderer {
     this.drawWorkbench(ctx, Math.floor(bcX - zt * 6.5), bcY, zt, zoom);
     this.drawBookshelf(ctx, bcX + bcW + zt, bcY - zt, zt, zoom);
     this.drawBatcomputer(ctx, bcX, bcY, zt, zoom, bcTilesW);
+
+    // ── Floor objects (crates, chair, debris) ──
+    this.drawFloorObjects(ctx, bcX, bcY, zt, zoom, bcTilesW);
 
     // ── Characters (Y-sorted) ──
     const agents = this.world.getAgentCharacters();
@@ -300,7 +309,7 @@ export class Renderer {
 
       // Screen label.
       ctx.fillStyle = screenColors[i];
-      ctx.font = `bold ${Math.max(6, zoom * 3)}px monospace`;
+      ctx.font = `bold ${Math.max(6, zoom * 3)}px "DM Mono", monospace`;
       ctx.textAlign = "center";
       ctx.fillText(screenLabels[i], sx + sw / 2, y + gap + sh - zoom * 2);
     }
@@ -451,10 +460,11 @@ export class Renderer {
     }
 
     // Books (opaque colors, with spine highlight).
+    // Desaturated, darker book colors — Fox palette sensibility.
     const bookColors = [
-      Renderer.ACCENT, "#D97757", "#2ECC71", "#9B59B6",
-      "#E74C3C", "#F39C12", "#1ABC9C", Renderer.ACCENT,
-      "#D97757", "#3498DB", "#E67E22", "#8E44AD",
+      "#1a5a8a", "#8a4a3a", "#2a7a4a", "#5a3a6a",
+      "#7a2a2a", "#8a6a2a", "#2a6a5a", "#1a5a8a",
+      "#8a4a3a", "#2a4a7a", "#7a5a2a", "#4a2a5a",
     ];
     let bookIdx = 0;
     for (let s = 0; s < shelves; s++) {
@@ -513,58 +523,370 @@ export class Renderer {
     ctx.fillRect(rackRightX - zoom, cableY - zoom, zoom * 2, zoom * 4);
   }
 
+  // ── Stalagmites (from floor) ────────────────────────────
+
+  private drawStalagmites(
+    ctx: CanvasRenderingContext2D,
+    cols: number, zt: number, zoom: number,
+  ): void {
+    for (let x = 0; x < cols; x++) {
+      const s1 = this.seed(x * 5 + 43);
+      const s2 = this.seed(x * 7 + 89);
+
+      // Every 4-5 tiles, a stalagmite from the floor.
+      if (x % 4 === 2 && s1 > 0.3) {
+        const h = Math.floor(zoom * (3 + s1 * 6));
+        const w = Math.floor(zoom * (1.5 + s2));
+        const sx = x * zt + zt / 2 - Math.floor(w / 2);
+        const baseY = this.height;
+
+        // Body.
+        ctx.fillStyle = Renderer.WALL_EDGE;
+        ctx.fillRect(sx, baseY - h, w, h);
+        // Tip (narrower).
+        ctx.fillStyle = Renderer.WALL_MID;
+        ctx.fillRect(sx + Math.floor(w / 4), baseY - h - zoom, Math.ceil(w / 2), zoom);
+        // Highlight on left.
+        ctx.fillStyle = Renderer.WALL_LIGHT;
+        ctx.fillRect(sx, baseY - h, Math.max(1, Math.floor(zoom / 2)), h);
+        // Shadow on right.
+        ctx.fillStyle = Renderer.WALL_DARK;
+        ctx.fillRect(sx + w - Math.max(1, Math.floor(zoom / 2)), baseY - h, Math.max(1, Math.floor(zoom / 2)), h);
+      }
+
+      // Smaller rubble between stalagmites.
+      if (x % 4 !== 2 && s2 > 0.65) {
+        const h = Math.floor(zoom * (1 + s1 * 2));
+        ctx.fillStyle = Renderer.WALL_EDGE;
+        ctx.fillRect(x * zt + zt / 2, this.height - h, zoom, h);
+      }
+    }
+  }
+
+  // ── Wall details (pipes, LED strip, panels) ───────────
+
+  private drawWallDetails(
+    ctx: CanvasRenderingContext2D,
+    zt: number, zoom: number, wallH: number,
+  ): void {
+    // Horizontal pipe running along the wall.
+    const pipeY = wallH - Math.floor(zt * 0.3);
+    ctx.fillStyle = "#141428";
+    ctx.fillRect(0, pipeY, this.width, zoom * 2);
+    // Pipe highlight (top edge).
+    ctx.fillStyle = Renderer.HIGHLIGHT;
+    ctx.fillRect(0, pipeY, this.width, Math.max(1, Math.floor(zoom / 2)));
+    // Pipe shadow (bottom edge).
+    ctx.fillStyle = "#0a0a18";
+    ctx.fillRect(0, pipeY + zoom * 2, this.width, Math.max(1, Math.floor(zoom / 2)));
+
+    // Pipe brackets every few tiles.
+    for (let x = zt * 2; x < this.width - zt; x += zt * 3) {
+      ctx.fillStyle = "#1a1a2e";
+      ctx.fillRect(x, pipeY - zoom, zoom * 2, zoom * 4);
+      ctx.fillStyle = Renderer.OUTLINE;
+      ctx.fillRect(x, pipeY - zoom, zoom * 2, Math.max(1, Math.floor(zoom / 2)));
+    }
+
+    // LED strip along wall bottom — subtle accent glow.
+    const ledY = wallH - zoom;
+    const now = Date.now();
+    for (let x = 0; x < this.width; x += zoom * 6) {
+      const phase = Math.sin(now / 1200 + x * 0.01);
+      ctx.fillStyle = phase > 0.3 ? "#122840" : "#0e1e30";
+      ctx.fillRect(x, ledY, zoom * 4, zoom);
+    }
+
+    // Wall-mounted monitor (right side).
+    const monX = this.width - zt * 4;
+    const monY = Math.floor(wallH * 0.25);
+    const monW = zt * 2;
+    const monH = Math.floor(zt * 1.2);
+
+    // Bezel.
+    ctx.fillStyle = "#0a0a14";
+    ctx.fillRect(monX - zoom, monY - zoom, monW + zoom * 2, monH + zoom * 2);
+    // Screen.
+    ctx.fillStyle = "#060610";
+    ctx.fillRect(monX, monY, monW, monH);
+    // Content — dark green terminal look.
+    const monPulse = Math.sin(now / 1500 + 3);
+    ctx.fillStyle = monPulse > 0 ? "#0a2a0a" : "#081e08";
+    ctx.fillRect(monX + zoom, monY + zoom, monW - zoom * 2, monH - zoom * 2);
+    // Scanlines.
+    ctx.fillStyle = "#040408";
+    for (let sl = 0; sl < monH; sl += zoom * 2) {
+      ctx.fillRect(monX, monY + sl, monW, Math.max(1, Math.floor(zoom / 2)));
+    }
+    // Mount bracket.
+    ctx.fillStyle = "#141428";
+    ctx.fillRect(monX + Math.floor(monW / 2) - zoom, monY + monH, zoom * 2, zoom * 2);
+  }
+
+  // ── Floor objects (crates, chair, debris) ─────────────
+
+  private drawFloorObjects(
+    ctx: CanvasRenderingContext2D,
+    bcX: number, bcY: number, zt: number, zoom: number, bcTilesW: number,
+  ): void {
+    const bcW = zt * bcTilesW;
+    const bcBottom = bcY + Math.floor(zt * 1.5) + zoom * 3;
+
+    // Chair in front of batcomputer.
+    const chairX = Math.floor(bcX + bcW / 2 - zoom * 3);
+    const chairY = bcBottom + zoom * 4;
+    // Seat.
+    ctx.fillStyle = "#1a1a2a";
+    ctx.fillRect(chairX, chairY, zoom * 6, zoom * 2);
+    ctx.fillStyle = Renderer.HIGHLIGHT;
+    ctx.fillRect(chairX, chairY, zoom * 6, Math.max(1, Math.floor(zoom / 2)));
+    // Backrest.
+    ctx.fillStyle = "#161624";
+    ctx.fillRect(chairX + zoom, chairY - zoom * 3, zoom * 4, zoom * 3);
+    ctx.fillStyle = Renderer.HIGHLIGHT;
+    ctx.fillRect(chairX + zoom, chairY - zoom * 3, zoom * 4, Math.max(1, Math.floor(zoom / 2)));
+    // Legs.
+    ctx.fillStyle = "#101018";
+    ctx.fillRect(chairX + zoom, chairY + zoom * 2, zoom, zoom * 2);
+    ctx.fillRect(chairX + zoom * 4, chairY + zoom * 2, zoom, zoom * 2);
+    // Outline.
+    this.drawOutlineRect(ctx, chairX, chairY - zoom * 3, zoom * 6, zoom * 7, zoom);
+
+    // Crate (left side, near workbench).
+    const crateX = Math.floor(bcX - zt * 5);
+    const crateY = this.height - zoom * 10;
+    const crateW = zoom * 7;
+    const crateH = zoom * 6;
+    // Body.
+    ctx.fillStyle = "#1e1a14";
+    ctx.fillRect(crateX, crateY, crateW, crateH);
+    // Top highlight.
+    ctx.fillStyle = "#2a2418";
+    ctx.fillRect(crateX, crateY, crateW, zoom);
+    // Shadow on right.
+    ctx.fillStyle = "#141210";
+    ctx.fillRect(crateX + crateW - zoom, crateY, zoom, crateH);
+    // Cross planks.
+    ctx.fillStyle = "#24200a";
+    ctx.fillRect(crateX + zoom, crateY + Math.floor(crateH / 2) - Math.max(1, Math.floor(zoom / 2)), crateW - zoom * 2, zoom);
+    ctx.fillRect(crateX + Math.floor(crateW / 2) - Math.max(1, Math.floor(zoom / 2)), crateY + zoom, zoom, crateH - zoom * 2);
+    // Outline.
+    this.drawOutlineRect(ctx, crateX, crateY, crateW, crateH, zoom);
+
+    // Second smaller crate stacked on top.
+    const crate2W = zoom * 5;
+    const crate2H = zoom * 4;
+    const crate2X = crateX + zoom;
+    const crate2Y = crateY - crate2H;
+    ctx.fillStyle = "#1a1610";
+    ctx.fillRect(crate2X, crate2Y, crate2W, crate2H);
+    ctx.fillStyle = "#262010";
+    ctx.fillRect(crate2X, crate2Y, crate2W, zoom);
+    ctx.fillStyle = "#12100c";
+    ctx.fillRect(crate2X + crate2W - zoom, crate2Y, zoom, crate2H);
+    this.drawOutlineRect(ctx, crate2X, crate2Y, crate2W, crate2H, zoom);
+
+    // Crate (right side, near bookshelf).
+    const crateRX = bcX + bcW + zt * 3 + zoom * 2;
+    const crateRY = this.height - zoom * 8;
+    const crateRW = zoom * 6;
+    const crateRH = zoom * 5;
+    ctx.fillStyle = "#1a1614";
+    ctx.fillRect(crateRX, crateRY, crateRW, crateRH);
+    ctx.fillStyle = "#242018";
+    ctx.fillRect(crateRX, crateRY, crateRW, zoom);
+    ctx.fillStyle = "#121010";
+    ctx.fillRect(crateRX + crateRW - zoom, crateRY, zoom, crateRH);
+    this.drawOutlineRect(ctx, crateRX, crateRY, crateRW, crateRH, zoom);
+
+    // Floor debris / scattered tools.
+    const debrisSeeds = [17, 53, 89, 127, 163];
+    for (const dSeed of debrisSeeds) {
+      const s = this.seed(dSeed);
+      const dx = s * (this.width - zt * 2) + zt;
+      const dy = this.height - zoom * (2 + s * 3);
+      ctx.fillStyle = s > 0.5 ? "#1a1a28" : "#181822";
+      ctx.fillRect(Math.floor(dx), Math.floor(dy), zoom, zoom);
+    }
+
+    // Floor cable running from server rack area.
+    const cableStartX = Math.floor(bcX - zt * 2);
+    const cableEndX = Math.floor(bcX - zt * 5.5);
+    const cableY = this.height - zoom * 3;
+    ctx.fillStyle = "#0e0e1c";
+    ctx.fillRect(cableEndX, cableY, cableStartX - cableEndX, zoom);
+    // Cable connector dot.
+    ctx.fillStyle = "#1a2a1a";
+    ctx.fillRect(cableEndX, cableY - zoom, zoom * 2, zoom * 3);
+  }
+
   // ── HUD ────────────────────────────────────────────────
 
   private drawHUD(ctx: CanvasRenderingContext2D, zoom: number): void {
     const stats = this.world.getUsageStats();
     const pad = zoom * 4;
-    const barW = zoom * 40;
+    const barW = zoom * 44;
     const x = this.width - barW - pad * 2;
     const y = pad;
-    const panelH = zoom * 40;
+    const font = `"DM Mono", monospace`;
+    const smallFont = Math.max(6, zoom * 3.5);
+    const medFont = Math.max(7, zoom * 4);
+    const bigFont = Math.max(8, zoom * 5);
+    const lineH = zoom * 5;
 
-    // Panel background (opaque).
+    // ── Panel background ──
+    const activeAgentNames = this.world.getActiveAgentNames();
+    const agentListH = activeAgentNames.length > 0 ? (activeAgentNames.length + 1) * lineH : 0;
+    const panelH = zoom * 46 + agentListH;
+
     ctx.fillStyle = "#08080f";
     ctx.fillRect(x - pad, y - pad, barW + pad * 2, panelH);
-    // Panel top accent line.
+    // Left accent border.
+    ctx.fillStyle = Renderer.ACCENT;
+    ctx.fillRect(x - pad, y - pad, zoom, panelH);
+    // Top accent line.
     ctx.fillStyle = "#152a44";
     ctx.fillRect(x - pad, y - pad, barW + pad * 2, zoom);
 
-    // Title.
+    // ── Title ──
     ctx.fillStyle = Renderer.ACCENT;
-    ctx.font = `bold ${zoom * 5}px monospace`;
+    ctx.font = `bold ${bigFont}px ${font}`;
     ctx.textAlign = "left";
     ctx.fillText("BAT CAVE", x, y + zoom * 4);
 
-    // Context fill bar.
+    // Model badge.
+    ctx.fillStyle = "#333348";
+    const modelText = stats?.activeModel || "opus-4-6";
+    const modelShort = modelText.replace("claude-", "");
+    ctx.font = `${smallFont}px ${font}`;
+    ctx.fillText(modelShort, x + barW - ctx.measureText(modelShort).width, y + zoom * 4);
+
+    // ── Context bar ──
+    const barY = y + zoom * 7;
     const pct = stats ? stats.contextFillPct / 100 : 0;
     const barColor = pct < 0.5 ? "#2ECC71" : pct < 0.8 ? "#F39C12" : "#E74C3C";
+    // Track.
     ctx.fillStyle = "#1a1a2e";
-    ctx.fillRect(x, y + zoom * 7, barW, zoom * 3);
+    ctx.fillRect(x, barY, barW, zoom * 3);
+    // Fill.
     ctx.fillStyle = barColor;
-    ctx.fillRect(x, y + zoom * 7, barW * pct, zoom * 3);
+    ctx.fillRect(x, barY, barW * pct, zoom * 3);
+    // Notch markers at 25%, 50%, 75%.
+    ctx.fillStyle = "#0a0a16";
+    for (const mark of [0.25, 0.5, 0.75]) {
+      ctx.fillRect(x + barW * mark, barY, zoom, zoom * 3);
+    }
+    // Percentage on bar.
+    ctx.fillStyle = "#CCCCDD";
+    ctx.font = `bold ${smallFont}px ${font}`;
+    ctx.fillText(`${stats?.contextFillPct ?? 0}%`, x + zoom * 2, barY + zoom * 2.5);
 
-    // Counters.
-    ctx.fillStyle = "#8888AA";
-    ctx.font = `${zoom * 4}px monospace`;
-    const lineH = zoom * 5;
-    const startY = y + zoom * 14;
-    ctx.fillText(`CTX ${stats?.contextFillPct ?? 0}%`, x, startY);
-    ctx.fillText(`MSG ${stats?.messagesThisSession ?? 0}`, x, startY + lineH);
-    ctx.fillText(`TOOLS ${stats?.toolCallsThisSession ?? 0}`, x, startY + lineH * 2);
-    ctx.fillText(`AGENTS ${stats?.agentsSpawnedThisSession ?? 0}`, x, startY + lineH * 3);
+    // ── Counters grid (2 columns) ──
+    ctx.font = `${medFont}px ${font}`;
+    const gridY = barY + zoom * 6;
+    const col2X = x + barW / 2;
 
-    // State indicator (bottom-left).
+    // Row 1: MSG + TOOLS
+    ctx.fillStyle = "#666680";
+    ctx.fillText("MSG", x, gridY);
+    ctx.fillStyle = "#AAAACC";
+    ctx.fillText(`${stats?.messagesThisSession ?? 0}`, x + zoom * 11, gridY);
+    ctx.fillStyle = "#666680";
+    ctx.fillText("TOOLS", col2X, gridY);
+    ctx.fillStyle = "#AAAACC";
+    ctx.fillText(`${stats?.toolCallsThisSession ?? 0}`, col2X + zoom * 13, gridY);
+
+    // Row 2: AGENTS + ACTIVE
+    const row2Y = gridY + lineH;
+    ctx.fillStyle = "#666680";
+    ctx.fillText("SPAWN", x, row2Y);
+    ctx.fillStyle = "#AAAACC";
+    ctx.fillText(`${stats?.agentsSpawnedThisSession ?? 0}`, x + zoom * 13, row2Y);
+    const activeCount = this.world.getActiveAgentCount();
+    ctx.fillStyle = "#666680";
+    ctx.fillText("ACTIVE", col2X, row2Y);
+    ctx.fillStyle = activeCount > 0 ? "#2ECC71" : "#555566";
+    ctx.fillText(`${activeCount}`, col2X + zoom * 14, row2Y);
+
+    // ── Divider ──
+    const divY = row2Y + lineH;
+    ctx.fillStyle = "#1a1a2e";
+    ctx.fillRect(x, divY, barW, zoom);
+
+    // ── Active agents list ──
+    if (activeAgentNames.length > 0) {
+      const agentStartY = divY + lineH;
+      ctx.fillStyle = "#666680";
+      ctx.font = `${smallFont}px ${font}`;
+      ctx.fillText("ACTIVE AGENTS", x, agentStartY);
+
+      ctx.fillStyle = "#AAAACC";
+      ctx.font = `${smallFont}px ${font}`;
+      for (let i = 0; i < activeAgentNames.length; i++) {
+        // Green dot.
+        ctx.fillStyle = "#2ECC71";
+        ctx.fillRect(x, agentStartY + (i + 1) * lineH - zoom * 2, zoom * 2, zoom * 2);
+        // Name.
+        ctx.fillStyle = "#AAAACC";
+        ctx.fillText(activeAgentNames[i], x + zoom * 4, agentStartY + (i + 1) * lineH);
+      }
+    }
+
+    // ── Activity sparkline (bottom of panel) ──
+    const sparkY = divY + lineH + agentListH + zoom * 2;
+    ctx.fillStyle = "#666680";
+    ctx.font = `${smallFont}px ${font}`;
+    ctx.fillText("ACTIVITY", x, sparkY);
+
+    // Draw a mini bar chart using tool call activity.
+    const sparkBarY = sparkY + zoom * 2;
+    const sparkBarH = zoom * 4;
+    const bars = 16;
+    const barWidth = Math.floor(barW / bars);
+    const now = Date.now();
+    for (let i = 0; i < bars; i++) {
+      // Simulate activity based on time + message count.
+      const s = this.seed(i + Math.floor(now / 2000));
+      const activity = stats ? Math.min(1, (stats.toolCallsThisSession / 50) * s) : s * 0.1;
+      const h = Math.max(zoom, Math.floor(sparkBarH * activity));
+      ctx.fillStyle = activity > 0.5 ? "#1a4a6e" : "#122030";
+      ctx.fillRect(x + i * barWidth, sparkBarY + sparkBarH - h, barWidth - zoom, h);
+    }
+
+    // ── State indicator (bottom-left) ──
     const state = this.world.getClaudeState();
     const stateColor: Record<string, string> = {
       idle: "#555566", thinking: Renderer.ACCENT, writing: "#2ECC71",
     };
+    // State dot (pulsing when active).
+    const dotSize = zoom * 3;
     ctx.fillStyle = stateColor[state] || "#555566";
-    ctx.fillRect(pad, this.height - pad - zoom * 6, zoom * 3, zoom * 3);
+    ctx.fillRect(pad, this.height - pad - zoom * 6, dotSize, dotSize);
+    // Pulse ring when not idle.
+    if (state !== "idle") {
+      const pulse = Math.sin(now / 300) * 0.5 + 0.5;
+      const ringSize = dotSize + Math.floor(pulse * zoom * 2);
+      ctx.fillStyle = state === "thinking" ? "#0e2040" : "#0e2a0e";
+      ctx.fillRect(
+        pad - Math.floor((ringSize - dotSize) / 2),
+        this.height - pad - zoom * 6 - Math.floor((ringSize - dotSize) / 2),
+        ringSize, ringSize
+      );
+      ctx.fillStyle = stateColor[state];
+      ctx.fillRect(pad, this.height - pad - zoom * 6, dotSize, dotSize);
+    }
+    // State label.
     ctx.fillStyle = "#AAAACC";
-    ctx.font = `${zoom * 4}px monospace`;
+    ctx.font = `bold ${medFont}px ${font}`;
     ctx.textAlign = "left";
     ctx.fillText(state.toUpperCase(), pad + zoom * 5, this.height - pad - zoom * 4);
+
+    // Tool in use (if thinking/writing).
+    if (state !== "idle") {
+      ctx.fillStyle = "#555566";
+      ctx.font = `${smallFont}px ${font}`;
+      ctx.fillText("working...", pad + zoom * 5, this.height - pad - zoom * 1);
+    }
   }
 }
 

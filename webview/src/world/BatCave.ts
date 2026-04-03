@@ -6,6 +6,7 @@
 import { Character } from "../entities/Character";
 import { Ambient } from "../entities/Ambient";
 import { generateAllSprites, SpriteSheet } from "../canvas/SpriteGenerator";
+import { Pathfinder, Rect } from "./Pathfinder";
 
 interface UsageStats {
   messagesThisSession: number;
@@ -31,6 +32,10 @@ export class BatCaveWorld {
   // Ambient life.
   private ambient: Ambient;
 
+  // Pathfinding.
+  private pathfinder: Pathfinder;
+  private obstacles: Rect[] = [];
+
   // State.
   private claudeState: "idle" | "thinking" | "writing" = "idle";
   private usageStats: UsageStats | null = null;
@@ -46,6 +51,7 @@ export class BatCaveWorld {
   constructor() {
     this.sprites = generateAllSprites();
     this.ambient = new Ambient();
+    this.pathfinder = new Pathfinder();
 
     const claudeSprite = this.sprites.get("claude")!;
     this.claude = new Character(
@@ -59,9 +65,47 @@ export class BatCaveWorld {
     this.worldWidth = w;
     this.worldHeight = h;
     this.wallH = wallH;
-    // Position Claude in the lower-center area (below wall + batcomputer).
+
+    const T = 16;
+    const zoom = Math.max(2, Math.min(Math.floor(w / (16 * T)), Math.floor(h / (8 * T))));
+    const zt = T * zoom;
+
+    // Batcomputer geometry (must match Renderer).
+    const bcTilesW = Math.min(5, Math.ceil(w / zt) - 1);
+    const bcW = zt * bcTilesW;
+    const bcX = Math.floor((w - bcW) / 2);
+    const bcY = wallH + zoom * 2;
+    const bcH = Math.floor(zt * 1.5);
+
+    // Build obstacle rects matching Renderer furniture positions.
+    this.obstacles = [
+      // Cave wall (entire top area is not walkable).
+      { x: 0, y: 0, w: w, h: wallH },
+      // Batcomputer + desk legs.
+      { x: bcX, y: bcY, w: bcW, h: bcH + zoom * 3 },
+      // Server rack.
+      { x: bcX - zt * 3, y: Math.floor(bcY - zt * 1.5), w: zt * 2, h: zt * 3 },
+      // Workbench.
+      { x: Math.floor(bcX - zt * 6.5), y: bcY, w: zt * 3, h: Math.floor(zt * 1.5) + zoom * 3 },
+      // Bookshelf.
+      { x: bcX + bcW + zt, y: bcY - zt, w: zt * 2, h: Math.floor(zt * 2.5) },
+      // Chair.
+      { x: Math.floor(bcX + bcW / 2 - zoom * 3), y: bcH + bcY + zoom, w: zoom * 6, h: zoom * 7 },
+    ];
+
+    // Rebuild pathfinder grid.
+    const cellSize = Math.max(8, zt / 2);
+    this.pathfinder.buildGrid(w, h, cellSize, this.obstacles);
+
+    // Position Claude below the batcomputer, anchored to floor.
+    const floorY = wallH + bcH + zoom * 5;
     this.claude.x = w / 2;
-    this.claude.y = h * 0.72;
+    this.claude.y = floorY;
+  }
+
+  /** Find a path from (sx,sy) to (tx,ty) avoiding furniture. */
+  findPath(sx: number, sy: number, tx: number, ty: number): { x: number; y: number }[] {
+    return this.pathfinder.findPath(sx, sy, tx, ty);
   }
 
   handleEvent(event: Record<string, unknown>): void {
@@ -94,8 +138,7 @@ export class BatCaveWorld {
         if (!sprite) break;
 
         const slot = this.nextAgentSlot++;
-        const slotX = this.worldWidth * 0.15 + (slot % 6) * (this.worldWidth * 0.12);
-        const slotY = this.worldHeight * 0.82 + Math.floor(slot / 6) * 30;
+        const { x: slotX, y: slotY } = this.getAgentSlotPosition(slot);
 
         const char = new Character(
           agentId,
@@ -172,6 +215,14 @@ export class BatCaveWorld {
     return this.usageStats;
   }
 
+  getActiveAgentCount(): number {
+    return this.agents.size;
+  }
+
+  getActiveAgentNames(): string[] {
+    return Array.from(this.agents.values()).filter(a => a.visible).map(a => a.name);
+  }
+
   private resetIdleTimer(): void {
     if (this.idleTimer !== null) {
       window.clearTimeout(this.idleTimer);
@@ -183,13 +234,28 @@ export class BatCaveWorld {
     }, 5000);
   }
 
+  private getAgentSlotPosition(slot: number): { x: number; y: number } {
+    const T = 16;
+    const zoom = Math.max(2, Math.min(
+      Math.floor(this.worldWidth / (16 * T)),
+      Math.floor(this.worldHeight / (8 * T))
+    ));
+    const zt = T * zoom;
+    // Agents stand on the floor below the batcomputer area, spread in rows.
+    const floorY = this.wallH + Math.floor(zt * 1.5) + zoom * 5;
+    const rowSpacing = zoom * 12;
+    const x = this.worldWidth * 0.15 + (slot % 6) * (this.worldWidth * 0.12);
+    const y = floorY + rowSpacing + Math.floor(slot / 6) * rowSpacing;
+    return { x, y };
+  }
+
   private repackSlots(): void {
     this.nextAgentSlot = 0;
     for (const [, char] of this.agents) {
       const slot = this.nextAgentSlot++;
-      const targetX = this.worldWidth * 0.15 + (slot % 6) * (this.worldWidth * 0.12);
-      const targetY = this.worldHeight * 0.82 + Math.floor(slot / 6) * 30;
-      char.moveTo(targetX, targetY);
+      const { x, y } = this.getAgentSlotPosition(slot);
+      const path = this.pathfinder.findPath(char.x, char.y, x, y);
+      char.moveAlongPath(path);
     }
   }
 }

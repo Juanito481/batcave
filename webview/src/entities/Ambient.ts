@@ -221,17 +221,21 @@ export class Ambient {
   private drawDrips(ctx: CanvasRenderingContext2D, zoom: number): void {
     const px = Math.max(1, Math.floor(zoom * 0.25));
 
-    for (const drip of this.drips) {
-      ctx.fillStyle = "rgba(30, 127, 216, 0.4)";
+    // Opaque palette for water (no rgba).
+    const DRIP_BRIGHT = "#1a4a6e";
+    const DRIP_MID = "#142e48";
+    const DRIP_DIM = "#0e1e30";
 
+    for (const drip of this.drips) {
       if (drip.splashTimer < 0) {
-        // Falling drop — single pixel, slightly elongated.
+        // Falling drop.
+        ctx.fillStyle = DRIP_BRIGHT;
         ctx.fillRect(Math.round(drip.x), Math.round(drip.y), px, px * 2);
       } else {
-        // Splash — expanding horizontal pixels.
+        // Splash — expanding, fading through palette steps.
         const spread = Math.floor((drip.splashTimer / 300) * 3) + 1;
-        const alpha = 0.4 * (1 - drip.splashTimer / 300);
-        ctx.fillStyle = `rgba(30, 127, 216, ${alpha})`;
+        const progress = drip.splashTimer / 300;
+        ctx.fillStyle = progress < 0.33 ? DRIP_BRIGHT : progress < 0.66 ? DRIP_MID : DRIP_DIM;
         ctx.fillRect(Math.round(drip.x) - spread * px, Math.round(drip.y), px * (spread * 2 + 1), px);
       }
     }
@@ -268,8 +272,12 @@ export class Ambient {
   private drawMotes(ctx: CanvasRenderingContext2D, zoom: number): void {
     const px = Math.max(1, Math.floor(zoom * 0.25));
 
-    for (const m of this.motes) {
-      ctx.fillStyle = `rgba(136, 136, 136, ${m.opacity})`;
+    // Opaque dust mote colors (no rgba). Different brightness levels.
+    const MOTE_COLORS = ["#1a1a24", "#1e1e2a", "#222230", "#262636"];
+
+    for (let i = 0; i < this.motes.length; i++) {
+      const m = this.motes[i];
+      ctx.fillStyle = MOTE_COLORS[i % MOTE_COLORS.length];
       ctx.fillRect(Math.round(m.x), Math.round(m.y), px, px);
     }
   }
@@ -279,14 +287,23 @@ export class Ambient {
   private drawGlow(ctx: CanvasRenderingContext2D, zoom: number): void {
     const cx = this.wW / 2;
     const cy = this.wallH + zoom * 8;
-    const baseRadius = zoom * 30;
-    const pulse = 0.5 + Math.sin(this.glow.phase * 0.8) * 0.15;
 
-    const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, baseRadius);
-    gradient.addColorStop(0, `rgba(30, 127, 216, ${0.06 * pulse})`);
-    gradient.addColorStop(1, "rgba(30, 127, 216, 0)");
+    // Opaque glow using concentric rectangles (no rgba gradients).
+    // Creates a visible light pool from the batcomputer screens.
+    const pulse = Math.sin(this.glow.phase * 0.8);
+    const glowLayers = [
+      { size: zoom * 6, color: pulse > 0 ? "#101830" : "#0e1428" },
+      { size: zoom * 12, color: pulse > 0 ? "#0d1224" : "#0c1020" },
+      { size: zoom * 20, color: pulse > 0 ? "#0b0f1e" : "#0a0e1a" },
+      { size: zoom * 30, color: "#0a0c16" },
+    ];
 
-    ctx.fillStyle = gradient;
-    ctx.fillRect(cx - baseRadius, cy - baseRadius, baseRadius * 2, baseRadius * 2);
+    // Draw from largest to smallest so inner layers overlay.
+    for (let i = glowLayers.length - 1; i >= 0; i--) {
+      const layer = glowLayers[i];
+      const s = layer.size;
+      ctx.fillStyle = layer.color;
+      ctx.fillRect(cx - s, cy - s * 0.6, s * 2, s * 1.2);
+    }
   }
 }

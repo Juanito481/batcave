@@ -171,9 +171,24 @@ export class ActivityMonitor {
             }
           }
 
-          // Detect Agent tool spawns.
+          // Detect Agent tool spawns — try to identify chess piece from description/prompt.
           if (toolName === "Agent") {
             this.agentsSpawnedCount++;
+            const input = b.input as Record<string, unknown> | undefined;
+            const toolUseId = b.id as string | undefined;
+            const agentId = this.identifyAgentFromInput(input);
+            if (agentId && !this.activeAgents.has(agentId)) {
+              this.activeAgents.add(agentId);
+              if (toolUseId) {
+                this.toolToAgent.set(toolUseId, agentId);
+              }
+              this.onEvent({
+                type: "agent_enter",
+                agentId,
+                agentName: AGENTS[agentId]?.name || agentId,
+                timestamp: now,
+              });
+            }
           }
 
           this.onEvent({
@@ -224,6 +239,42 @@ export class ActivityMonitor {
         }
       }
     }
+  }
+
+  /** Try to identify a chess-piece agent from Agent tool input fields. */
+  private identifyAgentFromInput(input: Record<string, unknown> | undefined): string | null {
+    if (!input) return null;
+    const desc = ((input.description as string) || "").toLowerCase();
+    const prompt = ((input.prompt as string) || "").toLowerCase();
+    const text = desc + " " + prompt;
+
+    // Check each known agent name against description/prompt.
+    for (const agentId of Object.keys(AGENTS)) {
+      if (text.includes(agentId.replace("-", " ")) || text.includes(agentId)) {
+        return agentId;
+      }
+    }
+
+    // Also check Italian names.
+    const italianMap: Record<string, string> = {
+      "sovrano": "king",
+      "stratega": "queen",
+      "fortezza": "white-rook",
+      "architetto": "knight",
+      "segretario": "pawn",
+      "scassinatore": "black-rook",
+      "demolitore": "black-bishop",
+      "sabotatore": "black-knight",
+      "cancelliere": "chancellor",
+      "cardinale": "cardinal",
+      "esploratore": "scout",
+      "nave": "ship",
+    };
+    for (const [name, id] of Object.entries(italianMap)) {
+      if (text.includes(name)) return id;
+    }
+
+    return null;
   }
 
   private inferState(toolName: string): "thinking" | "writing" | "idle" {

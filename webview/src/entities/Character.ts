@@ -30,6 +30,7 @@ export class Character {
 
   // Movement.
   private speed = 0.03; // pixels per ms
+  private waypoints: { x: number; y: number }[] = [];
 
   // Lifecycle.
   visible = true;
@@ -72,10 +73,21 @@ export class Character {
     this.exitTimer = 0;
   }
 
-  /** Move toward a target position. */
+  /** Move toward a target position (direct line). */
   moveTo(tx: number, ty: number): void {
+    this.waypoints = [];
     this.targetX = tx;
     this.targetY = ty;
+    this.state = "walk";
+  }
+
+  /** Move following a list of waypoints (from pathfinder). */
+  moveAlongPath(waypoints: { x: number; y: number }[]): void {
+    if (waypoints.length === 0) return;
+    this.waypoints = waypoints.slice();
+    const first = this.waypoints.shift()!;
+    this.targetX = first.x;
+    this.targetY = first.y;
     this.state = "walk";
   }
 
@@ -122,17 +134,24 @@ export class Character {
       return;
     }
 
-    // Handle walking.
+    // Handle walking (with waypoint support).
     if (this.state === "walk") {
       const dx = this.targetX - this.x;
       const dy = this.targetY - this.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
 
-      if (dist < 1) {
+      if (dist < 2) {
         this.x = this.targetX;
         this.y = this.targetY;
-        this.state = "idle";
-        this.currentAnim = "idle";
+        // Advance to next waypoint if available.
+        if (this.waypoints.length > 0) {
+          const next = this.waypoints.shift()!;
+          this.targetX = next.x;
+          this.targetY = next.y;
+        } else {
+          this.state = "idle";
+          this.currentAnim = "idle";
+        }
       } else {
         const step = this.speed * deltaMs;
         this.x += (dx / dist) * step;
@@ -171,7 +190,20 @@ export class Character {
 
     ctx.globalAlpha = this.opacity;
 
-    // Create a temporary canvas for the frame to handle flipping.
+    // Ground shadow (ellipse drawn on canvas, not in sprite).
+    const shadowW = Math.floor(zoom * 7);
+    const shadowH = Math.max(2, Math.floor(zoom * 1.5));
+    ctx.fillStyle = "#06040e";
+    ctx.beginPath();
+    ctx.ellipse(this.x, this.y, shadowW, shadowH, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Softer outer ring.
+    ctx.fillStyle = "#0a0816";
+    ctx.beginPath();
+    ctx.ellipse(this.x, this.y, shadowW + zoom, shadowH + Math.max(1, Math.floor(zoom * 0.5)), 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Sprite.
     if (this.flipped) {
       ctx.save();
       ctx.translate(dx + dw, dy);
@@ -183,8 +215,8 @@ export class Character {
     }
 
     // Name label.
-    ctx.fillStyle = "#AAAACC";
-    ctx.font = `${Math.max(8, zoom * 4)}px monospace`;
+    ctx.fillStyle = "#8888AA";
+    ctx.font = `${Math.max(8, zoom * 3.5)}px "DM Mono", monospace`;
     ctx.textAlign = "center";
     ctx.fillText(this.name, this.x, this.y + zoom * 4);
 
