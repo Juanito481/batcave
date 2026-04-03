@@ -62,6 +62,12 @@ export class Ambient {
     // Bats spawn lazily on first update when dimensions are known.
   }
 
+  /** Increase drip frequency under context pressure. */
+  setContextPressure(pct: number): void {
+    // 0% = 2500ms interval, 100% = 800ms interval.
+    this.dripInterval = Math.max(800, 2500 - pct * 17);
+  }
+
   // --- Public API ---
 
   update(deltaMs: number, worldWidth: number, worldHeight: number, wallH: number): void {

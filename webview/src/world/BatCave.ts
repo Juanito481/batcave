@@ -88,6 +88,11 @@ export class BatCaveWorld {
   // Write clicks timer.
   private writeClickTimer = 0;
 
+  // Giovanni Batcomputer behavior.
+  private giovanniAtBc = false;
+  private giovanniBcTimer = 0;
+  private giovanniBcWorkTimer = 0;
+
   // Layout.
   private worldWidth = 400;
   private worldHeight = 300;
@@ -298,6 +303,7 @@ export class BatCaveWorld {
           contextFillPct: event.contextFillPct as number,
         };
         this.checkBatSignal();
+        this.ambient.setContextPressure(this.usageStats.contextFillPct);
         break;
     }
   }
@@ -327,7 +333,7 @@ export class BatCaveWorld {
     }
     // Idle wandering for Alfred and Giovanni.
     this.maybeWander(this.alfred, deltaMs);
-    this.maybeWander(this.giovanni, deltaMs);
+    this.maybeGiovanniBatcomputer(deltaMs);
     // Decay current tool display.
     if (this.currentToolTimer > 0) {
       this.currentToolTimer -= deltaMs;
@@ -506,6 +512,53 @@ export class BatCaveWorld {
   }
 
   // ── Bat Signal ───────────────────────────────────────────
+
+  // ── Giovanni at Batcomputer ───────────────────────────
+
+  private maybeGiovanniBatcomputer(dt: number): void {
+    if (this.giovanniAtBc) {
+      // Working at the Batcomputer.
+      this.giovanniBcWorkTimer += dt;
+      if (this.giovanniBcWorkTimer >= 6000) {
+        // Done working, walk away.
+        this.giovanniAtBc = false;
+        this.giovanniBcTimer = 0;
+        this.giovanni.setIdle();
+        this.maybeWander(this.giovanni, 99999); // Force wander away.
+      }
+      return;
+    }
+
+    if (this.giovanni.state !== "idle") {
+      this.giovanniBcTimer = 0;
+      return;
+    }
+
+    this.giovanniBcTimer += dt;
+    // Every 15-25s, go to Batcomputer.
+    const threshold = 15000 + (Date.now() % 10000);
+    if (this.giovanniBcTimer >= threshold) {
+      this.giovanniBcTimer = 0;
+      this.giovanniBcWorkTimer = 0;
+      // Walk to chair position (in front of Batcomputer).
+      const bcX = Math.floor(this.worldWidth / 2);
+      const chairY = this.wallH + Math.floor((this.worldHeight - this.wallH) * 0.55);
+      const path = this.pathfinder.findPath(this.giovanni.x, this.giovanni.y, bcX, chairY);
+      if (path.length > 0) {
+        this.giovanni.moveAlongPath(path);
+        this.giovanniAtBc = true;
+        // Set action when he arrives (check in update via state).
+        const checkArrival = () => {
+          if (this.giovanni.state === "idle" && this.giovanniAtBc) {
+            this.giovanni.setAction();
+          } else if (this.giovanniAtBc) {
+            window.setTimeout(checkArrival, 200);
+          }
+        };
+        window.setTimeout(checkArrival, 500);
+      }
+    }
+  }
 
   private checkBatSignal(): void {
     const pct = this.usageStats?.contextFillPct ?? 0;

@@ -239,6 +239,21 @@ export function drawCaveEnvironment(rc: RenderContext): void {
   // ── Wall details (pipes, LED strip, panels) ──
   drawWallDetails(ctx, zt, zoom, wallH, width, height, rc.now, rc.world);
 
+  // ── Time-of-day tint ──
+  const hour = new Date().getHours();
+  // Night (21-5): blue tint. Day (10-16): warm tint. Dawn/dusk: neutral.
+  if (hour >= 21 || hour < 5) {
+    ctx.fillStyle = "#060818";
+    ctx.globalAlpha = 0.12;
+    ctx.fillRect(0, 0, width, height);
+    ctx.globalAlpha = 1;
+  } else if (hour >= 10 && hour <= 16) {
+    ctx.fillStyle = "#181008";
+    ctx.globalAlpha = 0.08;
+    ctx.fillRect(0, 0, width, height);
+    ctx.globalAlpha = 1;
+  }
+
   // ── Bat Signal (context 100%) ──
   if (rc.world.isBatSignalActive()) {
     drawBatSignal(ctx, width, wallH, zoom);

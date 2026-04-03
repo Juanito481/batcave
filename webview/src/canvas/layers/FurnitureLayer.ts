@@ -6,7 +6,7 @@ import { RenderContext, P, seed, outlineRect } from "./render-context";
 function drawBatcomputer(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, zt: number, zoom: number, tilesW: number,
-  now: number,
+  now: number, state?: "idle" | "thinking" | "writing",
 ): void {
   const totalW = zt * tilesW;
   const totalH = Math.floor(zt * 1.5);
@@ -29,8 +29,17 @@ function drawBatcomputer(
   const sw = Math.floor(screenAreaW / 3);
   const sh = totalH - gap * 2;
 
-  const screenColors = ["#1a3a1a", P.ACCENT, "#3a1a1a"];
-  const screenLabels = ["SYS", "MAIN", "LOG"];
+  // Screen colors react to Alfred's state.
+  const screenColors = state === "thinking"
+    ? [P.ACCENT, P.ACCENT, "#1a3a5a"]
+    : state === "writing"
+    ? ["#1a3a1a", "#2ECC71", "#1a3a1a"]
+    : ["#1a1a2a", "#1a1a2a", "#1a1a2a"]; // idle: dim
+  const screenLabels = state === "thinking"
+    ? ["READ", "THINK", "SCAN"]
+    : state === "writing"
+    ? ["EDIT", "WRITE", "DIFF"]
+    : ["SYS", "MAIN", "LOG"];
 
   for (let i = 0; i < 3; i++) {
     const sx = x + gap + i * (sw + gap);
@@ -760,7 +769,7 @@ export function drawAllFurniture(rc: RenderContext): void {
   drawServerRack(ctx, bcX - zt * 3, Math.floor(bcY - zt * 1.5), zt, zoom, now);
   drawWorkbench(ctx, Math.floor(bcX - zt * 6.5), bcY, zt, zoom, now);
   drawDisplayPanel(ctx, bcX + bcW + zt, bcY - Math.floor(zt * 0.5), zt, zoom, now, world);
-  drawBatcomputer(ctx, bcX, bcY, zt, zoom, bcTilesW, now);
+  drawBatcomputer(ctx, bcX, bcY, zt, zoom, bcTilesW, now, world.getAlfredState());
 
   // Floor objects (crates, chair, debris).
   drawFloorObjects(ctx, bcX, bcY, zt, zoom, bcTilesW, width, height);
