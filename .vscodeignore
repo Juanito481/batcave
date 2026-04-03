@@ -1,0 +1,12 @@
+.gitignore
+src/
+webview/src/
+webview/node_modules/
+webview/package.json
+webview/tsconfig.json
+webview/vite.config.ts
+webview/index.html
+node_modules/
+tsconfig.json
+*.map
+.DS_Store
