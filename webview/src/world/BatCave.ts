@@ -142,6 +142,23 @@ export class BatCaveWorld {
     return this.pathfinder.findPath(sx, sy, tx, ty);
   }
 
+  reset(): void {
+    // Clear all agents and timers.
+    for (const timer of this.exitTimers.values()) {
+      window.clearTimeout(timer);
+    }
+    this.exitTimers.clear();
+    this.agents.clear();
+    this.nextAgentSlot = 0;
+    this.wanderTimers.clear();
+    this.eventLog.length = 0;
+    this.usageStats = null;
+    this.currentTool = null;
+    this.currentToolTimer = 0;
+    this.alfredState = "idle";
+    this.alfred.setIdle();
+  }
+
   handleEvent(event: Record<string, unknown>): void {
     const type = event.type as string;
 

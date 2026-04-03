@@ -33,7 +33,6 @@ interface Mote {
   y: number;
   speedY: number;
   speedX: number;
-  opacity: number;
 }
 
 // --- Glow pulse ---
@@ -249,7 +248,6 @@ export class Ambient {
       y: randomY ? Math.random() * this.wH : this.wH + 5,
       speedY: -(0.003 + Math.random() * 0.005), // float upward
       speedX: (Math.random() - 0.5) * 0.004,
-      opacity: 0.08 + Math.random() * 0.07, // ~0.08-0.15
     };
   }
 

@@ -748,12 +748,7 @@ function drawFloorScatter(
 // ── Orchestrator ───────────────────────────────────────
 
 export function drawAllFurniture(rc: RenderContext): void {
-  const { ctx, width, height, now, world } = rc;
-  const zoom = world.getZoom();
-  const zt = world.getZt();
-  const cols = Math.ceil(width / zt) + 1;
-  const wallRows = height > zt * 10 ? 3 : 2;
-  const wallH = wallRows * zt;
+  const { ctx, width, now, world, zoom, zt, cols, wallRows, wallH } = rc;
 
   // Batcomputer positioning (same as render() lines 113-116).
   const bcTilesW = Math.min(5, cols - 2);

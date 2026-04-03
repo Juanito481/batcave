@@ -44,9 +44,10 @@ export function App() {
       const msg = e.data;
       if (msg.command === "event") {
         world.handleEvent(msg.payload);
-      }
-      if (msg.command === "config") {
+      } else if (msg.command === "config") {
         world.setConfig(msg.payload);
+      } else if (msg.command === "reset") {
+        world.reset();
       }
     };
     window.addEventListener("message", handleMessage);

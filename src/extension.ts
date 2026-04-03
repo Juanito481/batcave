@@ -66,6 +66,15 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
     });
   }
 
+  reset(): void {
+    if (this.view && this.webviewReady) {
+      this.view.webview.postMessage({ command: "reset", payload: {} });
+      this.monitor.stop();
+      this.monitor.start();
+      this.sendConfig();
+    }
+  }
+
   private handleEvent(event: BatCaveEvent): void {
     if (this.webviewReady && this.view) {
       this.postEvent(event);
@@ -150,7 +159,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     vscode.commands.registerCommand("batcave.reset", () => {
-      // Will be implemented when webview supports reset.
+      provider.reset();
     })
   );
 }
