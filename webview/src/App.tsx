@@ -60,6 +60,7 @@ export function App() {
 
     return () => {
       loop.stop();
+      renderer.dispose();
       resizeObserver.disconnect();
       window.removeEventListener("message", handleMessage);
     };

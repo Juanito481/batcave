@@ -8,6 +8,7 @@ import { Ambient } from "../entities/Ambient";
 import { generateAllSprites, SpriteSheet } from "../canvas/SpriteGenerator";
 import { Pathfinder, Rect } from "./Pathfinder";
 import { AgentMeta, UsageStats } from "../../../shared/types";
+import { bus } from "../systems/EventBus";
 
 /** Repo-specific color themes for the cave environment. */
 export interface RepoTheme {
@@ -80,12 +81,12 @@ export class BatCaveWorld {
 
     const alfredSprite = this.sprites.get("alfred")!;
     this.alfred = new Character(
-      "alfred", "Alfred", "🤖", alfredSprite,
+      "alfred", "Alfred (Claude)", "🤖", alfredSprite,
       this.worldWidth / 2, this.worldHeight / 2
     );
     const giovanniSprite = this.sprites.get("giovanni")!;
     this.giovanni = new Character(
-      "giovanni", "Giovanni", "🦇", giovanniSprite,
+      "giovanni", "Giovanni (Batman)", "🦇", giovanniSprite,
       this.worldWidth * 0.3, this.worldHeight / 2
     );
   }
@@ -167,17 +168,23 @@ export class BatCaveWorld {
         this.alfredState = "thinking";
         this.alfred.setAction();
         this.resetIdleTimer();
+        bus.emit("session:state", { state: "thinking" });
+        bus.emit("particle:spawn", { preset: "think-pulse", x: this.alfred.x, y: this.alfred.y - 20 });
+        bus.emit("sound:play", { id: "think-chime" });
         break;
 
       case "session_writing":
         this.alfredState = "writing";
         this.alfred.setAction();
         this.resetIdleTimer();
+        bus.emit("session:state", { state: "writing" });
+        bus.emit("particle:spawn", { preset: "write-glow", x: this.alfred.x, y: this.alfred.y - 10 });
         break;
 
       case "session_idle":
         this.alfredState = "idle";
         this.alfred.setIdle();
+        bus.emit("session:state", { state: "idle" });
         break;
 
       case "agent_enter": {
@@ -210,6 +217,9 @@ export class BatCaveWorld {
         char.enter(slotX, slotY);
         this.agents.set(agentId, char);
         this.logEvent("agent_enter", meta?.name || agentId);
+        bus.emit("agent:enter", { agentId, x: slotX, y: slotY });
+        bus.emit("particle:spawn", { preset: "agent-enter", x: slotX, y: slotY });
+        bus.emit("sound:play", { id: "agent-chime" });
         break;
       }
 
@@ -218,6 +228,9 @@ export class BatCaveWorld {
         const char = this.agents.get(agentId);
         if (char) {
           this.logEvent("agent_exit", char.name);
+          bus.emit("agent:exit", { agentId, x: char.x, y: char.y });
+          bus.emit("particle:spawn", { preset: "agent-exit", x: char.x, y: char.y });
+          bus.emit("sound:play", { id: "agent-exit" });
           char.exit();
           // Remove after exit animation (tracked so re-enter can cancel).
           // Capture reference to verify we delete the same instance (not a re-spawned one).
@@ -243,6 +256,9 @@ export class BatCaveWorld {
           this.alfred.setAction();
         }
         this.resetIdleTimer();
+        bus.emit("tool:start", { toolName: this.currentTool || "?", x: this.alfred.x, y: this.alfred.y });
+        bus.emit("particle:spawn", { preset: "tool-spark", x: this.alfred.x, y: this.alfred.y - 16 });
+        bus.emit("sound:play", { id: "tool-click" });
         break;
 
       case "tool_end":

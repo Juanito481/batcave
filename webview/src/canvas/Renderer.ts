@@ -1,4 +1,6 @@
 import { BatCaveWorld } from "../world/BatCave";
+import { ParticleSystem } from "../systems/ParticleSystem";
+import { SoundSystem } from "../systems/SoundSystem";
 import { RenderContext, P } from "./layers/render-context";
 import { drawCaveEnvironment } from "./layers/CaveLayer";
 import { drawAllFurniture } from "./layers/FurnitureLayer";
@@ -11,6 +13,8 @@ import { drawOverlay } from "./layers/HudLayer";
 export class Renderer {
   private ctx: CanvasRenderingContext2D;
   private world: BatCaveWorld;
+  private particles: ParticleSystem;
+  private sound: SoundSystem;
   private width = 0;
   private height = 0;
 
@@ -19,6 +23,10 @@ export class Renderer {
   constructor(ctx: CanvasRenderingContext2D, world: BatCaveWorld) {
     this.ctx = ctx;
     this.world = world;
+    this.particles = new ParticleSystem();
+    this.particles.start();
+    this.sound = new SoundSystem();
+    this.sound.start();
   }
 
   resize(width: number, height: number): void {
@@ -36,6 +44,16 @@ export class Renderer {
 
   update(deltaMs: number): void {
     this.world.update(deltaMs);
+    this.particles.update(deltaMs);
+  }
+
+  dispose(): void {
+    this.particles.stop();
+    this.sound.stop();
+  }
+
+  getSoundSystem(): SoundSystem {
+    return this.sound;
   }
 
   render(): void {
@@ -79,6 +97,9 @@ export class Renderer {
     for (const char of allChars) {
       char.draw(rc.ctx, zoom);
     }
+
+    // Layer 3.5: Particles (between characters and HUD).
+    this.particles.draw(rc.ctx, zoom);
 
     // Layer 4: HUD, tool icons, speech bubbles, timeline.
     drawOverlay(rc);
