@@ -1,0 +1,70 @@
+{
+  "name": "batcave",
+  "displayName": "Bat Cave",
+  "description": "Pixel art visualization of Claude Code activity with animated chess-piece agents in a DC-style lab environment",
+  "version": "0.1.0",
+  "publisher": "juanito481",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Juanito481/batcave"
+  },
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "panel": [
+        {
+          "id": "batcave",
+          "title": "Bat Cave",
+          "icon": "assets/icon.png"
+        }
+      ]
+    },
+    "views": {
+      "batcave": [
+        {
+          "type": "webview",
+          "id": "batcave.mainView",
+          "name": "Bat Cave"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "batcave.show",
+        "title": "Bat Cave: Show"
+      },
+      {
+        "command": "batcave.reset",
+        "title": "Bat Cave: Reset View"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "npm run build:ext && npm run build:webview",
+    "build:ext": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify",
+    "build:webview": "cd webview && npx vite build",
+    "watch:ext": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --watch",
+    "watch:webview": "cd webview && npx vite build --watch",
+    "dev": "concurrently \"npm run watch:ext\" \"npm run watch:webview\"",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.100.0",
+    "concurrently": "^9.1.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.8.0"
+  }
+}
