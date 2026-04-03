@@ -63,7 +63,7 @@ export const AGENTS: Record<string, AgentMeta> = {
   king: { name: "Il Sovrano", emoji: "\u2654", role: "Vision & coherence", color: "white" },
   queen: { name: "La Stratega", emoji: "\uD83D\uDC51", role: "Business analysis", color: "white" },
   "white-rook": { name: "La Fortezza", emoji: "\u2656", role: "Security defense", color: "white" },
-  bishop: { name: "L'Ossessivo", emoji: "\uD83D\uDD0E", role: "Code review", color: "white" },
+  bishop: { name: "Bishop", emoji: "\uD83D\uDD0E", role: "Code review", color: "white" },
   knight: { name: "L'Architetto", emoji: "\uD83D\uDC34", role: "Architecture & build", color: "white" },
   pawn: { name: "Il Segretario", emoji: "\u265F\uFE0F", role: "Briefing & status", color: "white" },
   "black-rook": { name: "Lo Scassinatore", emoji: "\u265C", role: "Red team & pentest", color: "black" },

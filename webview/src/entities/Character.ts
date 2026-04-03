@@ -9,11 +9,6 @@ import { SpriteSheet } from "../canvas/SpriteGenerator";
 
 export type CharacterState = "idle" | "walk" | "action" | "entering" | "exiting";
 
-interface Position {
-  x: number;
-  y: number;
-}
-
 export class Character {
   readonly id: string;
   readonly name: string;
@@ -35,7 +30,6 @@ export class Character {
 
   // Movement.
   private speed = 0.03; // pixels per ms
-  private path: Position[] = [];
 
   // Lifecycle.
   visible = true;
@@ -192,7 +186,7 @@ export class Character {
     ctx.fillStyle = "#AAAACC";
     ctx.font = `${Math.max(8, zoom * 4)}px monospace`;
     ctx.textAlign = "center";
-    ctx.fillText(this.emoji + " " + this.name, this.x, this.y + zoom * 4);
+    ctx.fillText(this.name, this.x, this.y + zoom * 4);
 
     ctx.globalAlpha = 1;
   }

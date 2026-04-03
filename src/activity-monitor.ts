@@ -29,6 +29,7 @@ export class ActivityMonitor {
   private agentsSpawnedCount = 0;
   private sessionStartedAt = Date.now();
   private activeAgents = new Set<string>();
+  private toolToAgent = new Map<string, string>(); // tool_use_id → agentId
   private lastState: "idle" | "thinking" | "writing" = "idle";
 
   constructor(onEvent: (event: BatCaveEvent) => void) {
@@ -154,9 +155,13 @@ export class ActivityMonitor {
           if (toolName === "Skill") {
             const input = b.input as Record<string, unknown> | undefined;
             const skillName = input?.skill as string | undefined;
+            const toolUseId = b.id as string | undefined;
             if (skillName && AGENTS[skillName]) {
               this.agentsSpawnedCount++;
               this.activeAgents.add(skillName);
+              if (toolUseId) {
+                this.toolToAgent.set(toolUseId, skillName);
+              }
               this.onEvent({
                 type: "agent_enter",
                 agentId: skillName,
@@ -196,11 +201,25 @@ export class ActivityMonitor {
         for (const block of content) {
           const b = block as Record<string, unknown>;
           if (b.type === "tool_result") {
+            const toolUseId = b.tool_use_id as string;
             this.onEvent({
               type: "tool_end",
-              toolName: (b.tool_use_id as string) || "unknown",
+              toolName: toolUseId || "unknown",
               timestamp: now,
             });
+
+            // If this tool_result corresponds to a Skill agent, emit agent_exit.
+            const agentId = this.toolToAgent.get(toolUseId);
+            if (agentId) {
+              this.toolToAgent.delete(toolUseId);
+              this.activeAgents.delete(agentId);
+              this.onEvent({
+                type: "agent_exit",
+                agentId,
+                agentName: AGENTS[agentId].name,
+                timestamp: now,
+              });
+            }
           }
         }
       }

@@ -28,7 +28,7 @@ interface CharacterPalette {
 
 const PALETTES: Record<string, CharacterPalette> = {
   claude: {
-    skin: "#D97757",
+    skin: "#E8A080",
     hair: "#C06040",
     shirt: "#D97757",
     pants: "#B85A3A",
@@ -141,26 +141,30 @@ const PALETTES: Record<string, CharacterPalette> = {
   },
 };
 
-// ── Pixel art templates (16 wide x 24 tall, top-aligned) ─────────
+// ── Pixel art templates (12 wide x 20 tall, drawn into 16x32 frame) ──
 // Legend: H=hair, S=skin, T=shirt, P=pants, A=accent, E=eyes, .=empty
 
 const BASE_TEMPLATE = [
-  "....HHHH....",
-  "...HHHHHH...",
-  "...HSSEHS...",
-  "...SSSSSS...",
-  "...SSSSSS...",
-  "....SSSS....",
-  "...TTTTTT...",
-  "..TTTTTTTT..",
-  "..TTATTATTT.",
-  "..TTTTTTTT..",
-  "..TTTTTTTT..",
-  "...TTTTTT...",
-  "...PPPPPP...",
-  "...PPPPPP...",
-  "...PP..PP...",
-  "...PP..PP...",
+  "....HHHH....",  // hair top
+  "...HHHHHH...",  // hair full
+  "..HHHHHHHH..",  // hair wide
+  "..HHSSSSHH..",  // forehead + hair sides
+  "..HSSEESSH..",  // face with eyes
+  "..HSSSSSSH..",  // cheeks
+  "...SSSSSS...",  // jaw
+  "....SSSS....",  // chin
+  "....TTTT....",  // collar
+  "...TTTTTT...",  // shirt top
+  ".SSTTATTAS..",  // arms (skin) + shirt + accent
+  ".SSTTTTTTS..",  // arms + shirt
+  ".SSTTTTTTS..",  // arms + shirt
+  "..STTTTTTS..",  // forearms + shirt
+  "...TTTTTT...",  // shirt bottom
+  "...PPPPPP...",  // waist
+  "...PPPPPP...",  // pants upper
+  "...PP..PP...",  // legs
+  "...PP..PP...",  // legs lower
+  "..PP....PP..",  // feet
 ];
 
 const ACCESSORY_TEMPLATES: Record<string, string[]> = {
@@ -202,7 +206,7 @@ const ACCESSORY_TEMPLATES: Record<string, string[]> = {
 export function generateSpriteSheet(characterId: string): SpriteSheet {
   const palette = PALETTES[characterId] || PALETTES.pawn;
   const frameW = 16;
-  const frameH = 24;
+  const frameH = 32;
   const cols = 4; // 4 frames per animation
   const rows = 4; // idle, walk-down, walk-side, action
 
@@ -212,34 +216,41 @@ export function generateSpriteSheet(characterId: string): SpriteSheet {
   // Row 0: idle (4 frames with subtle bob)
   for (let f = 0; f < 4; f++) {
     const bobY = f === 1 || f === 2 ? -1 : 0;
-    drawCharacter(ctx, f * frameW, bobY, palette, characterId, false);
+    drawCharacter(ctx, f * frameW, bobY, frameH, palette, characterId, false);
   }
 
   // Row 1: walk down (4 frames with leg movement)
   for (let f = 0; f < 4; f++) {
-    drawCharacter(ctx, f * frameW, frameH + (f % 2 === 0 ? 0 : -1), palette, characterId, false);
-    // Animate legs
-    const legOffset = f % 2 === 0 ? 0 : 1;
-    ctx.fillStyle = palette.pants;
-    if (legOffset) {
-      ctx.clearRect(f * frameW + 4, frameH + 14, 2, 2);
-      ctx.fillRect(f * frameW + 5, frameH + 14, 2, 2);
+    const bobY = f % 2 === 0 ? 0 : -1;
+    drawCharacter(ctx, f * frameW, frameH + bobY, frameH, palette, characterId, false);
+    // Animate legs by shifting one leg forward.
+    if (f % 2 === 1) {
+      const templateH = BASE_TEMPLATE.length;
+      const baseY = frameH + bobY + (ACCESSORY_TEMPLATES[characterId]?.length ?? 0) + 2;
+      // Clear and redraw offset legs.
+      ctx.fillStyle = palette.pants;
+      ctx.clearRect(f * frameW + 3, baseY + templateH - 3, 3, 2);
+      ctx.fillRect(f * frameW + 4, baseY + templateH - 3, 3, 2);
     }
   }
 
   // Row 2: walk side (4 frames)
   for (let f = 0; f < 4; f++) {
-    drawCharacter(ctx, f * frameW, frameH * 2 + (f % 2 === 0 ? 0 : -1), palette, characterId, true);
+    drawCharacter(ctx, f * frameW, frameH * 2 + (f % 2 === 0 ? 0 : -1), frameH, palette, characterId, true);
   }
 
-  // Row 3: action (typing/working — arms move)
+  // Row 3: action (typing/working — arms move + sparkles)
   for (let f = 0; f < 4; f++) {
-    drawCharacter(ctx, f * frameW, frameH * 3, palette, characterId, false);
-    // Action sparkle
+    drawCharacter(ctx, f * frameW, frameH * 3, frameH, palette, characterId, false);
+    // Action sparkle at arm level.
+    ctx.fillStyle = palette.accent;
+    const sparkleY = frameH * 3 + (ACCESSORY_TEMPLATES[characterId]?.length ?? 0) + 14;
     if (f % 2 === 0) {
-      ctx.fillStyle = palette.accent;
-      ctx.fillRect(f * frameW + 2 + f, frameH * 3 + 8, 1, 1);
-      ctx.fillRect(f * frameW + 12 - f, frameH * 3 + 9, 1, 1);
+      ctx.fillRect(f * frameW + 1 + f, sparkleY, 1, 1);
+      ctx.fillRect(f * frameW + 13 - f, sparkleY + 1, 1, 1);
+    } else {
+      ctx.fillRect(f * frameW + 2, sparkleY - 1, 1, 1);
+      ctx.fillRect(f * frameW + 12, sparkleY, 1, 1);
     }
   }
 
@@ -260,6 +271,7 @@ function drawCharacter(
   ctx: OffscreenCanvasRenderingContext2D,
   x: number,
   y: number,
+  frameH: number,
   palette: CharacterPalette,
   characterId: string,
   flipped: boolean
@@ -303,9 +315,9 @@ function drawCharacter(
     }
   }
 
-  // Shadow.
+  // Shadow — positioned relative to frame height.
   ctx.fillStyle = "rgba(0,0,0,0.2)";
-  ctx.fillRect(x + 4, y + 20, 8, 2);
+  ctx.fillRect(x + 3, y + frameH - 4, 10, 2);
 }
 
 /** Pre-generate all character sprite sheets. Returns a Map<id, SpriteSheet>. */

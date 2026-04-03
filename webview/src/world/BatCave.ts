@@ -4,6 +4,7 @@
  */
 
 import { Character } from "../entities/Character";
+import { Ambient } from "../entities/Ambient";
 import { generateAllSprites, SpriteSheet } from "../canvas/SpriteGenerator";
 
 interface UsageStats {
@@ -27,6 +28,9 @@ export class BatCaveWorld {
   claude: Character;
   private agents: Map<string, Character> = new Map();
 
+  // Ambient life.
+  private ambient: Ambient;
+
   // State.
   private claudeState: "idle" | "thinking" | "writing" = "idle";
   private usageStats: UsageStats | null = null;
@@ -36,10 +40,12 @@ export class BatCaveWorld {
   // Layout.
   private worldWidth = 400;
   private worldHeight = 300;
+  private wallH = 64;
   private nextAgentSlot = 0;
 
   constructor() {
     this.sprites = generateAllSprites();
+    this.ambient = new Ambient();
 
     const claudeSprite = this.sprites.get("claude")!;
     this.claude = new Character(
@@ -48,13 +54,14 @@ export class BatCaveWorld {
     );
   }
 
-  /** Set canvas dimensions so we can position characters. */
-  setDimensions(w: number, h: number): void {
+  /** Set canvas dimensions and wall height so we can position characters. */
+  setDimensions(w: number, h: number, wallH: number): void {
     this.worldWidth = w;
     this.worldHeight = h;
-    // Reposition Claude to center.
+    this.wallH = wallH;
+    // Position Claude in the lower-center area (below wall + batcomputer).
     this.claude.x = w / 2;
-    this.claude.y = h * 0.45;
+    this.claude.y = h * 0.72;
   }
 
   handleEvent(event: Record<string, unknown>): void {
@@ -87,8 +94,8 @@ export class BatCaveWorld {
         if (!sprite) break;
 
         const slot = this.nextAgentSlot++;
-        const slotX = this.worldWidth * 0.2 + (slot % 5) * (this.worldWidth * 0.15);
-        const slotY = this.worldHeight * 0.65 + Math.floor(slot / 5) * 40;
+        const slotX = this.worldWidth * 0.15 + (slot % 6) * (this.worldWidth * 0.12);
+        const slotY = this.worldHeight * 0.82 + Math.floor(slot / 6) * 30;
 
         const char = new Character(
           agentId,
@@ -142,6 +149,7 @@ export class BatCaveWorld {
   }
 
   update(deltaMs: number): void {
+    this.ambient.update(deltaMs, this.worldWidth, this.worldHeight, this.wallH);
     this.claude.update(deltaMs);
     for (const agent of this.agents.values()) {
       agent.update(deltaMs);
@@ -154,6 +162,10 @@ export class BatCaveWorld {
 
   getAgentCharacters(): Character[] {
     return Array.from(this.agents.values()).filter((a) => a.visible);
+  }
+
+  getAmbient(): Ambient {
+    return this.ambient;
   }
 
   getUsageStats(): UsageStats | null {
@@ -175,8 +187,8 @@ export class BatCaveWorld {
     this.nextAgentSlot = 0;
     for (const [, char] of this.agents) {
       const slot = this.nextAgentSlot++;
-      const targetX = this.worldWidth * 0.2 + (slot % 5) * (this.worldWidth * 0.15);
-      const targetY = this.worldHeight * 0.65 + Math.floor(slot / 5) * 40;
+      const targetX = this.worldWidth * 0.15 + (slot % 6) * (this.worldWidth * 0.12);
+      const targetY = this.worldHeight * 0.82 + Math.floor(slot / 6) * 30;
       char.moveTo(targetX, targetY);
     }
   }
