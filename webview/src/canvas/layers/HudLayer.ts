@@ -22,6 +22,7 @@ function drawToolIcon(rc: RenderContext): void {
   const bob = Math.floor(Math.sin(now / 300) * zoom);
   const iy = iconY + bob;
 
+  ctx.save();
   ctx.globalAlpha = alpha;
 
   // Icon background bubble.
@@ -78,7 +79,7 @@ function drawToolIcon(rc: RenderContext): void {
     ctx.fillRect(iconX, iy + s, s * 4, s * 2);
   }
 
-  ctx.globalAlpha = 1;
+  ctx.restore();
 }
 
 function toolCategory(tool: string): "read" | "write" | "bash" | "web" | "agent" | "other" {

@@ -19,6 +19,7 @@ const VIEW_ID = "batcave.mainView";
 
 class BatCaveViewProvider implements vscode.WebviewViewProvider {
   private view?: vscode.WebviewView;
+  private webviewReady = false;
   private monitor: ActivityMonitor;
   private eventQueue: BatCaveEvent[] = [];
 
@@ -46,6 +47,7 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
     // Listen for messages from webview.
     webviewView.webview.onDidReceiveMessage((msg: WebviewToExtMessage) => {
       if (msg.command === "ready") {
+        this.webviewReady = true;
         // Send config + any queued events.
         this.sendConfig();
         for (const event of this.eventQueue) {
@@ -60,11 +62,12 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
 
     webviewView.onDidDispose(() => {
       this.monitor.stop();
+      this.webviewReady = false;
     });
   }
 
   private handleEvent(event: BatCaveEvent): void {
-    if (this.view) {
+    if (this.webviewReady && this.view) {
       this.postEvent(event);
     } else {
       // Queue events until webview is ready (max 100).

@@ -188,6 +188,7 @@ export class Character {
     const dx = this.x - dw / 2;
     const dy = this.y - dh;
 
+    ctx.save();
     ctx.globalAlpha = this.opacity;
 
     // Ground shadow — pixel-art stacked rects (no ellipse API, opaque palette).
@@ -220,7 +221,7 @@ export class Character {
     ctx.textAlign = "center";
     ctx.fillText(this.name, this.x, this.y + zoom * 4);
 
-    ctx.globalAlpha = 1;
+    ctx.restore();
   }
 }
 

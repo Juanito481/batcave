@@ -16,12 +16,13 @@ export interface UsageStats {
   toolCallsThisSession: number;
   agentsSpawnedThisSession: number;
   activeModel: string;
+  sessionStartedAt: number;
   /** Estimated context window fill percentage (0-100). */
   contextFillPct: number;
 }
 
 export interface AgentEvent {
-  type: "agent_enter" | "agent_exit" | "agent_working";
+  type: "agent_enter" | "agent_exit";
   agentId: string;
   agentName: string;
   timestamp: number;
@@ -30,12 +31,11 @@ export interface AgentEvent {
 export interface ToolEvent {
   type: "tool_start" | "tool_end";
   toolName: string;
-  skillName?: string;
   timestamp: number;
 }
 
 export interface SessionEvent {
-  type: "session_start" | "session_idle" | "session_thinking" | "session_writing";
+  type: "session_idle" | "session_thinking" | "session_writing";
   timestamp: number;
 }
 

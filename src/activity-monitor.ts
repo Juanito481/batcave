@@ -30,6 +30,7 @@ export class ActivityMonitor {
   private sessionStartedAt = Date.now();
   private activeAgents = new Set<string>();
   private toolToAgent = new Map<string, string>(); // tool_use_id → agentId
+  private toolIdToName = new Map<string, string>(); // tool_use_id → toolName
   private lastState: "idle" | "thinking" | "writing" = "idle";
   private rescanTimer = 0;
   private static readonly RESCAN_INTERVAL_MS = 5000;
@@ -93,6 +94,25 @@ export class ActivityMonitor {
       } catch {
         this.lastFileSize = 0;
       }
+      // Reset session state for the new transcript.
+      this.messagesCount = 0;
+      this.toolCallsCount = 0;
+      this.agentsSpawnedCount = 0;
+      this.sessionStartedAt = Date.now();
+      this.lastState = "idle";
+      // Emit exit for any lingering agents from previous session.
+      const now = Date.now();
+      for (const agentId of this.activeAgents) {
+        this.onEvent({
+          type: "agent_exit",
+          agentId,
+          agentName: AGENTS[agentId]?.name || agentId,
+          timestamp: now,
+        });
+      }
+      this.activeAgents.clear();
+      this.toolToAgent.clear();
+      this.toolIdToName.clear();
     }
   }
 
@@ -121,11 +141,16 @@ export class ActivityMonitor {
     let fd: number;
     try {
       fd = fs.openSync(this.currentFile, "r");
-      fs.readSync(fd, buffer, 0, bytesToRead, this.lastFileSize);
-      fs.closeSync(fd);
     } catch {
       return;
     }
+    try {
+      fs.readSync(fd, buffer, 0, bytesToRead, this.lastFileSize);
+    } catch {
+      fs.closeSync(fd);
+      return;
+    }
+    fs.closeSync(fd);
 
     this.lastFileSize = stat.size;
 
@@ -198,6 +223,12 @@ export class ActivityMonitor {
             }
           }
 
+          // Track tool_use_id → toolName for tool_end resolution.
+          const toolUseIdForMap = b.id as string | undefined;
+          if (toolUseIdForMap) {
+            this.toolIdToName.set(toolUseIdForMap, toolName);
+          }
+
           this.onEvent({
             type: "tool_start",
             toolName,
@@ -224,9 +255,11 @@ export class ActivityMonitor {
           const b = block as Record<string, unknown>;
           if (b.type === "tool_result") {
             const toolUseId = b.tool_use_id as string;
+            const resolvedToolName = this.toolIdToName.get(toolUseId) || "unknown";
+            this.toolIdToName.delete(toolUseId);
             this.onEvent({
               type: "tool_end",
-              toolName: toolUseId || "unknown",
+              toolName: resolvedToolName,
               timestamp: now,
             });
 
@@ -238,7 +271,7 @@ export class ActivityMonitor {
               this.onEvent({
                 type: "agent_exit",
                 agentId,
-                agentName: AGENTS[agentId].name,
+                agentName: AGENTS[agentId]?.name || agentId,
                 timestamp: now,
               });
             }

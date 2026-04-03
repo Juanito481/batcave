@@ -170,6 +170,8 @@ export class BatCaveWorld {
         if (pendingExit !== undefined) {
           window.clearTimeout(pendingExit);
           this.exitTimers.delete(agentId);
+          // Remove the old exiting character so a fresh one can spawn.
+          this.agents.delete(agentId);
         }
         if (this.agents.has(agentId)) break;
 
@@ -201,8 +203,12 @@ export class BatCaveWorld {
           this.logEvent("agent_exit", char.name);
           char.exit();
           // Remove after exit animation (tracked so re-enter can cancel).
+          // Capture reference to verify we delete the same instance (not a re-spawned one).
+          const exitingChar = char;
           const timer = window.setTimeout(() => {
-            this.agents.delete(agentId);
+            if (this.agents.get(agentId) === exitingChar) {
+              this.agents.delete(agentId);
+            }
             this.exitTimers.delete(agentId);
             this.repackSlots();
           }, 500);
@@ -233,6 +239,7 @@ export class BatCaveWorld {
           toolCallsThisSession: event.toolCallsThisSession as number,
           agentsSpawnedThisSession: event.agentsSpawnedThisSession as number,
           activeModel: event.activeModel as string,
+          sessionStartedAt: event.sessionStartedAt as number,
           contextFillPct: event.contextFillPct as number,
         };
         break;
