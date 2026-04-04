@@ -518,10 +518,10 @@ function drawHUD(rc: RenderContext): void {
   const theme = world.getRepoTheme();
   const stats = world.getUsageStats();
 
-  // Panel sizing — 40% of width, with breathing room.
+  // Panel sizing — 30% of width, with breathing room.
   const pad = zoom * 4;
   const sectionGap = zoom * 4;
-  const barW = Math.max(zoom * 56, Math.floor(width * 0.38));
+  const barW = Math.max(zoom * 44, Math.floor(width * 0.28));
   const x = width - barW - pad * 2;
   const y = pad;
   const font = `"DM Mono", monospace`;

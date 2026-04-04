@@ -59,18 +59,29 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
       } else if (msg.command === "launchAgent") {
         const agentId = msg.agentId as string;
         if (agentId && AGENTS[agentId]) {
-          // Find the Claude Code terminal (matches "claude" or "Claude Code" in name).
+          // Find the Claude Code terminal — match common terminal profile names.
           const claudeTerminal = vscode.window.terminals.find(
-            (t) => /claude/i.test(t.name)
+            (t) => /claude/i.test(t.name) || /anthropic/i.test(t.name)
           );
           if (claudeTerminal) {
             claudeTerminal.show(true); // preserveFocus=true
-            claudeTerminal.sendText(`/${agentId}`, true);
-          } else {
-            // Fallback: send to active terminal.
+            // Use sendSequence for more reliable input to Claude Code.
             vscode.commands.executeCommand("workbench.action.terminal.sendSequence", {
-              text: `/${agentId}\n`,
+              text: `/${agentId}\r`,
             });
+          } else {
+            // Try any active terminal as fallback.
+            const activeTerminal = vscode.window.activeTerminal;
+            if (activeTerminal) {
+              activeTerminal.show(true);
+              vscode.commands.executeCommand("workbench.action.terminal.sendSequence", {
+                text: `/${agentId}\r`,
+              });
+            } else {
+              vscode.window.showWarningMessage(
+                `Bat Cave: No Claude Code terminal found. Open Claude Code first.`
+              );
+            }
           }
         }
       }

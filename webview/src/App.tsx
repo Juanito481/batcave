@@ -80,6 +80,26 @@ export function App() {
     };
     canvas.addEventListener("click", handleClick);
 
+    // Cursor change on hover over clickable regions.
+    const handleMouseMove = (e: MouseEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const cx = (e.clientX - rect.left) * scaleX;
+      const cy = (e.clientY - rect.top) * scaleY;
+
+      let overHit = false;
+      for (const region of getHitRegions()) {
+        if (cx >= region.x && cx <= region.x + region.w &&
+            cy >= region.y && cy <= region.y + region.h) {
+          overHit = true;
+          break;
+        }
+      }
+      canvas.style.cursor = overHit ? "pointer" : "default";
+    };
+    canvas.addEventListener("mousemove", handleMouseMove);
+
     // Tell the extension we're ready.
     vscode?.postMessage({ command: "ready" });
 
@@ -92,6 +112,7 @@ export function App() {
       resizeObserver.disconnect();
       window.removeEventListener("message", handleMessage);
       canvas.removeEventListener("click", handleClick);
+      canvas.removeEventListener("mousemove", handleMouseMove);
     };
   }, []);
 
