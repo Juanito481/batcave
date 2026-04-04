@@ -2,7 +2,7 @@
   "name": "batcave",
   "displayName": "Bat Cave",
   "description": "Pixel art visualization of Claude Code activity with animated chess-piece agents in a DC-style lab environment",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "publisher": "juanito481",
   "license": "MIT",
   "repository": {

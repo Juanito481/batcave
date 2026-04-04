@@ -147,12 +147,14 @@ export class ActivityMonitor {
     let fd: number;
     try {
       fd = fs.openSync(this.currentFile, "r");
-    } catch {
+    } catch (err) {
+      console.warn("[BatCave] Failed to open transcript:", (err as Error).message);
       return;
     }
     try {
       fs.readSync(fd, buffer, 0, bytesToRead, this.lastFileSize);
-    } catch {
+    } catch (err) {
+      console.warn("[BatCave] Failed to read transcript:", (err as Error).message);
       fs.closeSync(fd);
       return;
     }
@@ -167,8 +169,8 @@ export class ActivityMonitor {
       try {
         const record = JSON.parse(line);
         this.processRecord(record);
-      } catch {
-        // Malformed line — skip.
+      } catch (err) {
+        console.warn("[BatCave] Malformed JSONL line, skipping:", (err as Error).message);
       }
     }
   }
@@ -294,19 +296,22 @@ export class ActivityMonitor {
     const prompt = ((input.prompt as string) || "").toLowerCase();
     const text = desc + " " + prompt;
 
-    // Check each known agent name against description/prompt.
+    // Check each known agent ID using word-boundary regex to avoid partial matches.
     for (const agentId of Object.keys(AGENTS)) {
-      if (text.includes(agentId.replace("-", " ")) || text.includes(agentId)) {
+      // Match "black-knight" or "black knight" as whole words.
+      const pattern = new RegExp(`\\b${agentId.replace("-", "[- ]")}\\b`);
+      if (pattern.test(text)) {
         return agentId;
       }
     }
 
-    // Also check Italian names.
+    // Also check Italian names with word-boundary regex.
     const italianMap: Record<string, string> = {
       "sovrano": "king",
       "stratega": "queen",
       "fortezza": "white-rook",
       "architetto": "knight",
+      "ossessivo": "bishop",
       "segretario": "pawn",
       "scassinatore": "black-rook",
       "demolitore": "black-bishop",
@@ -317,7 +322,7 @@ export class ActivityMonitor {
       "nave": "ship",
     };
     for (const [name, id] of Object.entries(italianMap)) {
-      if (text.includes(name)) return id;
+      if (new RegExp(`\\b${name}\\b`).test(text)) return id;
     }
 
     return null;
