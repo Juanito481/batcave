@@ -83,6 +83,21 @@ interface Firefly {
   brightness: number; // 0-1
 }
 
+// --- Weather (rain + lightning) ---
+
+interface RainDrop {
+  x: number;
+  y: number;
+  speed: number;
+  length: number;
+}
+
+interface Lightning {
+  active: boolean;
+  timer: number;
+  intensity: number;
+}
+
 export class Ambient {
   private bats: Bat[] = [];
   private drips: Drip[] = [];
@@ -91,11 +106,16 @@ export class Ambient {
   private spiders: Spider[] = [];
   private rats: Rat[] = [];
   private fireflies: Firefly[] = [];
+  private rain: RainDrop[] = [];
+  private lightning: Lightning = { active: false, timer: 0, intensity: 0 };
 
   // Timers.
   private dripTimer = 0;
   private ratSpawnTimer = 0;
   private ratSpawnThreshold = 20000 + Math.random() * 20000;
+  private lightningTimer = 0;
+  private lightningThreshold = 30000 + Math.random() * 60000; // 30-90s between strikes
+  private rainIntensity = 0.3 + Math.random() * 0.4; // 0.3-0.7
 
   // Cached world dimensions.
   private wW = 400;
@@ -172,17 +192,20 @@ export class Ambient {
     this.updateSpiders(deltaMs);
     this.updateRats(deltaMs);
     this.updateFireflies(deltaMs);
+    this.updateWeather(deltaMs);
     this.glow.phase += deltaMs * 0.001;
   }
 
   draw(ctx: CanvasRenderingContext2D, zoom: number): void {
     this.drawGlow(ctx, zoom);
+    this.drawRain(ctx, zoom);
     this.drawFireflies(ctx, zoom);
     this.drawMotes(ctx, zoom);
     this.drawDrips(ctx, zoom);
     this.drawSpiders(ctx, zoom);
     this.drawRats(ctx, zoom);
     this.drawBats(ctx, zoom);
+    this.drawLightning(ctx);
   }
 
   // --- Bats ---
@@ -633,6 +656,89 @@ export class Ambient {
         ctx.fillRect(fx, fy, px, px);
       }
     }
+  }
+
+  // --- Weather (rain + lightning) ---
+
+  private updateWeather(dt: number): void {
+    // Spawn rain drops on the right edge (cave entrance).
+    const entranceX = this.wW * 0.85;
+    const entranceW = this.wW * 0.15;
+    const maxDrops = Math.floor(this.rainIntensity * 30);
+
+    // Maintain rain pool.
+    while (this.rain.length < maxDrops) {
+      this.rain.push({
+        x: entranceX + Math.random() * entranceW,
+        y: Math.random() * this.wH,
+        speed: 0.15 + Math.random() * 0.1,
+        length: 3 + Math.random() * 4,
+      });
+    }
+
+    // Update drops.
+    for (let i = this.rain.length - 1; i >= 0; i--) {
+      const drop = this.rain[i];
+      drop.y += drop.speed * dt;
+      drop.x -= drop.speed * dt * 0.15; // Slight wind angle.
+
+      if (drop.y > this.wH) {
+        // Respawn at top.
+        drop.y = -drop.length;
+        drop.x = entranceX + Math.random() * entranceW;
+      }
+    }
+
+    // Slowly vary rain intensity.
+    if (Math.random() < 0.0001) {
+      this.rainIntensity = 0.2 + Math.random() * 0.6;
+    }
+
+    // Lightning timer.
+    this.lightningTimer += dt;
+    if (this.lightningTimer >= this.lightningThreshold) {
+      this.lightningTimer = 0;
+      this.lightningThreshold = 30000 + Math.random() * 60000;
+      this.lightning.active = true;
+      this.lightning.timer = 0;
+      this.lightning.intensity = 0.6 + Math.random() * 0.3;
+      bus.emit("sound:play", { id: "thunder" });
+    }
+
+    // Lightning decay.
+    if (this.lightning.active) {
+      this.lightning.timer += dt;
+      if (this.lightning.timer > 150) {
+        this.lightning.active = false;
+      }
+    }
+  }
+
+  private drawRain(ctx: CanvasRenderingContext2D, zoom: number): void {
+    const px = Math.max(1, Math.floor(zoom * 0.2));
+    ctx.fillStyle = "#1a2a3a";
+
+    for (const drop of this.rain) {
+      ctx.fillRect(
+        Math.round(drop.x),
+        Math.round(drop.y),
+        px,
+        Math.round(drop.length * zoom * 0.3),
+      );
+    }
+  }
+
+  private drawLightning(ctx: CanvasRenderingContext2D): void {
+    if (!this.lightning.active) return;
+
+    // White flash overlay (only right side — cave entrance area).
+    const progress = this.lightning.timer / 150;
+    const alpha = this.lightning.intensity * (1 - progress);
+    ctx.save();
+    ctx.fillStyle = "#ffffff";
+    ctx.globalAlpha = alpha * 0.15;
+    ctx.fillRect(Math.floor(this.wW * 0.8), 0, Math.floor(this.wW * 0.2), this.wH);
+    ctx.restore();
   }
 
   // --- Screen glow pulse ---

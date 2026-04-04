@@ -9,7 +9,7 @@ import { generateAllSprites, SpriteSheet } from "../canvas/SpriteGenerator";
 import { Pathfinder, Rect } from "./Pathfinder";
 import { AgentMeta, UsageStats } from "../../../shared/types";
 import { bus } from "../systems/EventBus";
-import { AGENT_PERSONALITIES, AgentZone, IdleBehavior } from "../data/agent-personalities";
+import { AGENT_PERSONALITIES, AGENT_INTERACTIONS, CAVE_MILESTONES, AgentZone } from "../data/agent-personalities";
 
 /** Repo-specific color themes for the cave environment. */
 export interface RepoTheme {
@@ -155,6 +155,15 @@ export class BatCaveWorld {
 
   // Interactive dashboard — expanded panel.
   private expandedPanel: "files" | "stats" | "agents" | null = null;
+
+  // Cave evolution — milestone tracking.
+  private caveLevel = 1;
+  private totalToolsCumulative = 0;
+  private lastMilestoneNotified = 0;
+
+  // Agent interactions.
+  private interactionTimer = 0;
+  private activeInteraction: { a: string; b: string } | null = null;
 
   // Agent enter pulse — timestamp of last agent_enter for LED wave effect.
   private _agentPulseStart = 0;
@@ -439,8 +448,10 @@ export class BatCaveWorld {
         this.resetIdleTimer();
         bus.emit("tool:start", { toolName: this.currentTool || "?", x: this.alfred.x, y: this.alfred.y });
         bus.emit("particle:spawn", { preset: "tool-spark", x: this.alfred.x, y: this.alfred.y - 16 });
-        // Analytics: heatmap + breakdown + pace.
+        // Analytics: heatmap + breakdown + pace + evolution.
         this.recordToolForAnalytics(this.currentTool || "?");
+        this.totalToolsCumulative++;
+        this.checkCaveEvolution();
         break;
       }
 
@@ -526,6 +537,8 @@ export class BatCaveWorld {
     // Idle wandering for Alfred and Giovanni.
     this.maybeWander(this.alfred, deltaMs);
     this.maybeGiovanniBatcomputer(deltaMs);
+    // Agent interactions.
+    this.updateInteractions(deltaMs);
     // Decay current tool display.
     if (this.currentToolTimer > 0) {
       this.currentToolTimer -= deltaMs;
@@ -898,6 +911,181 @@ export class BatCaveWorld {
   /** Get current quip for an agent (null if none). */
   getAgentQuip(agentId: string): string | null {
     return this.agentQuips.get(agentId)?.text ?? null;
+  }
+
+  // ── Agent Interactions ──────────────────────────────────
+
+  private updateInteractions(dt: number): void {
+    this.interactionTimer += dt;
+    if (this.interactionTimer < 8000) return; // Check every 8s.
+    this.interactionTimer = 0;
+
+    // Find matching interactions.
+    for (const rule of AGENT_INTERACTIONS) {
+      const charA = this.agents.get(rule.agentA);
+      const charB = this.agents.get(rule.agentB);
+      if (!charA || !charB || !charA.visible || !charB.visible) continue;
+      if (charA.state !== "idle" && charB.state !== "idle") continue;
+
+      // Trigger interaction.
+      switch (rule.type) {
+        case "confront":
+          // Face each other — move toward midpoint.
+          this.confrontAgents(charA, charB, rule);
+          break;
+        case "collaborate":
+          // Both go to same zone.
+          this.collaborateAgents(charA, charB, rule);
+          break;
+        case "block":
+          // A moves between B and server rack.
+          this.blockAgent(charA, charB, rule);
+          break;
+        case "follow":
+          // B follows A.
+          this.followAgent(charA, charB, rule);
+          break;
+        case "repel":
+          // B moves away from A.
+          this.repelAgent(charA, charB, rule);
+          break;
+      }
+
+      // Only trigger one interaction per cycle.
+      break;
+    }
+  }
+
+  private confrontAgents(a: Character, b: Character, rule: typeof AGENT_INTERACTIONS[0]): void {
+    const midX = (a.x + b.x) / 2;
+    const midY = (a.y + b.y) / 2;
+    const offset = this._zoom * 8;
+    if (a.state === "idle") {
+      const path = this.pathfinder.findPath(a.x, a.y, midX - offset, midY);
+      if (path.length > 0) a.moveAlongPath(path);
+    }
+    if (b.state === "idle") {
+      const path = this.pathfinder.findPath(b.x, b.y, midX + offset, midY);
+      if (path.length > 0) b.moveAlongPath(path);
+    }
+    if (rule.quipA) this.agentQuips.set(a.id, { text: rule.quipA, timer: 4000 });
+    if (rule.quipB) this.agentQuips.set(b.id, { text: rule.quipB, timer: 4000 });
+    bus.emit("sound:play", { id: "interaction-chime" });
+  }
+
+  private collaborateAgents(a: Character, b: Character, rule: typeof AGENT_INTERACTIONS[0]): void {
+    const zone = AGENT_PERSONALITIES[a.id]?.zone || "workbench";
+    const pos = this.getZonePosition(zone, a.id);
+    if (!pos) return;
+    if (a.state === "idle") {
+      const path = this.pathfinder.findPath(a.x, a.y, pos.x - this._zoom * 6, pos.y);
+      if (path.length > 0) a.moveAlongPath(path);
+    }
+    if (b.state === "idle") {
+      const path = this.pathfinder.findPath(b.x, b.y, pos.x + this._zoom * 6, pos.y);
+      if (path.length > 0) b.moveAlongPath(path);
+    }
+    if (rule.quipA) this.agentQuips.set(a.id, { text: rule.quipA, timer: 4000 });
+    if (rule.quipB) this.agentQuips.set(b.id, { text: rule.quipB, timer: 4000 });
+    bus.emit("sound:play", { id: "interaction-chime" });
+  }
+
+  private blockAgent(blocker: Character, intruder: Character, rule: typeof AGENT_INTERACTIONS[0]): void {
+    // Blocker moves between intruder and the server zone.
+    const serverPos = this.getZonePosition("server", blocker.id);
+    if (!serverPos) return;
+    const blockX = (intruder.x + serverPos.x) / 2;
+    const blockY = (intruder.y + serverPos.y) / 2;
+    if (blocker.state === "idle") {
+      const path = this.pathfinder.findPath(blocker.x, blocker.y, blockX, blockY);
+      if (path.length > 0) blocker.moveAlongPath(path);
+    }
+    if (rule.quipA) this.agentQuips.set(blocker.id, { text: rule.quipA, timer: 4000 });
+    if (rule.quipB) this.agentQuips.set(intruder.id, { text: rule.quipB, timer: 4000 });
+    bus.emit("sound:play", { id: "interaction-chime" });
+  }
+
+  private followAgent(leader: Character, follower: Character, rule: typeof AGENT_INTERACTIONS[0]): void {
+    if (follower.state === "idle") {
+      const path = this.pathfinder.findPath(follower.x, follower.y, leader.x + this._zoom * 10, leader.y + this._zoom * 2);
+      if (path.length > 0) follower.moveAlongPath(path);
+    }
+    if (rule.quipA) this.agentQuips.set(leader.id, { text: rule.quipA, timer: 4000 });
+    if (rule.quipB) this.agentQuips.set(follower.id, { text: rule.quipB, timer: 4000 });
+  }
+
+  private repelAgent(repeller: Character, fleeing: Character, rule: typeof AGENT_INTERACTIONS[0]): void {
+    // Fleeing agent moves away.
+    const dx = fleeing.x - repeller.x;
+    const dy = fleeing.y - repeller.y;
+    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+    const fleeX = fleeing.x + (dx / dist) * this._zoom * 20;
+    const fleeY = fleeing.y + (dy / dist) * this._zoom * 8;
+    if (fleeing.state === "idle") {
+      const path = this.pathfinder.findPath(fleeing.x, fleeing.y, fleeX, fleeY);
+      if (path.length > 0) fleeing.moveAlongPath(path);
+    }
+    if (rule.quipA) this.agentQuips.set(repeller.id, { text: rule.quipA, timer: 4000 });
+    if (rule.quipB) this.agentQuips.set(fleeing.id, { text: rule.quipB, timer: 4000 });
+  }
+
+  // ── Cave Evolution ──────────────────────────────────────
+
+  private checkCaveEvolution(): void {
+    for (const milestone of CAVE_MILESTONES) {
+      if (this.totalToolsCumulative >= milestone.requiredTools && milestone.level > this.caveLevel) {
+        this.caveLevel = milestone.level;
+        if (milestone.level > this.lastMilestoneNotified) {
+          this.lastMilestoneNotified = milestone.level;
+          bus.emit("sound:play", { id: "milestone" });
+          bus.emit("particle:spawn", {
+            preset: "agent-enter",
+            x: this.worldWidth / 2,
+            y: this.worldHeight / 2,
+          });
+        }
+      }
+    }
+  }
+
+  getCaveLevel(): number {
+    return this.caveLevel;
+  }
+
+  getCaveLevelName(): string {
+    const milestone = CAVE_MILESTONES.find(m => m.level === this.caveLevel);
+    return milestone?.name || "Empty Cave";
+  }
+
+  getCaveDecoration(): string {
+    const milestone = CAVE_MILESTONES.find(m => m.level === this.caveLevel);
+    return milestone?.decoration || "none";
+  }
+
+  getTotalToolsCumulative(): number {
+    return this.totalToolsCumulative;
+  }
+
+  // ── State Persistence ──────────────────────────────────
+
+  getPersistedState(): Record<string, unknown> {
+    return {
+      totalToolsCumulative: this.totalToolsCumulative,
+      caveLevel: this.caveLevel,
+      lastMilestoneNotified: this.lastMilestoneNotified,
+    };
+  }
+
+  restoreState(state: Record<string, unknown>): void {
+    if (typeof state.totalToolsCumulative === "number") {
+      this.totalToolsCumulative = state.totalToolsCumulative;
+    }
+    if (typeof state.caveLevel === "number") {
+      this.caveLevel = state.caveLevel;
+    }
+    if (typeof state.lastMilestoneNotified === "number") {
+      this.lastMilestoneNotified = state.lastMilestoneNotified;
+    }
   }
 
   private logEvent(type: string, label: string): void {

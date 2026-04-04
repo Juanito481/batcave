@@ -70,6 +70,18 @@ export function App() {
     canvas.addEventListener("click", handleClick);
     canvas.style.cursor = "pointer";
 
+    // Restore persisted state.
+    const savedState = vscode?.getState() as Record<string, unknown> | undefined;
+    if (savedState) {
+      world.restoreState(savedState);
+    }
+
+    // Auto-save state every 10 seconds.
+    const saveInterval = setInterval(() => {
+      const state = world.getPersistedState();
+      vscode?.setState(state);
+    }, 10000);
+
     // Tell the extension we're ready.
     vscode?.postMessage({ command: "ready" });
 
@@ -80,6 +92,9 @@ export function App() {
       loop.stop();
       renderer.dispose();
       resizeObserver.disconnect();
+      clearInterval(saveInterval);
+      // Save state on teardown.
+      vscode?.setState(world.getPersistedState());
       canvas.removeEventListener("click", handleClick);
       window.removeEventListener("message", handleMessage);
     };

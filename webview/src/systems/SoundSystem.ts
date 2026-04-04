@@ -6,7 +6,8 @@
 
 import { bus } from "./EventBus";
 
-type SoundId = "drip" | "tool-click" | "agent-chime" | "agent-exit" | "think-chime" | "write-click";
+type SoundId = "drip" | "tool-click" | "agent-chime" | "agent-exit" | "think-chime" | "write-click"
+  | "spider-silk" | "rat-scurry" | "thunder" | "interaction-chime" | "milestone";
 
 export class SoundSystem {
   private ctx: AudioContext | null = null;
@@ -73,6 +74,31 @@ export class SoundSystem {
         break;
       case "write-click":
         this.playTone(ctx, gain, 3500 + Math.random() * 1000, "square", 0.01, v * 0.08);
+        break;
+      case "spider-silk":
+        // High whisper — silk thread descending.
+        this.playTone(ctx, gain, 6000 + Math.random() * 2000, "sine", 0.08, v * 0.06);
+        break;
+      case "rat-scurry":
+        // Fast clicking — tiny feet on stone.
+        for (let i = 0; i < 4; i++) {
+          setTimeout(() => {
+            this.playTone(ctx, gain, 4000 + Math.random() * 2000, "triangle", 0.02, v * 0.05);
+          }, i * 40);
+        }
+        break;
+      case "thunder":
+        // Low rumble — distant thunder.
+        this.playSlide(ctx, gain, 80, 40, 0.8, v * 0.3);
+        this.playTone(ctx, gain, 60 + Math.random() * 30, "sawtooth", 0.6, v * 0.15);
+        break;
+      case "interaction-chime":
+        // Two-note dialogue — agents talking.
+        this.playChime(ctx, gain, [440, 554], v * 0.12);
+        break;
+      case "milestone":
+        // Triumphant ascending arpeggio.
+        this.playChime(ctx, gain, [523, 659, 784, 1047], v * 0.3);
         break;
     }
   }

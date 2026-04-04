@@ -907,4 +907,105 @@ export function drawAllFurniture(rc: RenderContext): void {
   drawWhiteboard(ctx, zt, zoom, wallH, world);
   drawFloorCableRuns(ctx, zt, zoom, width, height);
   drawFloorScatter(ctx, zt, zoom, width, height);
+
+  // Cave evolution decorations.
+  drawEvolutionDecorations(ctx, zoom, zt, wallH, width, height, now, world);
+}
+
+// ── Cave Evolution Decorations ────────────────────────
+
+function drawEvolutionDecorations(
+  ctx: CanvasRenderingContext2D,
+  zoom: number, zt: number, wallH: number,
+  width: number, height: number, now: number,
+  world: RenderContext["world"],
+): void {
+  const level = world.getCaveLevel();
+  if (level < 2) return;
+
+  const font = `"DM Mono", monospace`;
+  const smallFont = Math.max(5, zoom * 2.5);
+
+  // Level 2+: Trophy on shelf (left wall).
+  if (level >= 2) {
+    const tx = zt * 2;
+    const ty = wallH - zoom * 2;
+    // Shelf.
+    ctx.fillStyle = "#1c1c2e";
+    ctx.fillRect(tx, ty, zoom * 8, zoom * 2);
+    ctx.fillStyle = P.HIGHLIGHT;
+    ctx.fillRect(tx, ty, zoom * 8, zoom);
+    // Trophy (golden cup).
+    ctx.fillStyle = "#FFD700";
+    ctx.fillRect(tx + zoom * 3, ty - zoom * 4, zoom * 2, zoom * 3);
+    ctx.fillRect(tx + zoom * 2, ty - zoom * 4, zoom * 4, zoom);
+    ctx.fillRect(tx + zoom * 2, ty - zoom, zoom * 4, zoom);
+    // Base.
+    ctx.fillStyle = darken("#FFD700", 0.3);
+    ctx.fillRect(tx + zoom * 2, ty - zoom, zoom * 4, zoom);
+  }
+
+  // Level 3+: Achievement plaques on wall.
+  if (level >= 3) {
+    const px = width - zt * 6;
+    const py = Math.floor(wallH * 0.5);
+    // Plaque 1.
+    ctx.fillStyle = "#2a2a3e";
+    ctx.fillRect(px, py, zoom * 6, zoom * 4);
+    outlineRect(ctx, px, py, zoom * 6, zoom * 4, Math.max(1, Math.floor(zoom / 2)));
+    ctx.fillStyle = "#FFD700";
+    ctx.font = `${Math.max(4, zoom * 2)}px ${font}`;
+    ctx.textAlign = "center";
+    ctx.fillText("100", px + zoom * 3, py + zoom * 3);
+  }
+
+  // Level 4+: Banner/flag on wall.
+  if (level >= 4) {
+    const bx = Math.floor(width * 0.15);
+    const by = Math.floor(wallH * 0.3);
+    // Pole.
+    ctx.fillStyle = "#3a3a4e";
+    ctx.fillRect(bx, by, zoom, zoom * 8);
+    // Banner.
+    const theme = world.getRepoTheme();
+    ctx.fillStyle = theme.accent;
+    ctx.fillRect(bx + zoom, by, zoom * 5, zoom * 4);
+    ctx.fillStyle = darken(theme.accent, 0.3);
+    ctx.fillRect(bx + zoom, by + zoom * 4, zoom * 4, zoom);
+    ctx.fillRect(bx + zoom, by + zoom * 5, zoom * 3, zoom);
+    // Text.
+    ctx.fillStyle = "#ffffff";
+    ctx.font = `bold ${Math.max(4, zoom * 2)}px ${font}`;
+    ctx.textAlign = "left";
+    ctx.fillText("250", bx + zoom * 2, by + zoom * 3);
+  }
+
+  // Level 5+: Gold trim on Batcomputer.
+  if (level >= 5) {
+    const bcTilesW = Math.min(5, Math.ceil(width / zt) - 1);
+    const bcW = zt * bcTilesW;
+    const bcX = Math.floor((width - bcW) / 2);
+    const bcY = wallH + zoom * 2;
+    ctx.fillStyle = "#FFD700";
+    ctx.fillRect(bcX, bcY, bcW, zoom);
+    ctx.fillRect(bcX, bcY + Math.floor(zt * 1.5) - zoom, bcW, zoom);
+  }
+
+  // Level 6: Legendary — pulsing ambient glow.
+  if (level >= 6) {
+    const pulse = Math.sin(now * 0.001) * 0.5 + 0.5;
+    ctx.save();
+    ctx.fillStyle = "#FFD700";
+    ctx.globalAlpha = pulse * 0.03;
+    ctx.fillRect(0, 0, width, height);
+    ctx.restore();
+  }
+
+  // Cave level label (bottom-left).
+  if (level >= 2) {
+    ctx.fillStyle = "#333344";
+    ctx.font = `${smallFont}px ${font}`;
+    ctx.textAlign = "left";
+    ctx.fillText(`LV${level} ${world.getCaveLevelName()}`, zoom * 3, height - zoom * 3);
+  }
 }

@@ -38,6 +38,10 @@ export class Character {
   private enterTimer = 0;
   private exitTimer = 0;
 
+  // Polish: breathing animation.
+  private breathTimer = 0;
+  private breathPhase = Math.random() * Math.PI * 2; // Offset per character.
+
   constructor(
     id: string,
     name: string,
@@ -177,6 +181,10 @@ export class Character {
         this.frameIndex = (this.frameIndex + 1) % anim.frames;
       }
     }
+
+    // Breathing animation (subtle Y offset when idle).
+    this.breathTimer += deltaMs;
+    this.breathPhase += deltaMs * 0.0015;
   }
 
   draw(ctx: CanvasRenderingContext2D, zoom: number): void {
@@ -192,22 +200,33 @@ export class Character {
 
     const dw = sw * zoom;
     const dh = sh * zoom;
+    // Breathing: subtle bob when idle (1px at zoom 4+).
+    const breathOffset = this.state === "idle"
+      ? Math.sin(this.breathPhase) * Math.max(0.5, zoom * 0.3)
+      : 0;
     const dx = this.x - dw / 2;
-    const dy = this.y - dh;
+    const dy = this.y - dh + breathOffset;
 
     ctx.save();
     ctx.globalAlpha = this.opacity;
 
     // Ground shadow — stays at ground level (targetY) even during enter/exit animations.
+    // Multi-layer elliptical shadow for depth.
     const sz = Math.max(1, zoom);
     const cx = Math.floor(this.x);
     const groundY = Math.floor(this.state === "entering" ? this.targetY : this.y);
-    // Outer ring (wider, dimmer).
+    // Outermost (widest, lightest).
+    ctx.fillStyle = "#0a0814";
+    ctx.fillRect(cx - sz * 6, groundY, sz * 12, sz);
+    // Outer ring.
     ctx.fillStyle = "#0a0816";
+    ctx.fillRect(cx - sz * 5, groundY - sz, sz * 10, sz);
     ctx.fillRect(cx - sz * 5, groundY, sz * 10, sz);
-    ctx.fillRect(cx - sz * 4, groundY - sz, sz * 8, sz);
-    ctx.fillRect(cx - sz * 4, groundY + sz, sz * 8, sz);
-    // Inner core (narrower, darker).
+    ctx.fillRect(cx - sz * 5, groundY + sz, sz * 10, sz);
+    // Middle ring.
+    ctx.fillStyle = "#08060e";
+    ctx.fillRect(cx - sz * 4, groundY, sz * 8, sz);
+    // Inner core (darkest).
     ctx.fillStyle = "#06040e";
     ctx.fillRect(cx - sz * 3, groundY, sz * 6, sz);
 

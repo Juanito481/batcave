@@ -55,6 +55,52 @@ export interface AgentPersonality {
   walkSpeed?: number; // Multiplier (default 1.0)
 }
 
+// ── Agent Interactions ──────────────────────────────────
+// When specific agent pairs are both active, they interact.
+
+export interface AgentInteraction {
+  agentA: string;
+  agentB: string;
+  type: "confront" | "collaborate" | "block" | "follow" | "repel";
+  quipA?: string; // A says this when interaction triggers
+  quipB?: string; // B says this
+}
+
+export const AGENT_INTERACTIONS: AgentInteraction[] = [
+  { agentA: "bishop", agentB: "black-bishop", type: "confront",
+    quipA: "This code needs review.", quipB: "This code needs demolition." },
+  { agentA: "king", agentB: "queen", type: "collaborate",
+    quipA: "Your analysis, Stratega?", quipB: "Three paths forward, Sovrano." },
+  { agentA: "white-rook", agentB: "black-rook", type: "block",
+    quipA: "Step away from the servers.", quipB: "You can't guard everything." },
+  { agentA: "knight", agentB: "pawn", type: "follow",
+    quipA: "Document this structure.", quipB: "On it, Architetto." },
+  { agentA: "cardinal", agentB: "bishop", type: "collaborate",
+    quipA: "I'll write the test.", quipB: "I'll find the smell." },
+  { agentA: "black-knight", agentB: "chancellor", type: "repel",
+    quipA: "What if the pipeline... didn't?", quipB: "Stay away from CI." },
+  { agentA: "scout", agentB: "queen", type: "collaborate",
+    quipA: "Visual report ready.", quipB: "Show me the metrics." },
+];
+
+// ── Cave Evolution Milestones ──────────────────────────
+
+export interface CaveMilestone {
+  level: number;
+  name: string;
+  requiredTools: number;
+  decoration: string; // ID for FurnitureLayer to render
+}
+
+export const CAVE_MILESTONES: CaveMilestone[] = [
+  { level: 1, name: "Empty Cave", requiredTools: 0, decoration: "none" },
+  { level: 2, name: "First Light", requiredTools: 50, decoration: "trophy" },
+  { level: 3, name: "The Workshop", requiredTools: 100, decoration: "plaques" },
+  { level: 4, name: "Command Center", requiredTools: 250, decoration: "banner" },
+  { level: 5, name: "The Fortress", requiredTools: 500, decoration: "gold-trim" },
+  { level: 6, name: "Legendary", requiredTools: 1000, decoration: "legendary" },
+];
+
 export const AGENT_PERSONALITIES: Record<string, AgentPersonality> = {
   king: {
     bodyType: "caped",
