@@ -297,7 +297,9 @@ export class ActivityMonitor {
     const text = desc + " " + prompt;
 
     // Check each known agent ID using word-boundary regex to avoid partial matches.
-    for (const agentId of Object.keys(AGENTS)) {
+    // Sort by length descending so "black-knight" matches before "knight".
+    const sortedIds = Object.keys(AGENTS).sort((a, b) => b.length - a.length);
+    for (const agentId of sortedIds) {
       // Match "black-knight" or "black knight" as whole words.
       const pattern = new RegExp(`\\b${agentId.replace("-", "[- ]")}\\b`);
       if (pattern.test(text)) {
