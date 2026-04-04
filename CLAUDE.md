@@ -24,7 +24,7 @@ webview/src/
   canvas/
     Renderer.ts         — thin orchestrator, owns ParticleSystem + SoundSystem
     GameLoop.ts         — requestAnimationFrame with delta-time clamping (100ms max)
-    SpriteGenerator.ts  — procedural 16x32 pixel-art sprites, palette-based
+    SpriteGenerator.ts  — procedural 16x32 pixel-art sprites, 12 unique body archetypes
     layers/
       render-context.ts — RenderContext interface, shared palette P, seed(), outlineRect()
       CaveLayer.ts      — floor tiles, wall tiles, stalactites, stalagmites, time-of-day tint, Bat Signal, state-reactive LED strip, agent enter pulse
@@ -37,8 +37,10 @@ webview/src/
   entities/
     Character.ts        — animated sprite entity, waypoint movement, enter/exit lifecycle
     Ambient.ts          — bats, water drips (with sound + state boost), dust motes, screen glow
+  data/
+    agent-personalities.ts — per-agent personality: body type, zone, idle behavior, quips
   world/
-    BatCave.ts          — world state, event handling, agent lifecycle, idle behaviors, quips, Bat Signal
+    BatCave.ts          — world state, event handling, agent lifecycle, zone-based behaviors, quips, Bat Signal
     Pathfinder.ts       — BFS grid-based, 8-directional, no corner-cutting
   helpers/
     color.ts            — darken, lighten, hexToRgb, rgbToHex, clamp
@@ -47,7 +49,31 @@ webview/src/
 ## Characters
 - **Alfred (Claude)** — butler, palette: dark tailcoat + white accent. Permanent.
 - **Giovanni (Batman)** — cowl, palette: grey/black + accent blue #1E7FD8. Permanent. Goes to Batcomputer periodically.
-- **13 Scacchiera agents** — appear/disappear when invoked via Skill/Agent tools.
+- **13 Scacchiera agents** — appear/disappear when invoked via Skill/Agent tools. Each has unique sprite, zone, behavior, and quips.
+
+## Agent Personality System (v2.0.0)
+
+Each of the 13 chess-piece agents has:
+- **Unique body archetype**: 12 distinct pixel-art silhouettes (caped, robed, armored, coated, hooded, heavy, glitch, labcoat, geared, compact, naval, standard)
+- **Preferred zone**: agents go to their meaningful area (server rack, workbench, display panel, batcomputer, patrol, follow Alfred, entrance)
+- **Idle behavior**: signature actions when not working (guard, inspect, pace, follow, lurk, chaos, etc.)
+- **Quips**: 4 personality-specific speech lines shown in bubbles every 20-40s idle
+
+| Agent | Body | Zone | Behavior |
+|-------|------|------|----------|
+| King | caped | batcomputer | survey |
+| Queen | robed | batcomputer | pace |
+| White Rook | armored | server | guard |
+| Bishop | coated | workbench | inspect |
+| Knight | standard | batcomputer | draft |
+| Pawn | compact | follow | note |
+| Black Rook | hooded | server | lurk |
+| Black Bishop | heavy | patrol | demolish |
+| Black Knight | glitch | patrol | chaos |
+| Chancellor | standard | server | maintain |
+| Cardinal | labcoat | workbench | test |
+| Scout | geared | display | scan |
+| Ship | naval | entrance | standby |
 
 ## Systems
 - **EventBus**: `bus.emit("particle:spawn", ...)`, `bus.emit("sound:play", ...)`. All state changes in BatCave emit events.

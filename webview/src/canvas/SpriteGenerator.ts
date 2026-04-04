@@ -6,11 +6,13 @@
  * - Directional shadow/highlight shading (light from top-left)
  * - Palette-based shadows (no alpha transparency)
  * - 4-direction walk animation with distinct leg positions
+ * - UNIQUE body templates per agent archetype (v2)
  *
  * No external PNG files — all art is computed at init.
  */
 
 import { darken, lighten } from "../helpers/color";
+import { AGENT_PERSONALITIES, BodyType } from "../data/agent-personalities";
 
 export interface SpriteSheet {
   canvas: OffscreenCanvas;
@@ -143,10 +145,13 @@ const PALETTES: Record<string, CharacterPalette> = {
   },
 };
 
-// ── Pixel templates (14 wide x 22 tall → drawn into 16x32 frame) ─
+// ── Body templates per archetype ────────────────────────
+// Each template: 17 rows (body) + legs are appended separately.
 // Legend: H=hair, S=skin, T=shirt, P=pants, A=accent, E=eyes, .=empty
+// All rows MUST be exactly 16 characters wide.
 
-const BASE_FRONT = [
+// Standard humanoid (default for knight, chancellor, NPCs).
+const BODY_STANDARD = [
   "......HHHH......",
   ".....HHHHHH.....",
   "....HHHHHHHH....",
@@ -164,12 +169,259 @@ const BASE_FRONT = [
   ".....TTTTTT.....",
   ".....PPPPPP.....",
   ".....PPPPPP.....",
-  ".....PP..PP.....",
-  ".....PP..PP.....",
-  "....PP....PP....",
 ];
 
-const BASE_BACK = [
+// Caped — King: wide cape draping from shoulders, regal silhouette.
+const BODY_CAPED = [
+  "......HHHH......",
+  ".....HHHHHH.....",
+  "....HHHHHHHH....",
+  "....HHSSSSHH....",
+  "....HSSEESSH....",
+  "....HSSSSSSH....",
+  ".....SSSSSS.....",
+  "......SSSS......",
+  "...AAATTTTAAA...",
+  "..AATTTTTTTTAA..",
+  "..ASTTTTTTTTSA..",
+  "..ATTTTTTTTTA..",
+  "..ATTTTTTTTTA..",
+  "...ATTTTTTTTA...",
+  "...AATTTTTTAA...",
+  "...AAPPPPPPAA...",
+  "...AAPPPPPPAA...",
+];
+
+// Robed — Queen: elegant dress that widens at the bottom.
+const BODY_ROBED = [
+  "......HHHH......",
+  ".....HHHHHH.....",
+  "....HHHHHHHH....",
+  "....HHSSSSHH....",
+  "....HSSEESSH....",
+  "....HSSSSSSH....",
+  ".....SSSSSS.....",
+  "......SSSS......",
+  ".....AATTAA.....",
+  "....TTTTTTTT....",
+  "...STTTATTTTS...",
+  "...STTTTTTTTS...",
+  "....TTTTTTTT....",
+  "....TTTTTTTT....",
+  "...TTTTTTTTTT...",
+  "..TTTTTTTTTTTT..",
+  "..TTTTTTTTTTTT..",
+];
+
+// Armored — White Rook: wide, stocky, boxy torso with shield.
+const BODY_ARMORED = [
+  "......HHHH......",
+  ".....HHHHHH.....",
+  "....HHHHHHHH....",
+  "....HHSSSSHH....",
+  "....HSSEESSH....",
+  "....HSSSSSSH....",
+  ".....SSSSSS.....",
+  "......SSSS......",
+  "....AATTTTAA....",
+  "...TTTTTTTTTT...",
+  "..STTTTATTTTS...",
+  "..STTTTTTTTTSA..",
+  "..STTTTTTTTTSA..",
+  "...TTTTTTTTTT...",
+  "...TTTTTTTTTT...",
+  "....PPPPPPPP....",
+  "....PPPPPPPP....",
+];
+
+// Coated — Bishop: long detective coat extending below waist.
+const BODY_COATED = [
+  "......HHHH......",
+  ".....HHHHHH.....",
+  "....HHHHHHHH....",
+  "....HHSSSSHH....",
+  "....HSSEESSH....",
+  "....HSSSSSSH....",
+  ".....SSSSSS.....",
+  "......SSSS......",
+  ".....AATTAA.....",
+  "....TTTTTTTT....",
+  "...STTTATTTTS...",
+  "...STTTTTTTTS...",
+  "...STTTTTTTTS...",
+  "....TTTTTTTT....",
+  "....TTTTTTTT....",
+  "....TTTTTTTT....",
+  "....TT.PP.TT....",
+];
+
+// Hooded — Black Rook: cloak with hood, narrow and sinister.
+const BODY_HOODED = [
+  ".....HHHHHH.....",
+  "....HHHHHHHH....",
+  "...HHHHHHHHHH...",
+  "...HHHHSSHHHH...",
+  "....HSSEESSH....",
+  "....HSSSSSSH....",
+  ".....SSSSSS.....",
+  "......SSSS......",
+  ".....TTTTTT.....",
+  "....TTTTTTTT....",
+  "...HTTTATTTTH...",
+  "...HTTTTTTTTH...",
+  "...HTTTTTTTTH...",
+  "....HHHHHHHH....",
+  "....HHTTTTHH....",
+  ".....PPPPPP.....",
+  ".....PPPPPP.....",
+];
+
+// Heavy — Black Bishop: very wide shoulders, demolition build.
+const BODY_HEAVY = [
+  "......HHHH......",
+  ".....HHHHHH.....",
+  "....HHHHHHHH....",
+  "....HHSSSSHH....",
+  "....HSSEESSH....",
+  "....HSSSSSSH....",
+  ".....SSSSSS.....",
+  "......SSSS......",
+  "...AAATTTTAAA...",
+  "..TTTTTTTTTTTT..",
+  ".STTTTTATTTTTS..",
+  ".STTTTTTTTTTTS..",
+  "..STTTTTTTTTTS..",
+  "..TTTTTTTTTTTT..",
+  "...TTTTTTTTTT...",
+  "....PPPPPPPP....",
+  "....PPPPPPPP....",
+];
+
+// Glitch — Black Knight: asymmetric, irregular silhouette.
+const BODY_GLITCH = [
+  ".....HHHHH......",
+  "....HHHHHH.H....",
+  "....HHHHHHHH....",
+  "....HHSSSSHH....",
+  "...HSSEESSH.....",
+  "....HSSSSSSH....",
+  ".....SSSSSS.....",
+  "......SSSS......",
+  ".....TATTAA.....",
+  "...TTTTTTTTT....",
+  "..STTTATTTTS....",
+  "...STTTTTTTTS...",
+  "..STTTTTTTTS....",
+  "...TTTTTTTTT....",
+  "....TTTTTTT.....",
+  "....PPPPPPP.....",
+  ".....PPPPPP.....",
+];
+
+// Lab coat — Cardinal: clean white coat, neat proportions.
+const BODY_LABCOAT = [
+  "......HHHH......",
+  ".....HHHHHH.....",
+  "....HHHHHHHH....",
+  "....HHSSSSHH....",
+  "....HSSEESSH....",
+  "....HSSSSSSH....",
+  ".....SSSSSS.....",
+  "......SSSS......",
+  ".....AATTAA.....",
+  "....TTTTTTTT....",
+  "...STTTATTTTS...",
+  "...STTTTTTTTS...",
+  "...STTTTTTTTS...",
+  "....TTTTTTTT....",
+  "....TTAATTTT....",
+  "....TTPPPPTT....",
+  "....TT.PP.TT....",
+];
+
+// Geared — Scout: vest with equipment bumps, utility look.
+const BODY_GEARED = [
+  "......HHHH......",
+  ".....HHHHHH.....",
+  "....HHHHHHHH....",
+  "....HHSSSSHH....",
+  "....HSSEESSH....",
+  "....HSSSSSSH....",
+  ".....SSSSSS.....",
+  "......SSSS......",
+  "....AAATTAAA....",
+  "....TTTTTTTT....",
+  "...SATTATTTTS...",
+  "...STTTATTATS...",
+  "...STTTTTTTTS...",
+  "....TTAATTTT....",
+  ".....TTTTTT.....",
+  ".....PPPPPP.....",
+  ".....PPPPPP.....",
+];
+
+// Compact — Pawn: shorter body, pushed down in frame.
+// Note: fewer body rows, legs start higher. Offset handled in buildPixelMap.
+const BODY_COMPACT = [
+  "......HHHH......",
+  ".....HHHHHH.....",
+  "....HHHHHHHH....",
+  "....HHSSSSHH....",
+  "....HSSEESSH....",
+  "....HSSSSSSH....",
+  ".....SSSSSS.....",
+  "......SSSS......",
+  ".....AATTAA.....",
+  "....TTTTTTTT....",
+  "...STTTTTTTTS...",
+  "...STTTTTTTTS...",
+  "....TTTTTTTT....",
+  ".....TTTTTT.....",
+  ".....PPPPPP.....",
+  ".....PPPPPP.....",
+  ".....PP..PP.....",
+];
+
+// Naval — Ship: broad shoulders, captain's coat with buttons.
+const BODY_NAVAL = [
+  "......HHHH......",
+  ".....HHHHHH.....",
+  "....HHHHHHHH....",
+  "....HHSSSSHH....",
+  "....HSSEESSH....",
+  "....HSSSSSSH....",
+  ".....SSSSSS.....",
+  "......SSSS......",
+  "....AATTTTAA....",
+  "...TTTTTTTTTT...",
+  "..STTTTATTTTTS..",
+  "..STTTTATTTTS...",
+  "..STTTTATTTTTS..",
+  "...TTTTTTTTTT...",
+  "....TTTTTTTT....",
+  "....PPPPPPPP....",
+  "....PPPPPPPP....",
+];
+
+// Map body type string to template.
+const BODY_TEMPLATES: Record<BodyType, string[]> = {
+  standard: BODY_STANDARD,
+  caped: BODY_CAPED,
+  robed: BODY_ROBED,
+  armored: BODY_ARMORED,
+  coated: BODY_COATED,
+  hooded: BODY_HOODED,
+  heavy: BODY_HEAVY,
+  glitch: BODY_GLITCH,
+  labcoat: BODY_LABCOAT,
+  geared: BODY_GEARED,
+  compact: BODY_COMPACT,
+  naval: BODY_NAVAL,
+};
+
+// Back-facing variants. Most agents use standard back.
+// Only caped/robed/hooded get unique backs.
+const BACK_STANDARD = [
   "......HHHH......",
   ".....HHHHHH.....",
   "....HHHHHHHH....",
@@ -187,20 +439,84 @@ const BASE_BACK = [
   ".....TTTTTT.....",
   ".....PPPPPP.....",
   ".....PPPPPP.....",
-  ".....PP..PP.....",
-  ".....PP..PP.....",
-  "....PP....PP....",
 ];
 
-// Walk leg variants — 4 distinct poses for smoother animation.
+const BACK_CAPED = [
+  "......HHHH......",
+  ".....HHHHHH.....",
+  "....HHHHHHHH....",
+  "....HHHHHHHH....",
+  "....HHHHHHHH....",
+  "....HHHHHHHH....",
+  ".....HHHHHH.....",
+  "......SSSS......",
+  "...AAATTTTAAA...",
+  "..AATTTTTTTTAA..",
+  "..AATTTTTTTTAA..",
+  "..AATTTTTTTTAA..",
+  "..AATTTTTTTTAA..",
+  "...AATTTTTTAA...",
+  "...AATTTTTTAA...",
+  "...AAPPPPPPAA...",
+  "...AAPPPPPPAA...",
+];
+
+const BACK_ROBED = [
+  "......HHHH......",
+  ".....HHHHHH.....",
+  "....HHHHHHHH....",
+  "....HHHHHHHH....",
+  "....HHHHHHHH....",
+  "....HHHHHHHH....",
+  ".....HHHHHH.....",
+  "......SSSS......",
+  ".....AATTAA.....",
+  "....TTTTTTTT....",
+  "...STTTTTTTTS...",
+  "...STTTTTTTTS...",
+  "....TTTTTTTT....",
+  "....TTTTTTTT....",
+  "...TTTTTTTTTT...",
+  "..TTTTTTTTTTTT..",
+  "..TTTTTTTTTTTT..",
+];
+
+const BACK_HOODED = [
+  ".....HHHHHH.....",
+  "....HHHHHHHH....",
+  "...HHHHHHHHHH...",
+  "...HHHHHHHHHH...",
+  "...HHHHHHHHHH...",
+  "...HHHHHHHHHH...",
+  "....HHHHHHHH....",
+  "......SSSS......",
+  ".....TTTTTT.....",
+  "....TTTTTTTT....",
+  "...HTTTTTTTTH...",
+  "...HTTTTTTTTH...",
+  "...HTTTTTTTTH...",
+  "....HHHHHHHH....",
+  "....HHTTTTHH....",
+  ".....PPPPPP.....",
+  ".....PPPPPP.....",
+];
+
+function getBackTemplate(bodyType: BodyType): string[] {
+  switch (bodyType) {
+    case "caped": return BACK_CAPED;
+    case "robed": return BACK_ROBED;
+    case "hooded": return BACK_HOODED;
+    default: return BACK_STANDARD;
+  }
+}
+
+// ── Leg variants ─────────────────────────────────────────
+
+// Standard legs (used by most body types).
 const LEGS_FRONT: string[][] = [
-  // Pose 0 — standing
   [".....PP..PP.....", ".....PP..PP.....", "....PP....PP...."],
-  // Pose 1 — right step forward
   [".....PP..PP.....", "....PP....PP....", "...PP......PP..."],
-  // Pose 2 — passing (feet together)
   [".....PPPPPP.....", ".....PP..PP.....", ".....PP..PP....."],
-  // Pose 3 — left step forward
   [".....PP..PP.....", "....PP....PP....", "...PP......PP..."],
 ];
 
@@ -218,14 +534,68 @@ const LEGS_SIDE: string[][] = [
   ["......PP.PPP....", "......PP..PP....", ".....PP...PP...."],
 ];
 
+// Caped legs — cape drapes over legs.
+const LEGS_CAPED: string[][] = [
+  ["...AAPP..PPAA...", "...AAPP..PPAA...", "....PP....PP...."],
+  ["...AAPP..PPAA...", "...APP....PPA...", "....PP....PP...."],
+  ["...AAPPPPPPAA...", "...AAPP..PPAA...", "....PP....PP...."],
+  ["...AAPP..PPAA...", "...APP....PPA...", "....PP....PP...."],
+];
+
+// Robed legs — dress/robe bottom, no visible legs.
+const LEGS_ROBED: string[][] = [
+  [".TTTTTTTTTTTTTT.", ".TTTTTTTTTTTTTT.", "..TTTTTTTTTTTT.."],
+  [".TTTTTTTTTTTTTT.", "..TTTTTTTTTTTT..", "..TTTTTTTTTTTT.."],
+  ["..TTTTTTTTTTTT..", ".TTTTTTTTTTTTTT.", "..TTTTTTTTTTTT.."],
+  ["..TTTTTTTTTTTT..", ".TTTTTTTTTTTTTT.", "..TTTTTTTTTTTT.."],
+];
+
+// Armored legs — wider stance.
+const LEGS_ARMORED: string[][] = [
+  ["....PP....PP....", "....PP....PP....", "...PP......PP..."],
+  ["....PP....PP....", "...PP......PP...", "...PP......PP..."],
+  ["....PPPPPPPP....", "....PP....PP....", "....PP....PP...."],
+  ["....PP....PP....", "...PP......PP...", "...PP......PP..."],
+];
+
+// Hooded legs — cloak over standard legs.
+const LEGS_HOODED: string[][] = [
+  ["....HHPPPPPH....", ".....PP..PP.....", ".....PP..PP....."],
+  ["....HHPP.PPH....", "....PP....PP....", "....PP....PP...."],
+  ["....HHPPPPPH....", ".....PP..PP.....", ".....PP..PP....."],
+  ["....HHPP.PPH....", "....PP....PP....", "....PP....PP...."],
+];
+
+function getFrontLegs(bodyType: BodyType): string[][] {
+  switch (bodyType) {
+    case "caped": return LEGS_CAPED;
+    case "robed": return LEGS_ROBED;
+    case "armored": return LEGS_ARMORED;
+    case "hooded": return LEGS_HOODED;
+    default: return LEGS_FRONT;
+  }
+}
+
+function getBackLegs(bodyType: BodyType): string[][] {
+  // Back legs are simpler — only caped/robed need variants.
+  switch (bodyType) {
+    case "caped": return LEGS_CAPED;
+    case "robed": return LEGS_ROBED;
+    default: return LEGS_BACK;
+  }
+}
+
+// ── Accessories (head/hat overlays) ─────────────────────
+
 const ACCESSORY_TEMPLATES: Record<string, string[]> = {
   giovanni: [
     "....A.AAAA.A....",
     "....AAAAAAAA....",
   ],
   king: [
-    "....A.AAAA.A....",
+    "......A.AA......",
     ".....AAAAAA.....",
+    "....A.AAAA.A....",
   ],
   queen: [
     "......A..A......",
@@ -243,6 +613,10 @@ const ACCESSORY_TEMPLATES: Record<string, string[]> = {
     "....A......A....",
     "................",
   ],
+  "black-bishop": [
+    "....AAAAAAAA....",
+    "....AAAAAAAA....",
+  ],
   chancellor: [
     "................",
     ".....A....A.....",
@@ -253,9 +627,19 @@ const ACCESSORY_TEMPLATES: Record<string, string[]> = {
   ],
   scout: [
     "..AAAAAAAAAAAA..",
-    "................",
+    "...AAAAAAAAAA...",
+  ],
+  ship: [
+    "....AAAAAAAA....",
+    ".....AAAAAA.....",
   ],
 };
+
+// ── Resolve body type for a character ───────────────────
+
+function getBodyType(characterId: string): BodyType {
+  return AGENT_PERSONALITIES[characterId]?.bodyType ?? "standard";
+}
 
 // ── Pixel map building ───────────────────────────────────
 
@@ -334,7 +718,6 @@ function renderFrame(
   }
 
   // Pass 2 — Fill with directional shading.
-  // lightFromLeft=true: light from top-left (default). false: light from top-right (for flipped sprites).
   for (let y = 0; y < FH; y++) {
     for (let x = 0; x < FW; x++) {
       const key = map[y][x];
@@ -378,6 +761,11 @@ function renderFrame(
 export function generateSpriteSheet(characterId: string): SpriteSheet {
   const palette = PALETTES[characterId] || PALETTES.pawn;
   const shades = deriveShades(palette);
+  const bodyType = getBodyType(characterId);
+  const bodyFront = BODY_TEMPLATES[bodyType] || BODY_STANDARD;
+  const bodyBack = getBackTemplate(bodyType);
+  const legsFront = getFrontLegs(bodyType);
+  const legsBack = getBackLegs(bodyType);
   const cols = 4;
   const rows = 5; // idle, walk-down, walk-up, walk-side, action
 
@@ -388,33 +776,32 @@ export function generateSpriteSheet(characterId: string): SpriteSheet {
 
   // Row 0 — Idle (subtle bob, front-facing).
   for (let f = 0; f < 4; f++) {
-    const map = buildPixelMap(characterId, BASE_FRONT);
+    const map = buildPixelMap(characterId, bodyFront);
     renderFrame(ctx, f * FW, 0, offsetMap(map, bobs[f]), shades, false, true);
   }
 
   // Row 1 — Walk down (4 distinct leg poses).
   const walkBobs = [0, -1, 0, -1];
   for (let f = 0; f < 4; f++) {
-    const map = buildPixelMap(characterId, BASE_FRONT, LEGS_FRONT[f]);
+    const map = buildPixelMap(characterId, bodyFront, legsFront[f]);
     renderFrame(ctx, f * FW, FH, offsetMap(map, walkBobs[f]), shades, false, true);
   }
 
   // Row 2 — Walk up (4 distinct leg poses, back-facing).
   for (let f = 0; f < 4; f++) {
-    const map = buildPixelMap(characterId, BASE_BACK, LEGS_BACK[f]);
+    const map = buildPixelMap(characterId, bodyBack, legsBack[f]);
     renderFrame(ctx, f * FW, FH * 2, offsetMap(map, walkBobs[f]), shades, false, true);
   }
 
   // Row 3 — Walk side (flipped, with corrected shading direction).
   for (let f = 0; f < 4; f++) {
-    const map = buildPixelMap(characterId, BASE_FRONT, LEGS_SIDE[f]);
-    // Flipped sprite: light should come from top-right to maintain consistent lighting.
+    const map = buildPixelMap(characterId, bodyFront, LEGS_SIDE[f]);
     renderFrame(ctx, f * FW, FH * 3, offsetMap(map, walkBobs[f]), shades, true, false);
   }
 
   // Row 4 — Action (bob + sparkle overlay at arms).
   for (let f = 0; f < 4; f++) {
-    const map = buildPixelMap(characterId, BASE_FRONT);
+    const map = buildPixelMap(characterId, bodyFront);
     renderFrame(ctx, f * FW, FH * 4, offsetMap(map, bobs[f]), shades, false, true);
     const accH = ACCESSORY_TEMPLATES[characterId]?.length ?? 0;
     const sy = FH * 4 + accH + 16 + bobs[f];

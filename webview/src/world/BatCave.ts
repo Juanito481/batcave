@@ -9,6 +9,7 @@ import { generateAllSprites, SpriteSheet } from "../canvas/SpriteGenerator";
 import { Pathfinder, Rect } from "./Pathfinder";
 import { AgentMeta, UsageStats } from "../../../shared/types";
 import { bus } from "../systems/EventBus";
+import { AGENT_PERSONALITIES, AgentZone, IdleBehavior } from "../data/agent-personalities";
 
 /** Repo-specific color themes for the cave environment. */
 export interface RepoTheme {
@@ -130,6 +131,14 @@ export class BatCaveWorld {
     "Another fine session, if I may say so.",
     "Shall I fetch the test suite, sir?",
   ];
+
+  // Agent quips — per-agent speech bubbles.
+  private agentQuips = new Map<string, { text: string; timer: number }>();
+  private agentQuipTimers = new Map<string, number>();
+  private agentQuipThresholds = new Map<string, number>();
+
+  // Agent behavior timers — zone-specific idle actions.
+  private agentBehaviorTimers = new Map<string, number>();
 
   // Bat Signal (context 100%).
   private batSignalTimer = 0;
@@ -336,7 +345,7 @@ export class BatCaveWorld {
         if (!sprite) break;
 
         const slot = this.nextAgentSlot++;
-        const { x: slotX, y: slotY } = this.getAgentSlotPosition(slot);
+        const { x: slotX, y: slotY } = this.getAgentSlotPosition(slot, agentId);
 
         const char = new Character(
           agentId,
@@ -379,6 +388,10 @@ export class BatCaveWorld {
               this.agents.delete(agentId);
             }
             this.exitTimers.delete(agentId);
+            this.agentQuips.delete(agentId);
+            this.agentQuipTimers.delete(agentId);
+            this.agentQuipThresholds.delete(agentId);
+            this.agentBehaviorTimers.delete(agentId);
             this.repackSlots();
           }, 500);
           this.exitTimers.set(agentId, timer);
@@ -485,8 +498,9 @@ export class BatCaveWorld {
     this.ambient.update(deltaMs, this.worldWidth, this.worldHeight, this.wallH);
     this.alfred.update(deltaMs);
     this.giovanni.update(deltaMs);
-    for (const agent of this.agents.values()) {
+    for (const [agentId, agent] of this.agents) {
       agent.update(deltaMs);
+      this.updateAgentBehavior(agentId, agent, deltaMs);
     }
     // Update companions (casual spawn/stay/exit).
     this.updateCompanions(deltaMs);
@@ -657,6 +671,174 @@ export class BatCaveWorld {
     return { avg: Math.round(avg * 10) / 10, current: Math.round(currentRate * 10) / 10, trend };
   }
 
+  // ── Per-agent idle behaviors ───────────────────────────
+
+  private updateAgentBehavior(agentId: string, char: Character, dt: number): void {
+    if (char.state !== "idle") {
+      this.agentBehaviorTimers.delete(agentId);
+      return;
+    }
+
+    const personality = AGENT_PERSONALITIES[agentId];
+    if (!personality) {
+      this.maybeWander(char, dt);
+      return;
+    }
+
+    // Agent quips (every 20-40s when idle).
+    this.updateAgentQuip(agentId, dt);
+
+    const timer = (this.agentBehaviorTimers.get(agentId) ?? 0) + dt;
+    const threshold = 5000 + (agentId.charCodeAt(0) % 4) * 2000;
+    if (timer < threshold) {
+      this.agentBehaviorTimers.set(agentId, timer);
+      return;
+    }
+    this.agentBehaviorTimers.set(agentId, 0);
+
+    switch (personality.idleBehavior) {
+      case "survey":
+        // King: stands still most of the time, occasionally turns.
+        if (Math.random() < 0.3) this.wanderInZone(char, "batcomputer");
+        break;
+      case "pace":
+        // Queen: paces between batcomputer and other zones.
+        this.wanderInZone(char, Math.random() < 0.5 ? "batcomputer" : "workbench");
+        break;
+      case "guard":
+        // White Rook: patrols perimeter.
+        this.patrolPerimeter(char);
+        break;
+      case "inspect":
+        // Bishop: wanders between workbench and furniture.
+        this.wanderInZone(char, Math.random() < 0.7 ? "workbench" : "display");
+        break;
+      case "draft":
+        // Knight: goes between batcomputer and workbench.
+        this.wanderInZone(char, Math.random() < 0.6 ? "batcomputer" : "workbench");
+        break;
+      case "note":
+        // Pawn: follows Alfred.
+        this.followAlfred(char);
+        break;
+      case "lurk":
+        // Black Rook: sneaks around server area.
+        this.wanderInZone(char, Math.random() < 0.6 ? "server" : "patrol");
+        break;
+      case "demolish":
+        // Black Bishop: inspects everything.
+        this.wanderInZone(char, Math.random() < 0.5 ? "workbench" : "server");
+        break;
+      case "chaos":
+        // Black Knight: erratic random movement.
+        this.chaosWander(char);
+        break;
+      case "maintain":
+        // Chancellor: stays near server rack.
+        this.wanderInZone(char, "server");
+        break;
+      case "test":
+        // Cardinal: workbench area.
+        this.wanderInZone(char, Math.random() < 0.8 ? "workbench" : "batcomputer");
+        break;
+      case "scan":
+        // Scout: display panel.
+        this.wanderInZone(char, Math.random() < 0.7 ? "display" : "batcomputer");
+        break;
+      case "standby":
+        // Ship: stays near entrance, barely moves.
+        if (Math.random() < 0.2) this.wanderInZone(char, "entrance");
+        break;
+    }
+  }
+
+  /** Wander within a zone's area. */
+  private wanderInZone(char: Character, zone: AgentZone): void {
+    const pos = this.getZonePosition(zone, char.id);
+    if (!pos) return;
+    const jx = (Math.random() - 0.5) * this._zoom * 16;
+    const jy = (Math.random() - 0.5) * this._zoom * 6;
+    const tx = pos.x + jx;
+    const ty = pos.y + jy;
+    const path = this.pathfinder.findPath(char.x, char.y, tx, ty);
+    if (path.length > 0) char.moveAlongPath(path);
+  }
+
+  /** Patrol perimeter path. */
+  private patrolPerimeter(char: Character): void {
+    const floorY = this.wallH + Math.floor((this.worldHeight - this.wallH) * 0.82);
+    const margin = this.worldWidth * 0.08;
+    // Pick a random perimeter point.
+    const side = Math.floor(Math.random() * 4);
+    let tx: number, ty: number;
+    switch (side) {
+      case 0: tx = margin; ty = floorY; break;
+      case 1: tx = this.worldWidth - margin; ty = floorY; break;
+      case 2: tx = this.worldWidth * 0.5; ty = floorY - this._zoom * 8; break;
+      default: tx = this.worldWidth * 0.5; ty = floorY + this._zoom * 4; break;
+    }
+    const path = this.pathfinder.findPath(char.x, char.y, tx, ty);
+    if (path.length > 0) char.moveAlongPath(path);
+  }
+
+  /** Follow Alfred at a respectful distance. */
+  private followAlfred(char: Character): void {
+    const offset = this._zoom * 14;
+    const tx = this.alfred.x + offset;
+    const ty = this.alfred.y + this._zoom * 2;
+    const dx = tx - char.x;
+    const dy = ty - char.y;
+    // Only follow if Alfred moved far enough.
+    if (Math.sqrt(dx * dx + dy * dy) > offset * 0.6) {
+      const path = this.pathfinder.findPath(char.x, char.y, tx, ty);
+      if (path.length > 0) char.moveAlongPath(path);
+    }
+  }
+
+  /** Chaotic random movement — erratic, unpredictable. */
+  private chaosWander(char: Character): void {
+    const floorY = this.wallH + Math.floor((this.worldHeight - this.wallH) * 0.82);
+    const tx = Math.random() * this.worldWidth * 0.8 + this.worldWidth * 0.1;
+    const ty = floorY + (Math.random() - 0.5) * this._zoom * 12;
+    const path = this.pathfinder.findPath(char.x, char.y, tx, ty);
+    if (path.length > 0) char.moveAlongPath(path);
+  }
+
+  // ── Agent quips ──────────────────────────────────────────
+
+  private updateAgentQuip(agentId: string, dt: number): void {
+    // Don't show if agent already has an active quip.
+    if (this.agentQuips.has(agentId)) {
+      const quip = this.agentQuips.get(agentId)!;
+      quip.timer -= dt;
+      if (quip.timer <= 0) this.agentQuips.delete(agentId);
+      return;
+    }
+
+    const timer = (this.agentQuipTimers.get(agentId) ?? 0) + dt;
+    const threshold = this.agentQuipThresholds.get(agentId) ?? (20000 + Math.random() * 20000);
+
+    if (timer < threshold) {
+      this.agentQuipTimers.set(agentId, timer);
+      return;
+    }
+
+    // Fire quip.
+    this.agentQuipTimers.set(agentId, 0);
+    this.agentQuipThresholds.set(agentId, 20000 + Math.random() * 20000);
+
+    const personality = AGENT_PERSONALITIES[agentId];
+    if (!personality || personality.quips.length === 0) return;
+
+    const text = personality.quips[Math.floor(Math.random() * personality.quips.length)];
+    this.agentQuips.set(agentId, { text, timer: 4000 });
+  }
+
+  /** Get current quip for an agent (null if none). */
+  getAgentQuip(agentId: string): string | null {
+    return this.agentQuips.get(agentId)?.text ?? null;
+  }
+
   private logEvent(type: string, label: string): void {
     this.eventLog.push({ type, label, timestamp: Date.now() });
     // Keep max 64 entries.
@@ -709,14 +891,57 @@ export class BatCaveWorld {
     }, 5000);
   }
 
-  private getAgentSlotPosition(slot: number): { x: number; y: number } {
+  private getAgentSlotPosition(slot: number, agentId?: string): { x: number; y: number } {
     const zoom = this._zoom;
-    // Agents stand on the floor at same level as Claude, spread in rows.
     const floorY = this.wallH + Math.floor((this.worldHeight - this.wallH) * 0.82);
+
+    // Zone-based positioning: agents go to their preferred area.
+    if (agentId) {
+      const personality = AGENT_PERSONALITIES[agentId];
+      if (personality) {
+        const pos = this.getZonePosition(personality.zone, agentId);
+        if (pos) return pos;
+      }
+    }
+
+    // Fallback: grid layout for unknown agents.
     const rowSpacing = zoom * 12;
     const x = this.worldWidth * 0.15 + (slot % 6) * (this.worldWidth * 0.12);
     const y = floorY + Math.floor(slot / 6) * rowSpacing;
     return { x, y };
+  }
+
+  /** Get position in a zone, with slight randomization to avoid stacking. */
+  private getZonePosition(zone: AgentZone, agentId: string): { x: number; y: number } | null {
+    const floorY = this.wallH + Math.floor((this.worldHeight - this.wallH) * 0.82);
+    const zt = this._zt;
+    const zoom = this._zoom;
+    const bcTilesW = Math.min(5, Math.ceil(this.worldWidth / zt) - 1);
+    const bcW = zt * bcTilesW;
+    const bcX = Math.floor((this.worldWidth - bcW) / 2);
+    // Deterministic jitter based on agent ID.
+    const jitter = (agentId.charCodeAt(0) % 7 - 3) * zoom * 3;
+
+    switch (zone) {
+      case "batcomputer":
+        return { x: bcX + bcW / 2 + jitter, y: floorY - zoom * 2 };
+      case "server":
+        return { x: bcX - zt * 2 + jitter, y: floorY - zoom * 2 };
+      case "workbench":
+        return { x: Math.floor(bcX - zt * 5) + jitter, y: floorY };
+      case "display":
+        return { x: bcX + bcW + zt * 2 + jitter, y: floorY - zoom * 2 };
+      case "patrol":
+        // Start at a random perimeter point.
+        return { x: this.worldWidth * 0.2 + jitter, y: floorY };
+      case "follow":
+        // Near Alfred with offset.
+        return { x: this.alfred.x + zoom * 12, y: this.alfred.y + zoom * 2 };
+      case "entrance":
+        return { x: this.worldWidth * 0.88 + jitter, y: floorY };
+      default:
+        return null;
+    }
   }
 
   private repackSlots(): void {

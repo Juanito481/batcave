@@ -111,8 +111,13 @@ function drawSpeechBubbles(rc: RenderContext): void {
 
   for (const agent of agents) {
     if (!agent.visible) continue;
-    if (agent.state === "idle" || agent.state === "entering" || agent.state === "exiting") continue;
-    drawBubble(ctx, agent.x, agent.y - zoom * 18, "working...", zoom, fontSize);
+    // Show agent-specific quip if available, otherwise "working..." when active.
+    const agentQuip = world.getAgentQuip(agent.id);
+    if (agentQuip) {
+      drawBubble(ctx, agent.x, agent.y - zoom * 18, agentQuip, zoom, fontSize);
+    } else if (agent.state !== "idle" && agent.state !== "entering" && agent.state !== "exiting") {
+      drawBubble(ctx, agent.x, agent.y - zoom * 18, "working...", zoom, fontSize);
+    }
   }
 }
 
