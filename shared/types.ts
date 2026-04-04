@@ -32,6 +32,8 @@ export interface ToolEvent {
   type: "tool_start" | "tool_end";
   toolName: string;
   timestamp: number;
+  /** File path touched by this tool (Read, Edit, Write, Glob, Grep). */
+  filePath?: string;
 }
 
 export interface SessionEvent {

@@ -6,21 +6,19 @@ import { RenderContext, P, seed, outlineRect } from "./render-context";
 function drawBatcomputer(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, zt: number, zoom: number, tilesW: number,
-  now: number, state?: "idle" | "thinking" | "writing",
+  now: number, world: RenderContext["world"],
 ): void {
+  const state = world.getAlfredState();
   const totalW = zt * tilesW;
   const totalH = Math.floor(zt * 1.5);
 
   // Desk body.
   ctx.fillStyle = "#1c1c2e";
   ctx.fillRect(x, y, totalW, totalH);
-  // Desk top edge highlight.
   ctx.fillStyle = P.HIGHLIGHT;
   ctx.fillRect(x, y, totalW, zoom);
-  // Desk shadow on bottom.
   ctx.fillStyle = "#141422";
   ctx.fillRect(x, y + totalH - zoom, totalW, zoom);
-  // Outline.
   outlineRect(ctx, x, y, totalW, totalH, zoom);
 
   // 3 screens.
@@ -29,20 +27,16 @@ function drawBatcomputer(
   const sw = Math.floor(screenAreaW / 3);
   const sh = totalH - gap * 2;
 
-  // Screen colors react to Alfred's state.
   const screenColors = state === "thinking"
     ? [P.ACCENT, P.ACCENT, "#1a3a5a"]
     : state === "writing"
     ? ["#1a3a1a", "#2ECC71", "#1a3a1a"]
-    : ["#1a1a2a", "#1a1a2a", "#1a1a2a"]; // idle: dim
-  const screenLabels = state === "thinking"
-    ? ["READ", "THINK", "SCAN"]
-    : state === "writing"
-    ? ["EDIT", "WRITE", "DIFF"]
-    : ["SYS", "MAIN", "LOG"];
+    : ["#1a1a2a", "#1a1a2a", "#1a1a2a"];
 
-  // Writing tremor — subtle 1px jitter on screen content.
   const tremor = state === "writing" ? Math.floor(Math.sin(now / 80) * zoom * 0.5) : 0;
+  const font = `"DM Mono", monospace`;
+  const smallFont = Math.max(5, zoom * 2.5);
+  const labelFont = Math.max(6, zoom * 3);
 
   for (let i = 0; i < 3; i++) {
     const sx = x + gap + i * (sw + gap);
@@ -50,30 +44,110 @@ function drawBatcomputer(
     // Bezel.
     ctx.fillStyle = "#0a0a14";
     ctx.fillRect(sx - zoom, y + gap - zoom, sw + zoom * 2, sh + zoom * 2);
-
     // Screen surface.
     ctx.fillStyle = "#060610";
     ctx.fillRect(sx, y + gap, sw, sh);
-
-    // Screen glow (opaque, blended via solid color cycling).
+    // Screen glow.
     const phase = Math.sin(now / 800 + i * 2.1);
     const glowBase = screenColors[i];
     const glow = phase > 0 ? lighten(glowBase, phase * 0.15) : glowBase;
     ctx.fillStyle = glow;
     ctx.fillRect(sx + zoom + tremor, y + gap + zoom, sw - zoom * 2, sh - zoom * 2);
-
-    // Scanlines (opaque dark bands).
+    // Scanlines.
     ctx.fillStyle = "#040408";
     for (let sl = 0; sl < sh; sl += zoom * 2) {
       ctx.fillRect(sx, y + gap + sl, sw, zoom);
     }
-
-    // Screen label.
-    ctx.fillStyle = screenColors[i];
-    ctx.font = `bold ${Math.max(6, zoom * 3)}px "DM Mono", monospace`;
-    ctx.textAlign = "center";
-    ctx.fillText(screenLabels[i], sx + sw / 2, y + gap + sh - zoom * 2);
   }
+
+  // ── Left screen: recent files ──
+  const leftX = x + gap;
+  const screenY = y + gap;
+  const files = world.getRecentFiles();
+  ctx.font = `${smallFont}px ${font}`;
+  ctx.textAlign = "left";
+
+  // Screen header.
+  ctx.fillStyle = "#555570";
+  ctx.fillText("FILES", leftX + zoom * 2, screenY + zoom * 3);
+
+  if (files.length > 0) {
+    const lineH = Math.max(zoom * 3, smallFont + zoom);
+    const maxLines = Math.min(files.length, Math.floor((sh - zoom * 5) / lineH));
+    const visible = files.slice(-maxLines);
+    for (let f = 0; f < visible.length; f++) {
+      const file = visible[f];
+      const fy = screenY + zoom * 5 + f * lineH;
+      // Color by tool type.
+      const toolCat = ["Edit", "Write", "NotebookEdit"].includes(file.tool) ? "write"
+        : ["Read", "Grep", "Glob"].includes(file.tool) ? "read" : "other";
+      ctx.fillStyle = toolCat === "write" ? "#2ECC71" : toolCat === "read" ? "#5a8ab8" : "#888899";
+      // Truncate filename.
+      const maxChars = Math.max(6, Math.floor((sw - zoom * 4) / (smallFont * 0.6)));
+      const display = file.name.length > maxChars
+        ? file.name.slice(0, maxChars - 1) + "\u2026"
+        : file.name;
+      ctx.fillText(display, leftX + zoom * 2, fy);
+    }
+  } else {
+    ctx.fillStyle = "#333348";
+    ctx.fillText("no files", leftX + zoom * 2, screenY + zoom * 7);
+  }
+
+  // ── Center screen: active tool + state ──
+  const centerX = x + gap + sw + gap;
+  const activeData = world.getActiveToolDisplay();
+
+  // State label (big).
+  ctx.font = `bold ${labelFont}px ${font}`;
+  ctx.textAlign = "center";
+  ctx.fillStyle = state === "thinking" ? P.ACCENT
+    : state === "writing" ? "#2ECC71" : "#555566";
+  ctx.fillText(activeData.state, centerX + sw / 2 + tremor, screenY + Math.floor(sh * 0.35));
+
+  // Current tool name.
+  ctx.font = `${smallFont}px ${font}`;
+  ctx.fillStyle = "#888899";
+  const toolDisplay = activeData.tool.length > 10
+    ? activeData.tool.slice(0, 9) + "\u2026"
+    : activeData.tool;
+  ctx.fillText(toolDisplay, centerX + sw / 2 + tremor, screenY + Math.floor(sh * 0.55));
+
+  // Divider line.
+  ctx.fillStyle = "#1a1a30";
+  ctx.fillRect(centerX + zoom * 2, screenY + Math.floor(sh * 0.62), sw - zoom * 4, Math.max(1, Math.floor(zoom / 2)));
+
+  // Active agents count.
+  const agentCount = world.getActiveAgentNames().length;
+  if (agentCount > 0) {
+    ctx.fillStyle = "#2ECC71";
+    ctx.fillText(`${agentCount} agent${agentCount > 1 ? "s" : ""}`, centerX + sw / 2, screenY + Math.floor(sh * 0.78));
+  }
+
+  // ── Right screen: session stats ──
+  const rightX = x + gap + (sw + gap) * 2;
+  const stats = world.getSessionStats();
+  const theme = world.getRepoTheme();
+
+  ctx.font = `${smallFont}px ${font}`;
+  ctx.textAlign = "left";
+
+  // Header.
+  ctx.fillStyle = "#555570";
+  ctx.fillText("STATS", rightX + zoom * 2, screenY + zoom * 3);
+
+  // Context %.
+  const ctxColor = stats.contextPct < 50 ? "#2ECC71" : stats.contextPct < 80 ? "#F39C12" : "#E74C3C";
+  ctx.fillStyle = ctxColor;
+  ctx.fillText(`CTX ${stats.contextPct}%`, rightX + zoom * 2, screenY + zoom * 7);
+
+  // Tool count.
+  ctx.fillStyle = theme.accent;
+  ctx.fillText(`${stats.toolCount} tools`, rightX + zoom * 2, screenY + zoom * 11);
+
+  // Duration.
+  ctx.fillStyle = "#888899";
+  ctx.fillText(stats.duration, rightX + zoom * 2, screenY + zoom * 15);
 
   // Desk legs.
   ctx.fillStyle = "#141424";
@@ -810,7 +884,7 @@ export function drawAllFurniture(rc: RenderContext): void {
   drawServerRack(ctx, bcX - zt * 3, Math.floor(bcY - zt * 1.5), zt, zoom, now);
   drawWorkbench(ctx, Math.floor(bcX - zt * 6.5), bcY, zt, zoom, now);
   drawDisplayPanel(ctx, bcX + bcW + zt, bcY - Math.floor(zt * 0.5), zt, zoom, now, world);
-  drawBatcomputer(ctx, bcX, bcY, zt, zoom, bcTilesW, now, world.getAlfredState());
+  drawBatcomputer(ctx, bcX, bcY, zt, zoom, bcTilesW, now, world);
 
   // Floor objects (crates, chair, debris).
   drawFloorObjects(ctx, bcX, bcY, zt, zoom, bcTilesW, width, height);

@@ -237,10 +237,14 @@ export class ActivityMonitor {
             this.toolIdToName.set(toolUseIdForMap, toolName);
           }
 
+          // Extract file path from tool input when available.
+          const filePath = this.extractFilePath(toolName, b.input as Record<string, unknown> | undefined);
+
           this.onEvent({
             type: "tool_start",
             toolName,
             timestamp: now,
+            filePath: filePath || undefined,
           });
 
           // Update Claude state.
@@ -327,6 +331,20 @@ export class ActivityMonitor {
       if (new RegExp(`\\b${name}\\b`).test(text)) return id;
     }
 
+    return null;
+  }
+
+  /** Extract file path from tool input fields. */
+  private extractFilePath(toolName: string, input: Record<string, unknown> | undefined): string | null {
+    if (!input) return null;
+    // Read, Edit, Write, Grep, Glob all use file_path or path.
+    const filePath = (input.file_path as string) || (input.path as string) || null;
+    if (filePath) return filePath;
+    // Bash: extract from command if it references a file.
+    if (toolName === "Bash") {
+      const cmd = input.command as string | undefined;
+      if (cmd) return null; // Too complex to parse reliably — skip.
+    }
     return null;
   }
 

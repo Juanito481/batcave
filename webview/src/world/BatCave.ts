@@ -87,6 +87,10 @@ export class BatCaveWorld {
   private currentTool: string | null = null;
   private currentToolTimer = 0;
 
+  // Recent files touched — ring buffer for Batcomputer left screen.
+  private recentFiles: { name: string; tool: string; timestamp: number }[] = [];
+  private static readonly MAX_RECENT_FILES = 8;
+
   // Event log (for timeline).
   private eventLog: { type: string; label: string; timestamp: number }[] = [];
 
@@ -380,6 +384,22 @@ export class BatCaveWorld {
         this.currentTool = (event.toolName as string) || null;
         this.currentToolTimer = 3000; // Show icon for 3s.
         this.logEvent("tool", this.currentTool || "?");
+
+        // Track file touched for Batcomputer screen.
+        const filePath = (event as Record<string, unknown>).filePath as string | undefined;
+        if (filePath) {
+          const parts = filePath.split("/");
+          const fileName = parts[parts.length - 1] || filePath;
+          this.recentFiles.push({
+            name: fileName,
+            tool: this.currentTool || "?",
+            timestamp: Date.now(),
+          });
+          if (this.recentFiles.length > BatCaveWorld.MAX_RECENT_FILES) {
+            this.recentFiles.shift();
+          }
+        }
+
         if (this.alfredState === "idle") {
           this.alfredState = "thinking";
           this.alfred.setAction();
@@ -502,6 +522,32 @@ export class BatCaveWorld {
   /** Timestamp of last agent_enter (for LED wave). 0 if never. */
   getAgentPulseStart(): number {
     return this._agentPulseStart;
+  }
+
+  /** Recent files for Batcomputer left screen. */
+  getRecentFiles(): { name: string; tool: string }[] {
+    return this.recentFiles.slice(-5);
+  }
+
+  /** Screen data for Batcomputer center screen. */
+  getActiveToolDisplay(): { tool: string; state: string } {
+    return {
+      tool: this.currentTool || "---",
+      state: this.alfredState.toUpperCase(),
+    };
+  }
+
+  /** Screen data for Batcomputer right screen. */
+  getSessionStats(): { contextPct: number; toolCount: number; duration: string } {
+    const stats = this.usageStats;
+    const elapsed = Date.now() - (stats?.sessionStartedAt ?? Date.now());
+    const mins = Math.floor(elapsed / 60_000);
+    const secs = Math.floor((elapsed % 60_000) / 1000);
+    return {
+      contextPct: stats?.contextFillPct ?? 0,
+      toolCount: stats?.toolCallsThisSession ?? 0,
+      duration: mins > 0 ? `${mins}m ${secs}s` : `${secs}s`,
+    };
   }
 
   getCurrentTool(): string | null {
