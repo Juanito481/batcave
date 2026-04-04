@@ -126,6 +126,9 @@ export class BatCaveWorld {
   // Write clicks timer.
   private writeClickTimer = 0;
 
+  // Agent enter pulse — timestamp of last agent_enter for LED wave effect.
+  private _agentPulseStart = 0;
+
   // Giovanni Batcomputer behavior.
   private giovanniAtBc = false;
   private giovanniBcTimer = 0;
@@ -331,6 +334,7 @@ export class BatCaveWorld {
         char.enter(slotX, slotY);
         this.agents.set(agentId, char);
         this.logEvent("agent_enter", meta?.name || agentId);
+        this._agentPulseStart = Date.now();
         bus.emit("agent:enter", { agentId, x: slotX, y: slotY });
         bus.emit("particle:spawn", { preset: "agent-enter", x: slotX, y: slotY });
         bus.emit("sound:play", { id: "agent-chime" });
@@ -425,6 +429,8 @@ export class BatCaveWorld {
   }
 
   update(deltaMs: number): void {
+    // Cave breathing: thinking doubles drip frequency, writing is normal, idle is calm.
+    this.ambient.setStateBoost(this.alfredState === "thinking" ? 0.5 : 1);
     this.ambient.update(deltaMs, this.worldWidth, this.worldHeight, this.wallH);
     this.alfred.update(deltaMs);
     this.giovanni.update(deltaMs);
@@ -491,6 +497,11 @@ export class BatCaveWorld {
 
   getRepoTheme(): RepoTheme {
     return this.repoTheme;
+  }
+
+  /** Timestamp of last agent_enter (for LED wave). 0 if never. */
+  getAgentPulseStart(): number {
+    return this._agentPulseStart;
   }
 
   getCurrentTool(): string | null {

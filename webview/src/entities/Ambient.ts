@@ -65,15 +65,23 @@ export class Ambient {
 
   // Context pressure (0-100) — controls base drip interval.
   private contextPressure = 0;
+  // State boost — thinking halves the drip interval for "cave breathing" effect.
+  private stateBoost = 1;
 
   /** Increase drip frequency under context pressure. */
   setContextPressure(pct: number): void {
     this.contextPressure = pct;
   }
 
-  /** Compute drip interval from pressure: 0% = 25000ms, 100% = 8000ms. */
+  /** Set state-driven drip frequency multiplier (1 = normal, 0.5 = double speed). */
+  setStateBoost(multiplier: number): void {
+    this.stateBoost = multiplier;
+  }
+
+  /** Compute drip interval from pressure + state boost. */
   private getDripInterval(): number {
-    return Math.max(8000, 25000 - this.contextPressure * 170);
+    const base = Math.max(8000, 25000 - this.contextPressure * 170);
+    return base * this.stateBoost;
   }
 
   // --- Public API ---

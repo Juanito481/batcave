@@ -41,6 +41,9 @@ function drawBatcomputer(
     ? ["EDIT", "WRITE", "DIFF"]
     : ["SYS", "MAIN", "LOG"];
 
+  // Writing tremor — subtle 1px jitter on screen content.
+  const tremor = state === "writing" ? Math.floor(Math.sin(now / 80) * zoom * 0.5) : 0;
+
   for (let i = 0; i < 3; i++) {
     const sx = x + gap + i * (sw + gap);
 
@@ -57,7 +60,7 @@ function drawBatcomputer(
     const glowBase = screenColors[i];
     const glow = phase > 0 ? lighten(glowBase, phase * 0.15) : glowBase;
     ctx.fillStyle = glow;
-    ctx.fillRect(sx + zoom, y + gap + zoom, sw - zoom * 2, sh - zoom * 2);
+    ctx.fillRect(sx + zoom + tremor, y + gap + zoom, sw - zoom * 2, sh - zoom * 2);
 
     // Scanlines (opaque dark bands).
     ctx.fillStyle = "#040408";
@@ -754,6 +757,41 @@ function drawFloorScatter(
   ctx.fillRect(coilX, coilY + zoom * 2, zoom * 3, zoom);
 }
 
+// ── Batcomputer light pool (floor glow, state-reactive) ──
+
+function drawBatcomputerLightPool(
+  ctx: CanvasRenderingContext2D,
+  bcX: number, bcY: number, zt: number, zoom: number, bcTilesW: number,
+  now: number, state?: "idle" | "thinking" | "writing",
+): void {
+  if (state === "idle") return; // No glow when idle — cave stays dark.
+
+  const bcW = zt * bcTilesW;
+  const bcBottom = bcY + Math.floor(zt * 1.5) + zoom * 3;
+
+  // Pool color based on state.
+  const poolColor = state === "thinking" ? "#0a1428" : "#0a1e0e";
+  const poolBright = state === "thinking" ? "#0e1a30" : "#0e2814";
+
+  // Breathing pulse.
+  const pulse = Math.sin(now / 1200) * 0.5 + 0.5;
+  const color = pulse > 0.5 ? poolBright : poolColor;
+
+  // Main pool — wide, shallow rectangle below the desk.
+  const poolW = bcW + zoom * 8;
+  const poolH = zoom * 6;
+  const poolX = bcX - zoom * 4;
+  const poolY = bcBottom + zoom * 2;
+
+  ctx.fillStyle = color;
+  ctx.fillRect(poolX, poolY, poolW, poolH);
+
+  // Softer outer edge (wider, dimmer).
+  ctx.fillStyle = poolColor;
+  ctx.fillRect(poolX - zoom * 2, poolY + poolH, poolW + zoom * 4, zoom * 3);
+  ctx.fillRect(poolX + zoom * 2, poolY - zoom * 2, poolW - zoom * 4, zoom * 2);
+}
+
 // ── Orchestrator ───────────────────────────────────────
 
 export function drawAllFurniture(rc: RenderContext): void {
@@ -764,6 +802,9 @@ export function drawAllFurniture(rc: RenderContext): void {
   const bcW = zt * bcTilesW;
   const bcX = Math.floor((width - bcW) / 2);
   const bcY = wallH + zoom * 2;
+
+  // Light pool on floor below Batcomputer — state-reactive ambient glow.
+  drawBatcomputerLightPool(ctx, bcX, bcY, zt, zoom, bcTilesW, now, world.getAlfredState());
 
   drawCables(ctx, bcX, bcY, zt, zoom, bcTilesW);
   drawServerRack(ctx, bcX - zt * 3, Math.floor(bcY - zt * 1.5), zt, zoom, now);

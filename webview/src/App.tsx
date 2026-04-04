@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { GameLoop } from "./canvas/GameLoop";
 import { Renderer } from "./canvas/Renderer";
 import { BatCaveWorld } from "./world/BatCave";
-import { getHitRegions } from "./canvas/layers/HudLayer";
 
 // Acquire VS Code API (injected by the extension host).
 const vscode =
@@ -58,47 +57,6 @@ export function App() {
     };
     window.addEventListener("message", handleMessage);
 
-    // Canvas click handler for HUD buttons.
-    const handleClick = (e: MouseEvent) => {
-      const rect = canvas.getBoundingClientRect();
-      const scaleX = canvas.width / rect.width;
-      const scaleY = canvas.height / rect.height;
-      const cx = (e.clientX - rect.left) * scaleX;
-      const cy = (e.clientY - rect.top) * scaleY;
-
-      for (const region of getHitRegions()) {
-        if (cx >= region.x && cx <= region.x + region.w &&
-            cy >= region.y && cy <= region.y + region.h) {
-          if (region.action === "toggleSound") {
-            vscode?.postMessage({ command: "toggleSound" });
-          } else if (region.action.startsWith("launchAgent:")) {
-            const agentId = region.action.replace("launchAgent:", "");
-            vscode?.postMessage({ command: "launchAgent", agentId });
-          }
-        }
-      }
-    };
-    canvas.addEventListener("click", handleClick);
-
-    // Cursor change on hover over clickable regions.
-    const handleMouseMove = (e: MouseEvent) => {
-      const rect = canvas.getBoundingClientRect();
-      const scaleX = canvas.width / rect.width;
-      const scaleY = canvas.height / rect.height;
-      const cx = (e.clientX - rect.left) * scaleX;
-      const cy = (e.clientY - rect.top) * scaleY;
-
-      let overHit = false;
-      for (const region of getHitRegions()) {
-        if (cx >= region.x && cx <= region.x + region.w &&
-            cy >= region.y && cy <= region.y + region.h) {
-          overHit = true;
-          break;
-        }
-      }
-      canvas.style.cursor = overHit ? "pointer" : "default";
-    };
-    canvas.addEventListener("mousemove", handleMouseMove);
 
     // Tell the extension we're ready.
     vscode?.postMessage({ command: "ready" });
@@ -111,8 +69,6 @@ export function App() {
       renderer.dispose();
       resizeObserver.disconnect();
       window.removeEventListener("message", handleMessage);
-      canvas.removeEventListener("click", handleClick);
-      canvas.removeEventListener("mousemove", handleMouseMove);
     };
   }, []);
 

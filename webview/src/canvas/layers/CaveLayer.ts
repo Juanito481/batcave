@@ -172,12 +172,39 @@ function drawWallDetails(
     ctx.fillRect(x, pipeY - zoom, zoom * 2, Math.max(1, Math.floor(zoom / 2)));
   }
 
-  // LED strip along wall bottom — repo-themed accent glow.
+  // LED strip along wall bottom — state-reactive + repo-themed.
   const ledY = wallH - zoom;
   const theme = world.getRepoTheme();
+  const state = world.getAlfredState();
+  const stateColor = state === "thinking" ? "#1a3a6a"
+    : state === "writing" ? "#1a4a2a"
+    : theme.accentDark;
+  const stateDim = state === "thinking" ? "#0e1e3a"
+    : state === "writing" ? "#0e2a16"
+    : darken(theme.accentDark, 0.3);
+
+  // Speed up pulse when active.
+  const ledSpeed = state === "idle" ? 1200 : 600;
+
+  // Agent enter pulse — bright wave traveling along the strip for 1.5s after agent_enter.
+  const pulseStart = world.getAgentPulseStart();
+  const pulseAge = now - pulseStart;
+  const pulseActive = pulseStart > 0 && pulseAge < 1500;
+  const pulsePos = pulseActive ? (pulseAge / 1500) * width : -1;
+
   for (let x = 0; x < width; x += zoom * 6) {
-    const phase = Math.sin(now / 1200 + x * 0.01);
-    ctx.fillStyle = phase > 0.3 ? theme.accentDark : darken(theme.accentDark, 0.3);
+    const phase = Math.sin(now / ledSpeed + x * 0.01);
+    let color = phase > 0.3 ? stateColor : stateDim;
+
+    // Wave overlay — bright accent near the pulse wavefront.
+    if (pulseActive) {
+      const dist = Math.abs(x - pulsePos);
+      if (dist < zoom * 12) {
+        color = "#2ECC71"; // Green flash for agent arrival.
+      }
+    }
+
+    ctx.fillStyle = color;
     ctx.fillRect(x, ledY, zoom * 4, zoom);
   }
 
