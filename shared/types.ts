@@ -59,9 +59,11 @@ export interface ExtToWebviewMessage {
 }
 
 /** Message from webview to extension host. */
-export interface WebviewToExtMessage {
-  command: "ready" | "requestState" | "toggleSound";
-}
+export type WebviewToExtMessage =
+  | { command: "ready" }
+  | { command: "requestState" }
+  | { command: "toggleSound" }
+  | { command: "launchAgent"; agentId: string };
 
 /** Known Alfred chess-piece agents. */
 export const AGENTS: Record<string, AgentMeta> = {

@@ -157,7 +157,14 @@ export class Character {
         this.x += (dx / dist) * step;
         this.y += (dy / dist) * step;
         this.flipped = dx < 0;
-        this.currentAnim = "walk-down";
+        // Choose animation based on dominant movement direction.
+        if (Math.abs(dx) > Math.abs(dy)) {
+          this.currentAnim = "walk-side";
+        } else if (dy < 0) {
+          this.currentAnim = "walk-up";
+        } else {
+          this.currentAnim = "walk-down";
+        }
       }
     }
 
@@ -191,18 +198,18 @@ export class Character {
     ctx.save();
     ctx.globalAlpha = this.opacity;
 
-    // Ground shadow — pixel-art stacked rects (no ellipse API, opaque palette).
+    // Ground shadow — stays at ground level (targetY) even during enter/exit animations.
     const sz = Math.max(1, zoom);
     const cx = Math.floor(this.x);
-    const sy2 = Math.floor(this.y);
+    const groundY = Math.floor(this.state === "entering" ? this.targetY : this.y);
     // Outer ring (wider, dimmer).
     ctx.fillStyle = "#0a0816";
-    ctx.fillRect(cx - sz * 5, sy2, sz * 10, sz);
-    ctx.fillRect(cx - sz * 4, sy2 - sz, sz * 8, sz);
-    ctx.fillRect(cx - sz * 4, sy2 + sz, sz * 8, sz);
+    ctx.fillRect(cx - sz * 5, groundY, sz * 10, sz);
+    ctx.fillRect(cx - sz * 4, groundY - sz, sz * 8, sz);
+    ctx.fillRect(cx - sz * 4, groundY + sz, sz * 8, sz);
     // Inner core (narrower, darker).
     ctx.fillStyle = "#06040e";
-    ctx.fillRect(cx - sz * 3, sy2, sz * 6, sz);
+    ctx.fillRect(cx - sz * 3, groundY, sz * 6, sz);
 
     // Sprite.
     if (this.flipped) {

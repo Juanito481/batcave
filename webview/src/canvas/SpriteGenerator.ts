@@ -5,7 +5,7 @@
  * - 1px dark outline around all silhouettes
  * - Directional shadow/highlight shading (light from top-left)
  * - Palette-based shadows (no alpha transparency)
- * - Walk animation with distinct leg positions
+ * - 4-direction walk animation with distinct leg positions
  *
  * No external PNG files — all art is computed at init.
  */
@@ -19,11 +19,9 @@ export interface SpriteSheet {
   animations: Record<string, { row: number; frames: number; speed: number }>;
 }
 
-// ── Outline & ground shadow (near-black with warm cave tint) ─
+// ── Outline (near-black with warm cave tint) ────────────
 
 const OUTLINE = "#0c0810";
-const GROUND_SHADOW_DARK = "#080610";
-const GROUND_SHADOW_MID = "#0c0a14";
 
 // ── Palette & shading ────────────────────────────────────
 
@@ -127,103 +125,135 @@ const PALETTES: Record<string, CharacterPalette> = {
     skin: "#C0C0D0", hair: "#808090", shirt: "#505060",
     pants: "#404050", accent: "#1E7FD8", eyes: "#1E7FD8",
   },
-  // Ab — nordafricano, fototipo 2, ricci corti marroni, jeans + felpa nera
   ab: {
     skin: "#C8A882", hair: "#3D2B1F", shirt: "#1A1A1A",
     pants: "#2B4570", accent: "#333333", eyes: "#1a1a2e",
   },
-  // Andrea — ricci castano chiaro, vestito da caccia (gilet + pantalone)
   andrea: {
     skin: "#F0D0A0", hair: "#A0724A", shirt: "#5B6B3D",
     pants: "#4A5A2D", accent: "#8B7355", eyes: "#1a1a2e",
   },
-  // Arturo — tanti ricci rossi, tutto nero, stile metal hardcore
   arturo: {
     skin: "#E0C8A8", hair: "#B83200", shirt: "#0E0E0E",
     pants: "#101010", accent: "#1A1A1A", eyes: "#1a1a2e",
   },
-  // Francesco — camicia + golf mezza zip, capelli neri corti, bicipiti
   francesco: {
     skin: "#E8C8A0", hair: "#1A1A2A", shirt: "#2C3E50",
     pants: "#3A3A3A", accent: "#4A6A7A", eyes: "#1a1a2e",
   },
 };
 
-// ── Pixel templates (12 wide x 20 tall → drawn into 16x32 frame) ─
+// ── Pixel templates (14 wide x 22 tall → drawn into 16x32 frame) ─
 // Legend: H=hair, S=skin, T=shirt, P=pants, A=accent, E=eyes, .=empty
 
-const BASE_TEMPLATE = [
-  "....HHHH....",
-  "...HHHHHH...",
-  "..HHHHHHHH..",
-  "..HHSSSSHH..",
-  "..HSSEESSH..",
-  "..HSSSSSSH..",
-  "...SSSSSS...",
-  "....SSSS....",
-  "....TTTT....",
-  "...TTTTTT...",
-  ".SSTTATTAS..",
-  ".SSTTTTTTS..",
-  ".SSTTTTTTS..",
-  "..STTTTTTS..",
-  "...TTTTTT...",
-  "...PPPPPP...",
-  "...PPPPPP...",
-  "...PP..PP...",
-  "...PP..PP...",
-  "..PP....PP..",
+const BASE_FRONT = [
+  "......HHHH......",
+  ".....HHHHHH.....",
+  "....HHHHHHHH....",
+  "....HHSSSSHH....",
+  "....HSSEESSH....",
+  "....HSSSSSSH....",
+  ".....SSSSSS.....",
+  "......SSSS......",
+  ".....AATTAA.....",
+  "....TTTTTTTT....",
+  "...STTTATTTTS...",
+  "...STTTTTTTTS...",
+  "...STTTTTTTTS...",
+  "....TTTTTTTT....",
+  ".....TTTTTT.....",
+  ".....PPPPPP.....",
+  ".....PPPPPP.....",
+  ".....PP..PP.....",
+  ".....PP..PP.....",
+  "....PP....PP....",
 ];
 
-// Walk leg variants (replace last 3 rows of BASE_TEMPLATE).
-const LEGS_NORMAL = [
-  "...PP..PP...",
-  "...PP..PP...",
-  "..PP....PP..",
+const BASE_BACK = [
+  "......HHHH......",
+  ".....HHHHHH.....",
+  "....HHHHHHHH....",
+  "....HHHHHHHH....",
+  "....HHHHHHHH....",
+  "....HHHHHHHH....",
+  ".....HHHHHH.....",
+  "......SSSS......",
+  ".....AATTAA.....",
+  "....TTTTTTTT....",
+  "...STTTTTTTTS...",
+  "...STTTTTTTTS...",
+  "...STTTTTTTTS...",
+  "....TTTTTTTT....",
+  ".....TTTTTT.....",
+  ".....PPPPPP.....",
+  ".....PPPPPP.....",
+  ".....PP..PP.....",
+  ".....PP..PP.....",
+  "....PP....PP....",
 ];
 
-const LEGS_STRIDE = [
-  "...PP..PP...",
-  "..PP....PP..",
-  ".PP......PP.",
+// Walk leg variants — 4 distinct poses for smoother animation.
+const LEGS_FRONT: string[][] = [
+  // Pose 0 — standing
+  [".....PP..PP.....", ".....PP..PP.....", "....PP....PP...."],
+  // Pose 1 — right step forward
+  [".....PP..PP.....", "....PP....PP....", "...PP......PP..."],
+  // Pose 2 — passing (feet together)
+  [".....PPPPPP.....", ".....PP..PP.....", ".....PP..PP....."],
+  // Pose 3 — left step forward
+  [".....PP..PP.....", "....PP....PP....", "...PP......PP..."],
+];
+
+const LEGS_BACK: string[][] = [
+  [".....PP..PP.....", ".....PP..PP.....", "....PP....PP...."],
+  [".....PP..PP.....", "....PP....PP....", "...PP......PP..."],
+  [".....PPPPPP.....", ".....PP..PP.....", ".....PP..PP....."],
+  [".....PP..PP.....", "....PP....PP....", "...PP......PP..."],
+];
+
+const LEGS_SIDE: string[][] = [
+  [".....PP..PP.....", ".....PP..PP.....", ".....PP..PP....."],
+  ["....PPP.PP......", "....PP..PP......", "....PP...PP....."],
+  [".....PP..PP.....", ".....PP..PP.....", ".....PP..PP....."],
+  ["......PP.PPP....", "......PP..PP....", ".....PP...PP...."],
 ];
 
 const ACCESSORY_TEMPLATES: Record<string, string[]> = {
   giovanni: [
-    "..A.AAAA.A..",
-    "..AAAAAAAA..",
+    "....A.AAAA.A....",
+    "....AAAAAAAA....",
   ],
   king: [
-    "..A.AAAA.A..",
-    "...AAAAAA...",
+    "....A.AAAA.A....",
+    ".....AAAAAA.....",
   ],
   queen: [
-    "....A..A....",
-    "...AAAAAA...",
+    "......A..A......",
+    ".....AAAAAA.....",
   ],
   "white-rook": [
-    "..AAA..AAA..",
-    "..AAAAAAAA..",
+    "....AAA..AAA....",
+    "....AAAAAAAA....",
   ],
   knight: [
-    "............",
-    "..A.........",
+    "................",
+    "....A...........",
   ],
   "black-rook": [
-    "..A......A..",
-    "............",
+    "....A......A....",
+    "................",
   ],
   chancellor: [
-    "............",
-    "...A....A...",
+    "................",
+    ".....A....A.....",
   ],
   cardinal: [
-    "............",
-    "....AAAA....",
+    "................",
+    "......AAAA......",
   ],
   scout: [
-    "AAAAAAAAAAAA",
-    "............",
+    "..AAAAAAAAAAAA..",
+    "................",
   ],
 };
 
@@ -234,30 +264,29 @@ type PixelMap = (string | null)[][];
 const FW = 16;
 const FH = 32;
 
-function buildPixelMap(characterId: string, legVariant?: string[]): PixelMap {
+function buildPixelMap(characterId: string, bodyTemplate: string[], legVariant?: string[]): PixelMap {
   const map: PixelMap = Array.from({ length: FH }, () => Array(FW).fill(null));
   const accessory = ACCESSORY_TEMPLATES[characterId];
-  const ox = 2;
-  let oy = 2;
+  let oy = 4; // Start offset for vertical centering in 32px frame.
 
   if (accessory) {
     for (let r = 0; r < accessory.length; r++) {
-      for (let c = 0; c < accessory[r].length && c + ox < FW; c++) {
-        if (accessory[r][c] !== ".") map[oy + r][ox + c] = accessory[r][c];
+      for (let c = 0; c < Math.min(accessory[r].length, FW); c++) {
+        if (accessory[r][c] !== ".") map[oy + r][c] = accessory[r][c];
       }
     }
     oy += accessory.length;
   }
 
   const body = legVariant
-    ? [...BASE_TEMPLATE.slice(0, -3), ...legVariant]
-    : BASE_TEMPLATE;
+    ? [...bodyTemplate.slice(0, -3), ...legVariant]
+    : bodyTemplate;
 
   for (let r = 0; r < body.length; r++) {
     const ty = oy + r;
     if (ty >= FH) break;
-    for (let c = 0; c < body[r].length && c + ox < FW; c++) {
-      if (body[r][c] !== ".") map[ty][ox + c] = body[r][c];
+    for (let c = 0; c < Math.min(body[r].length, FW); c++) {
+      if (body[r][c] !== ".") map[ty][c] = body[r][c];
     }
   }
 
@@ -285,6 +314,7 @@ function renderFrame(
   map: PixelMap,
   shades: DerivedShades,
   flipped: boolean,
+  lightFromLeft: boolean,
 ): void {
   // Pass 1 — Outline: empty pixels with a filled 4-neighbor.
   ctx.fillStyle = OUTLINE;
@@ -303,7 +333,8 @@ function renderFrame(
     }
   }
 
-  // Pass 2 — Fill with directional shading (light from top-left).
+  // Pass 2 — Fill with directional shading.
+  // lightFromLeft=true: light from top-left (default). false: light from top-right (for flipped sprites).
   for (let y = 0; y < FH; y++) {
     for (let x = 0; x < FW; x++) {
       const key = map[y][x];
@@ -311,14 +342,21 @@ function renderFrame(
 
       const px = flipped ? fx + FW - 1 - x : fx + x;
 
-      // Outer-edge detection (null neighbors).
       const rightNull = x >= FW - 1 || map[y][x + 1] === null;
       const belowNull = y >= FH - 1 || map[y + 1][x] === null;
       const leftNull = x <= 0 || map[y][x - 1] === null;
       const aboveNull = y <= 0 || map[y - 1][x] === null;
 
-      const shadow = rightNull || belowNull;
-      const highlight = leftNull || aboveNull;
+      let shadow: boolean;
+      let highlight: boolean;
+
+      if (lightFromLeft) {
+        shadow = rightNull || belowNull;
+        highlight = leftNull || aboveNull;
+      } else {
+        shadow = leftNull || belowNull;
+        highlight = rightNull || aboveNull;
+      }
 
       let color: string;
       if (shadow && !highlight) {
@@ -333,12 +371,6 @@ function renderFrame(
       ctx.fillRect(px, fy + y, 1, 1);
     }
   }
-
-  // Ground shadow (opaque palette colors, no rgba).
-  ctx.fillStyle = GROUND_SHADOW_DARK;
-  ctx.fillRect(fx + 3, fy + FH - 3, 10, 1);
-  ctx.fillStyle = GROUND_SHADOW_MID;
-  ctx.fillRect(fx + 4, fy + FH - 2, 8, 1);
 }
 
 // ── Sprite sheet generation ──────────────────────────────
@@ -347,45 +379,51 @@ export function generateSpriteSheet(characterId: string): SpriteSheet {
   const palette = PALETTES[characterId] || PALETTES.pawn;
   const shades = deriveShades(palette);
   const cols = 4;
-  const rows = 4;
+  const rows = 5; // idle, walk-down, walk-up, walk-side, action
 
   const canvas = new OffscreenCanvas(FW * cols, FH * rows);
   const ctx = canvas.getContext("2d")!;
 
-  const baseMap = buildPixelMap(characterId);
   const bobs = [0, -1, -1, 0];
 
-  // Row 0 — Idle (subtle bob).
+  // Row 0 — Idle (subtle bob, front-facing).
   for (let f = 0; f < 4; f++) {
-    renderFrame(ctx, f * FW, 0, offsetMap(baseMap, bobs[f]), shades, false);
+    const map = buildPixelMap(characterId, BASE_FRONT);
+    renderFrame(ctx, f * FW, 0, offsetMap(map, bobs[f]), shades, false, true);
   }
 
-  // Row 1 — Walk down (alternating stride + bob).
-  const legFrames = [LEGS_NORMAL, LEGS_STRIDE, LEGS_NORMAL, LEGS_STRIDE];
+  // Row 1 — Walk down (4 distinct leg poses).
   const walkBobs = [0, -1, 0, -1];
   for (let f = 0; f < 4; f++) {
-    const walkMap = buildPixelMap(characterId, legFrames[f]);
-    renderFrame(ctx, f * FW, FH, offsetMap(walkMap, walkBobs[f]), shades, false);
+    const map = buildPixelMap(characterId, BASE_FRONT, LEGS_FRONT[f]);
+    renderFrame(ctx, f * FW, FH, offsetMap(map, walkBobs[f]), shades, false, true);
   }
 
-  // Row 2 — Walk side (same stride pattern, flipped).
+  // Row 2 — Walk up (4 distinct leg poses, back-facing).
   for (let f = 0; f < 4; f++) {
-    const walkMap = buildPixelMap(characterId, legFrames[f]);
-    renderFrame(ctx, f * FW, FH * 2, offsetMap(walkMap, walkBobs[f]), shades, true);
+    const map = buildPixelMap(characterId, BASE_BACK, LEGS_BACK[f]);
+    renderFrame(ctx, f * FW, FH * 2, offsetMap(map, walkBobs[f]), shades, false, true);
   }
 
-  // Row 3 — Action (bob + sparkle overlay at arms).
+  // Row 3 — Walk side (flipped, with corrected shading direction).
   for (let f = 0; f < 4; f++) {
-    renderFrame(ctx, f * FW, FH * 3, offsetMap(baseMap, bobs[f]), shades, false);
-    // Sparkle accent pixels near the hands.
+    const map = buildPixelMap(characterId, BASE_FRONT, LEGS_SIDE[f]);
+    // Flipped sprite: light should come from top-right to maintain consistent lighting.
+    renderFrame(ctx, f * FW, FH * 3, offsetMap(map, walkBobs[f]), shades, true, false);
+  }
+
+  // Row 4 — Action (bob + sparkle overlay at arms).
+  for (let f = 0; f < 4; f++) {
+    const map = buildPixelMap(characterId, BASE_FRONT);
+    renderFrame(ctx, f * FW, FH * 4, offsetMap(map, bobs[f]), shades, false, true);
     const accH = ACCESSORY_TEMPLATES[characterId]?.length ?? 0;
-    const sy = FH * 3 + accH + 14 + bobs[f];
+    const sy = FH * 4 + accH + 16 + bobs[f];
     ctx.fillStyle = palette.accent;
     if (f % 2 === 0) {
-      ctx.fillRect(f * FW + 1 + f, sy, 1, 1);
+      ctx.fillRect(f * FW + 2 + f, sy, 1, 1);
       ctx.fillRect(f * FW + 13 - f, sy + 1, 1, 1);
     } else {
-      ctx.fillRect(f * FW + 2, sy - 1, 1, 1);
+      ctx.fillRect(f * FW + 3, sy - 1, 1, 1);
       ctx.fillRect(f * FW + 12, sy, 1, 1);
     }
   }
@@ -396,9 +434,10 @@ export function generateSpriteSheet(characterId: string): SpriteSheet {
     frameHeight: FH,
     animations: {
       idle: { row: 0, frames: 4, speed: 400 },
-      "walk-down": { row: 1, frames: 4, speed: 200 },
-      "walk-side": { row: 2, frames: 4, speed: 200 },
-      action: { row: 3, frames: 4, speed: 250 },
+      "walk-down": { row: 1, frames: 4, speed: 180 },
+      "walk-up": { row: 2, frames: 4, speed: 180 },
+      "walk-side": { row: 3, frames: 4, speed: 180 },
+      action: { row: 4, frames: 4, speed: 250 },
     },
   };
 }

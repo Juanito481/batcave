@@ -59,10 +59,19 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
       } else if (msg.command === "launchAgent") {
         const agentId = msg.agentId as string;
         if (agentId && AGENTS[agentId]) {
-          // Send the slash command to the active terminal.
-          vscode.commands.executeCommand("workbench.action.terminal.sendSequence", {
-            text: `/${agentId}\n`,
-          });
+          // Find the Claude Code terminal (matches "claude" or "Claude Code" in name).
+          const claudeTerminal = vscode.window.terminals.find(
+            (t) => /claude/i.test(t.name)
+          );
+          if (claudeTerminal) {
+            claudeTerminal.show(true); // preserveFocus=true
+            claudeTerminal.sendText(`/${agentId}`, true);
+          } else {
+            // Fallback: send to active terminal.
+            vscode.commands.executeCommand("workbench.action.terminal.sendSequence", {
+              text: `/${agentId}\n`,
+            });
+          }
         }
       }
     });

@@ -131,6 +131,7 @@ export class BatCaveWorld {
   private giovanniBcTimer = 0;
   private giovanniBcThreshold = 15000 + Math.random() * 10000;
   private giovanniBcWorkTimer = 0;
+  private giovanniBcArrivalTimer: number | null = null;
 
   // Layout.
   private worldWidth = 400;
@@ -240,6 +241,11 @@ export class BatCaveWorld {
     this.agents.clear();
     this.nextAgentSlot = 0;
     this.wanderTimers.clear();
+    if (this.giovanniBcArrivalTimer !== null) {
+      window.clearTimeout(this.giovanniBcArrivalTimer);
+      this.giovanniBcArrivalTimer = null;
+    }
+    this.giovanniAtBc = false;
     this.eventLog.length = 0;
     this.usageStats = null;
     this.currentTool = null;
@@ -706,13 +712,14 @@ export class BatCaveWorld {
         this.giovanniAtBc = true;
         // Set action when he arrives (check in update via state).
         const checkArrival = () => {
+          this.giovanniBcArrivalTimer = null;
           if (this.giovanni.state === "idle" && this.giovanniAtBc) {
             this.giovanni.setAction();
           } else if (this.giovanniAtBc) {
-            window.setTimeout(checkArrival, 200);
+            this.giovanniBcArrivalTimer = window.setTimeout(checkArrival, 200);
           }
         };
-        window.setTimeout(checkArrival, 500);
+        this.giovanniBcArrivalTimer = window.setTimeout(checkArrival, 500);
       }
     }
   }
