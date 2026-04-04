@@ -91,6 +91,17 @@ export class BatCaveWorld {
   private recentFiles: { name: string; tool: string; timestamp: number }[] = [];
   private static readonly MAX_RECENT_FILES = 8;
 
+  // Agent history — chronological log for display panel.
+  private agentHistory: { id: string; name: string; emoji: string; action: "enter" | "exit"; timestamp: number }[] = [];
+  private static readonly MAX_AGENT_HISTORY = 10;
+
+  // Git activity — for wall monitor.
+  private gitLog: { type: "commit" | "push"; message: string; timestamp: number }[] = [];
+  private static readonly MAX_GIT_LOG = 6;
+
+  // Todo list — for whiteboard.
+  private todoList: { content: string; status: "pending" | "in_progress" | "completed" }[] = [];
+
   // Event log (for timeline).
   private eventLog: { type: string; label: string; timestamp: number }[] = [];
 
@@ -339,6 +350,7 @@ export class BatCaveWorld {
         this.agents.set(agentId, char);
         this.logEvent("agent_enter", meta?.name || agentId);
         this._agentPulseStart = Date.now();
+        this.trackAgentHistory(agentId, meta?.name || agentId, meta?.emoji || "?", "enter");
         bus.emit("agent:enter", { agentId, x: slotX, y: slotY });
         bus.emit("particle:spawn", { preset: "agent-enter", x: slotX, y: slotY });
         bus.emit("sound:play", { id: "agent-chime" });
@@ -354,6 +366,7 @@ export class BatCaveWorld {
         const char = this.agents.get(agentId);
         if (char) {
           this.logEvent("agent_exit", char.name);
+          this.trackAgentHistory(agentId, char.name, char.emoji, "exit");
           bus.emit("agent:exit", { agentId, x: char.x, y: char.y });
           bus.emit("particle:spawn", { preset: "agent-exit", x: char.x, y: char.y });
           bus.emit("sound:play", { id: "agent-exit" });
@@ -429,6 +442,24 @@ export class BatCaveWorld {
         this.checkBatSignal();
         this.ambient.setContextPressure(this.usageStats.contextFillPct);
         break;
+
+      case "git_commit":
+        this.gitLog.push({ type: "commit", message: (event as Record<string, unknown>).message as string, timestamp: Date.now() });
+        if (this.gitLog.length > BatCaveWorld.MAX_GIT_LOG) this.gitLog.shift();
+        break;
+
+      case "git_push":
+        this.gitLog.push({ type: "push", message: "pushed to remote", timestamp: Date.now() });
+        if (this.gitLog.length > BatCaveWorld.MAX_GIT_LOG) this.gitLog.shift();
+        break;
+
+      case "todo_update": {
+        const todos = (event as Record<string, unknown>).todos as { content: string; status: "pending" | "in_progress" | "completed" }[];
+        if (Array.isArray(todos)) {
+          this.todoList = todos;
+        }
+        break;
+      }
     }
   }
 
@@ -517,6 +548,26 @@ export class BatCaveWorld {
 
   getRepoTheme(): RepoTheme {
     return this.repoTheme;
+  }
+
+  private trackAgentHistory(id: string, name: string, emoji: string, action: "enter" | "exit"): void {
+    this.agentHistory.push({ id, name, emoji, action, timestamp: Date.now() });
+    if (this.agentHistory.length > BatCaveWorld.MAX_AGENT_HISTORY) this.agentHistory.shift();
+  }
+
+  /** Agent history for display panel. */
+  getAgentHistory(): { id: string; name: string; emoji: string; action: "enter" | "exit" }[] {
+    return this.agentHistory.slice(-6);
+  }
+
+  /** Git log for wall monitor. */
+  getGitLog(): { type: "commit" | "push"; message: string }[] {
+    return this.gitLog.slice(-4);
+  }
+
+  /** Todo list for whiteboard. */
+  getTodoList(): { content: string; status: "pending" | "in_progress" | "completed" }[] {
+    return this.todoList;
   }
 
   /** Timestamp of last agent_enter (for LED wave). 0 if never. */

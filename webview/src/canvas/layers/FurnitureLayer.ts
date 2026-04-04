@@ -266,7 +266,7 @@ function drawWorkbench(
   ctx.fillRect(x + w - zoom * 3, y - zoom, zoom * 2, zoom);
 }
 
-// ── Display panel (wall-mounted multi-screen, right side) ──
+// ── Display panel (wall-mounted, right side) — agent tracker ──
 
 function drawDisplayPanel(
   ctx: CanvasRenderingContext2D,
@@ -276,82 +276,71 @@ function drawDisplayPanel(
   const w = Math.floor(zt * 2.5);
   const h = Math.floor(zt * 1.8);
   const theme = world.getRepoTheme();
+  const font = `"DM Mono", monospace`;
+  const smallFont = Math.max(5, zoom * 2.5);
 
   // Mounting bracket.
   ctx.fillStyle = "#141428";
   ctx.fillRect(x + Math.floor(w / 2) - zoom * 2, y + h, zoom * 4, zoom * 3);
 
-  // Panel body (dark metal frame).
+  // Panel body.
   ctx.fillStyle = "#0a0a14";
   ctx.fillRect(x, y, w, h);
-  // Top bezel highlight.
   ctx.fillStyle = "#1a1a2e";
   ctx.fillRect(x, y, w, zoom);
   outlineRect(ctx, x, y, w, h, zoom);
 
-  // Two screens side by side.
+  // Single screen area.
   const gap = zoom * 2;
-  const screenW = Math.floor((w - gap * 3) / 2);
+  const screenW = w - gap * 2;
   const screenH = h - gap * 2;
+  const sx = x + gap;
+  const sy = y + gap;
 
-  for (let i = 0; i < 2; i++) {
-    const sx = x + gap + i * (screenW + gap);
-    const sy = y + gap;
-
-    // Screen surface.
-    ctx.fillStyle = "#060610";
-    ctx.fillRect(sx, sy, screenW, screenH);
-
-    // Content glow (left = status grid, right = map).
-    const phase = Math.sin(now / 1000 + i * 1.5);
-    if (i === 0) {
-      // Status grid — accent-colored rows.
-      ctx.fillStyle = phase > 0 ? theme.accentDark : darken(theme.accentDark, 0.3);
-      ctx.fillRect(sx + zoom, sy + zoom, screenW - zoom * 2, screenH - zoom * 2);
-      // Grid lines.
-      ctx.fillStyle = theme.accent;
-      for (let row = 0; row < 4; row++) {
-        const ry = sy + zoom * 2 + row * Math.floor(screenH / 5);
-        ctx.fillRect(sx + zoom * 2, ry, screenW - zoom * 4, Math.max(1, Math.floor(zoom / 2)));
-      }
-      // Status dots (green/red).
-      for (let row = 0; row < 3; row++) {
-        const ry = sy + zoom * 3 + row * Math.floor(screenH / 5);
-        const on = Math.sin(now / 600 + row * 2.1) > 0;
-        ctx.fillStyle = on ? "#2ECC71" : "#3a1a1a";
-        ctx.fillRect(sx + screenW - zoom * 4, ry, zoom, zoom);
-      }
-    } else {
-      // Map/blueprint — dark blue with grid.
-      ctx.fillStyle = phase > 0 ? "#0a1828" : "#081420";
-      ctx.fillRect(sx + zoom, sy + zoom, screenW - zoom * 2, screenH - zoom * 2);
-      // Grid.
-      ctx.fillStyle = "#122238";
-      for (let gx = 0; gx < 5; gx++) {
-        ctx.fillRect(sx + zoom * 2 + gx * Math.floor(screenW / 5), sy + zoom, Math.max(1, Math.floor(zoom / 2)), screenH - zoom * 2);
-      }
-      for (let gy = 0; gy < 4; gy++) {
-        ctx.fillRect(sx + zoom, sy + zoom * 2 + gy * Math.floor(screenH / 4), screenW - zoom * 2, Math.max(1, Math.floor(zoom / 2)));
-      }
-      // Blinking cursor dot.
-      if (Math.sin(now / 400) > 0) {
-        ctx.fillStyle = "#E74C3C";
-        ctx.fillRect(sx + Math.floor(screenW * 0.6), sy + Math.floor(screenH * 0.4), zoom, zoom);
-      }
-    }
-
-    // Scanlines.
-    ctx.fillStyle = "#040408";
-    for (let sl = 0; sl < screenH; sl += zoom * 2) {
-      ctx.fillRect(sx, sy + sl, screenW, Math.max(1, Math.floor(zoom / 2)));
-    }
+  ctx.fillStyle = "#060610";
+  ctx.fillRect(sx, sy, screenW, screenH);
+  // Background glow.
+  ctx.fillStyle = darken(theme.accentDark, 0.3);
+  ctx.fillRect(sx + zoom, sy + zoom, screenW - zoom * 2, screenH - zoom * 2);
+  // Scanlines.
+  ctx.fillStyle = "#040408";
+  for (let sl = 0; sl < screenH; sl += zoom * 2) {
+    ctx.fillRect(sx, sy + sl, screenW, Math.max(1, Math.floor(zoom / 2)));
   }
 
-  // LED indicator row under screens.
+  // Header.
+  ctx.font = `${smallFont}px ${font}`;
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#555570";
+  ctx.fillText("AGENTS", sx + zoom * 2, sy + zoom * 3);
+
+  // Agent history.
+  const history = world.getAgentHistory();
+  if (history.length > 0) {
+    const lineH = Math.max(zoom * 3, smallFont + zoom);
+    const maxLines = Math.min(history.length, Math.floor((screenH - zoom * 5) / lineH));
+    const visible = history.slice(-maxLines);
+    for (let a = 0; a < visible.length; a++) {
+      const entry = visible[a];
+      const ay = sy + zoom * 5 + a * lineH;
+      ctx.fillStyle = entry.action === "enter" ? "#2ECC71" : "#E74C3C";
+      const arrow = entry.action === "enter" ? "\u25B6" : "\u25C0";
+      const maxChars = Math.max(6, Math.floor((screenW - zoom * 4) / (smallFont * 0.6)));
+      const label = entry.name.length > maxChars
+        ? entry.name.slice(0, maxChars - 1) + "\u2026"
+        : entry.name;
+      ctx.fillText(`${arrow} ${label}`, sx + zoom * 2, ay);
+    }
+  } else {
+    ctx.fillStyle = "#333348";
+    ctx.fillText("no agents", sx + zoom * 2, sy + zoom * 7);
+  }
+
+  // LED indicators.
+  const activeCount = world.getActiveAgentNames().length;
   for (let i = 0; i < 4; i++) {
     const lx = x + zoom * 3 + i * zoom * 4;
-    const phase = Math.sin(now / 500 + i * 1.3);
-    ctx.fillStyle = phase > 0 ? theme.accent : "#0a0a12";
+    ctx.fillStyle = i < activeCount ? "#2ECC71" : "#0a0a12";
     ctx.fillRect(lx, y + h - zoom * 2, zoom, zoom);
   }
 }
@@ -694,7 +683,7 @@ function drawLocker(
   ctx.fillRect(lx + lw - zoom * 3, ly + lh, zoom * 2, zoom * 2);
 }
 
-// ── Whiteboard (wall-mounted, between weapon rack and tool board) ──
+// ── Whiteboard (wall-mounted) — todo / task board ──
 
 function drawWhiteboard(
   ctx: CanvasRenderingContext2D,
@@ -705,37 +694,57 @@ function drawWhiteboard(
   const by = Math.floor(wallH * 0.2);
   const bw = Math.floor(zt * 2);
   const bh = Math.floor(zt * 1);
+  const font = `"DM Mono", monospace`;
+  const smallFont = Math.max(5, zoom * 2);
 
-  // Board surface (off-white in cave light).
+  // Board surface.
   ctx.fillStyle = "#1e1e30";
   ctx.fillRect(bx, by, bw, bh);
-  // Inner lighter area.
   ctx.fillStyle = "#242438";
   ctx.fillRect(bx + zoom, by + zoom, bw - zoom * 2, bh - zoom * 2);
-  // Frame.
   outlineRect(ctx, bx, by, bw, bh, zoom);
-  // Top rail (marker tray).
+  // Marker tray.
   ctx.fillStyle = "#1a1a2e";
   ctx.fillRect(bx, by + bh, bw, zoom * 2);
   outlineRect(ctx, bx, by + bh, bw, zoom * 2, Math.max(1, Math.floor(zoom / 2)));
 
-  // Scribbles (hand-drawn lines in accent colors).
-  const theme = world.getRepoTheme();
-  ctx.fillStyle = theme.accent;
-  // Horizontal line.
-  ctx.fillRect(bx + zoom * 2, by + zoom * 3, bw - zoom * 6, Math.max(1, Math.floor(zoom / 2)));
-  // Diagonal-ish line (stepped pixels).
-  for (let i = 0; i < 4; i++) {
-    ctx.fillRect(bx + zoom * 3 + i * zoom * 2, by + zoom * 5 + i * zoom, zoom * 2, Math.max(1, Math.floor(zoom / 2)));
-  }
-  // Box shape.
-  ctx.fillStyle = "#3a2a2a";
-  ctx.fillRect(bx + bw - zoom * 6, by + zoom * 2, zoom * 4, zoom * 3);
-  ctx.fillStyle = "#242438";
-  ctx.fillRect(bx + bw - zoom * 5, by + zoom * 3, zoom * 2, zoom);
+  // Todo content.
+  const todos = world.getTodoList();
+  ctx.font = `${smallFont}px ${font}`;
+  ctx.textAlign = "left";
 
-  // Markers on tray.
-  const markerColors = ["#E74C3C", "#2ECC71", theme.accent];
+  if (todos.length > 0) {
+    const lineH = Math.max(zoom * 2.5, smallFont + Math.floor(zoom * 0.5));
+    const maxLines = Math.min(todos.length, Math.floor((bh - zoom * 2) / lineH));
+    const visible = todos.slice(0, maxLines);
+    for (let t = 0; t < visible.length; t++) {
+      const todo = visible[t];
+      const ty = by + zoom * 2 + t * lineH;
+      // Status indicator.
+      const statusColor = todo.status === "completed" ? "#2ECC71"
+        : todo.status === "in_progress" ? "#F39C12" : "#555570";
+      const statusChar = todo.status === "completed" ? "\u2713"
+        : todo.status === "in_progress" ? "\u25B6" : "\u25CB";
+      ctx.fillStyle = statusColor;
+      // Truncate task name.
+      const maxChars = Math.max(5, Math.floor((bw - zoom * 4) / (smallFont * 0.6)));
+      const label = todo.content.length > maxChars
+        ? todo.content.slice(0, maxChars - 1) + "\u2026"
+        : todo.content;
+      ctx.fillText(`${statusChar} ${label}`, bx + zoom * 2, ty);
+    }
+  } else {
+    // Fallback: decorative scribbles when no todos.
+    const theme = world.getRepoTheme();
+    ctx.fillStyle = theme.accent;
+    ctx.fillRect(bx + zoom * 2, by + zoom * 3, bw - zoom * 6, Math.max(1, Math.floor(zoom / 2)));
+    for (let i = 0; i < 3; i++) {
+      ctx.fillRect(bx + zoom * 3 + i * zoom * 2, by + zoom * 5 + i * zoom, zoom * 2, Math.max(1, Math.floor(zoom / 2)));
+    }
+  }
+
+  // Markers on tray (status-colored).
+  const markerColors = ["#2ECC71", "#F39C12", "#555570"];
   for (let i = 0; i < markerColors.length; i++) {
     ctx.fillStyle = markerColors[i];
     ctx.fillRect(bx + zoom * 2 + i * zoom * 3, by + bh + Math.max(1, Math.floor(zoom / 2)), zoom * 2, zoom);

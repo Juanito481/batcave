@@ -41,7 +41,19 @@ export interface SessionEvent {
   timestamp: number;
 }
 
-export type BatCaveEvent = AgentEvent | ToolEvent | SessionEvent | UsageStats;
+export interface GitEvent {
+  type: "git_commit" | "git_push";
+  message: string;
+  timestamp: number;
+}
+
+export interface TodoEvent {
+  type: "todo_update";
+  todos: { content: string; status: "pending" | "in_progress" | "completed" }[];
+  timestamp: number;
+}
+
+export type BatCaveEvent = AgentEvent | ToolEvent | SessionEvent | UsageStats | GitEvent | TodoEvent;
 
 export interface BatCaveConfig {
   activeRepo: string;

@@ -247,6 +247,20 @@ export class ActivityMonitor {
             filePath: filePath || undefined,
           });
 
+          // Detect git operations from Bash commands.
+          if (toolName === "Bash") {
+            const cmd = (b.input as Record<string, unknown> | undefined)?.command as string | undefined;
+            if (cmd) {
+              this.detectGitActivity(cmd, now);
+            }
+          }
+
+          // Detect todo updates from TodoWrite tool.
+          if (toolName === "TodoWrite") {
+            const input = b.input as Record<string, unknown> | undefined;
+            this.detectTodoUpdate(input, now);
+          }
+
           // Update Claude state.
           const newState = this.inferState(toolName);
           if (newState !== this.lastState) {
@@ -332,6 +346,35 @@ export class ActivityMonitor {
     }
 
     return null;
+  }
+
+  /** Detect git commit/push from Bash commands. */
+  private detectGitActivity(cmd: string, now: number): void {
+    // git commit -m "message" or git commit -m "$(cat <<'EOF' ... EOF)"
+    const commitMatch = cmd.match(/git\s+commit\s+.*-m\s+["']([^"'\n]{1,80})/);
+    if (commitMatch) {
+      this.onEvent({ type: "git_commit", message: commitMatch[1], timestamp: now });
+    }
+    if (/git\s+push\b/.test(cmd)) {
+      this.onEvent({ type: "git_push", message: "push", timestamp: now });
+    }
+  }
+
+  /** Detect todo list updates from TodoWrite tool. */
+  private detectTodoUpdate(input: Record<string, unknown> | undefined, now: number): void {
+    if (!input) return;
+    const todos = input.todos as { content?: string; status?: string }[] | undefined;
+    if (!Array.isArray(todos)) return;
+    this.onEvent({
+      type: "todo_update",
+      todos: todos
+        .filter((t) => t.content && t.status)
+        .map((t) => ({
+          content: t.content as string,
+          status: t.status as "pending" | "in_progress" | "completed",
+        })),
+      timestamp: now,
+    });
   }
 
   /** Extract file path from tool input fields. */

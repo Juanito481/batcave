@@ -208,11 +208,13 @@ function drawWallDetails(
     ctx.fillRect(x, ledY, zoom * 4, zoom);
   }
 
-  // Wall-mounted monitor (right side).
+  // Wall-mounted monitor (right side) — git log.
   const monX = width - zt * 4;
   const monY = Math.floor(wallH * 0.25);
   const monW = zt * 2;
   const monH = Math.floor(zt * 1.2);
+  const font = `"DM Mono", monospace`;
+  const smallFont = Math.max(5, zoom * 2.5);
 
   // Bezel.
   ctx.fillStyle = "#0a0a14";
@@ -220,7 +222,7 @@ function drawWallDetails(
   // Screen.
   ctx.fillStyle = "#060610";
   ctx.fillRect(monX, monY, monW, monH);
-  // Content — dark green terminal look.
+  // Content background — dark green terminal.
   const monPulse = Math.sin(now / 1500 + 3);
   ctx.fillStyle = monPulse > 0 ? "#0a2a0a" : "#081e08";
   ctx.fillRect(monX + zoom, monY + zoom, monW - zoom * 2, monH - zoom * 2);
@@ -229,6 +231,34 @@ function drawWallDetails(
   for (let sl = 0; sl < monH; sl += zoom * 2) {
     ctx.fillRect(monX, monY + sl, monW, Math.max(1, Math.floor(zoom / 2)));
   }
+
+  // Git log content.
+  const gitLog = world.getGitLog();
+  ctx.font = `${smallFont}px ${font}`;
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#335533";
+  ctx.fillText("GIT", monX + zoom * 2, monY + zoom * 3);
+
+  if (gitLog.length > 0) {
+    const lineH = Math.max(zoom * 3, smallFont + zoom);
+    const maxLines = Math.min(gitLog.length, Math.floor((monH - zoom * 5) / lineH));
+    const visible = gitLog.slice(-maxLines);
+    for (let g = 0; g < visible.length; g++) {
+      const entry = visible[g];
+      const gy = monY + zoom * 5 + g * lineH;
+      ctx.fillStyle = entry.type === "commit" ? "#2ECC71" : "#F39C12";
+      const prefix = entry.type === "commit" ? "\u25CF " : "\u25B2 ";
+      const maxChars = Math.max(6, Math.floor((monW - zoom * 4) / (smallFont * 0.6)));
+      const msg = entry.message.length > maxChars
+        ? entry.message.slice(0, maxChars - 1) + "\u2026"
+        : entry.message;
+      ctx.fillText(prefix + msg, monX + zoom * 2, gy);
+    }
+  } else {
+    ctx.fillStyle = "#1a3a1a";
+    ctx.fillText("no commits", monX + zoom * 2, monY + zoom * 7);
+  }
+
   // Mount bracket.
   ctx.fillStyle = "#141428";
   ctx.fillRect(monX + Math.floor(monW / 2) - zoom, monY + monH, zoom * 2, zoom * 2);
