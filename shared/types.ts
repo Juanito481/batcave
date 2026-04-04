@@ -46,15 +46,21 @@ export interface BatCaveConfig {
   agents: Record<string, AgentMeta>;
 }
 
+/** Sound settings payload from extension to webview. */
+export interface SoundSettingsPayload {
+  enabled: boolean;
+  volume: number;
+}
+
 /** Message from extension host to webview. */
 export interface ExtToWebviewMessage {
-  command: "event" | "reset" | "config";
-  payload: BatCaveEvent | BatCaveConfig;
+  command: "event" | "reset" | "config" | "sound-settings";
+  payload: BatCaveEvent | BatCaveConfig | SoundSettingsPayload;
 }
 
 /** Message from webview to extension host. */
 export interface WebviewToExtMessage {
-  command: "ready" | "requestState";
+  command: "ready" | "requestState" | "toggleSound";
 }
 
 /** Known Alfred chess-piece agents. */

@@ -33,6 +33,23 @@ const REPO_THEMES: Record<string, RepoTheme> = {
 
 const DEFAULT_THEME: RepoTheme = { accent: "#1E7FD8", accentDark: "#122840", ledColor: "#1a4a8a", label: "---" };
 
+/** Companion NPC state — characters that come and go casually. */
+interface CompanionState {
+  id: string;
+  name: string;
+  emoji: string;
+  char: Character | null;
+  present: boolean;
+  spawnTimer: number;
+  spawnThreshold: number;
+  stayTimer: number;
+  stayThreshold: number;
+  preferredZone: "server" | "workbench" | "display";
+}
+
+/** Audit IDs that trigger Francesco's appearance. */
+const AUDIT_AGENTS = ["bishop", "black-bishop", "white-rook"];
+
 export class BatCaveWorld {
   // Sprite sheets (generated once at init).
   private sprites: Map<string, SpriteSheet>;
@@ -41,6 +58,13 @@ export class BatCaveWorld {
   alfred: Character;
   giovanni: Character;
   private agents: Map<string, Character> = new Map();
+
+  // Companions (Ab, Andrea, Arturo) — appear/disappear casually.
+  private companions: CompanionState[] = [];
+
+  // Francesco — appears only during audit agents.
+  private francesco: Character | null = null;
+  private francescoVisible = false;
 
   // Ambient life.
   private ambient: Ambient;
@@ -66,8 +90,19 @@ export class BatCaveWorld {
   // Event log (for timeline).
   private eventLog: { type: string; label: string; timestamp: number }[] = [];
 
+  // Session analytics — heatmap, tool breakdown, pace.
+  private static readonly HEATMAP_SLOT_MS = 30_000; // 30s per slot
+  private static readonly HEATMAP_SLOTS = 40;
+  private heatmapSlots: number[] = new Array(BatCaveWorld.HEATMAP_SLOTS).fill(0);
+  private heatmapOrigin = Date.now(); // timestamp of slot 0
+  private toolBreakdown = { read: 0, write: 0, bash: 0, web: 0, agent: 0, other: 0 };
+  private paceHistory: number[] = []; // tool counts per completed minute
+  private paceMinuteStart = Date.now();
+  private paceMinuteCount = 0;
+
   // Alfred quips.
   private quipTimer = 0;
+  private quipThreshold = 30000 + Math.random() * 20000;
   private currentQuip: string | null = null;
   private quipDisplayTimer = 0;
   private static readonly QUIPS = [
@@ -85,12 +120,16 @@ export class BatCaveWorld {
   private batSignalTimer = 0;
   private batSignalShown = false;
 
+  // Sound state (mirrored from extension settings for HUD display).
+  private _soundEnabled = false;
+
   // Write clicks timer.
   private writeClickTimer = 0;
 
   // Giovanni Batcomputer behavior.
   private giovanniAtBc = false;
   private giovanniBcTimer = 0;
+  private giovanniBcThreshold = 15000 + Math.random() * 10000;
   private giovanniBcWorkTimer = 0;
 
   // Layout.
@@ -116,6 +155,28 @@ export class BatCaveWorld {
       "giovanni", "Giovanni (Batman)", "🦇", giovanniSprite,
       this.worldWidth * 0.3, this.worldHeight / 2
     );
+
+    // Initialize companions — they start off-screen, spawning casually.
+    this.companions = [
+      {
+        id: "ab", name: "Ab", emoji: "💻", char: null, present: false,
+        spawnTimer: 0, spawnThreshold: 10000 + Math.random() * 20000,
+        stayTimer: 0, stayThreshold: 30000 + Math.random() * 60000,
+        preferredZone: "server",
+      },
+      {
+        id: "andrea", name: "Andrea", emoji: "🦆", char: null, present: false,
+        spawnTimer: 0, spawnThreshold: 15000 + Math.random() * 25000,
+        stayTimer: 0, stayThreshold: 30000 + Math.random() * 60000,
+        preferredZone: "workbench",
+      },
+      {
+        id: "arturo", name: "Arturo", emoji: "🤘", char: null, present: false,
+        spawnTimer: 0, spawnThreshold: 20000 + Math.random() * 30000,
+        stayTimer: 0, stayThreshold: 30000 + Math.random() * 60000,
+        preferredZone: "display",
+      },
+    ];
   }
 
   /** Set canvas dimensions and wall height so we can position characters. */
@@ -185,6 +246,27 @@ export class BatCaveWorld {
     this.currentToolTimer = 0;
     this.alfredState = "idle";
     this.alfred.setIdle();
+    // Reset analytics.
+    this.heatmapSlots.fill(0);
+    this.heatmapOrigin = Date.now();
+    this.toolBreakdown = { read: 0, write: 0, bash: 0, web: 0, agent: 0, other: 0 };
+    this.paceHistory.length = 0;
+    this.paceMinuteCount = 0;
+    this.paceMinuteStart = Date.now();
+    // Reset companions.
+    for (const c of this.companions) {
+      if (c.char && c.present) c.char.exit();
+      c.present = false;
+      c.spawnTimer = 0;
+      c.spawnThreshold = 15000 + Math.random() * 30000;
+      c.stayTimer = 0;
+      c.stayThreshold = 30000 + Math.random() * 60000;
+    }
+    // Reset Francesco.
+    if (this.francesco && this.francescoVisible) {
+      this.francesco.exit();
+      this.francescoVisible = false;
+    }
   }
 
   handleEvent(event: Record<string, unknown>): void {
@@ -197,7 +279,6 @@ export class BatCaveWorld {
         this.resetIdleTimer();
         bus.emit("session:state", { state: "thinking" });
         bus.emit("particle:spawn", { preset: "think-pulse", x: this.alfred.x, y: this.alfred.y - 20 });
-        bus.emit("sound:play", { id: "think-chime" });
         break;
 
       case "session_writing":
@@ -247,6 +328,10 @@ export class BatCaveWorld {
         bus.emit("agent:enter", { agentId, x: slotX, y: slotY });
         bus.emit("particle:spawn", { preset: "agent-enter", x: slotX, y: slotY });
         bus.emit("sound:play", { id: "agent-chime" });
+        // Francesco appears during audit agents.
+        if (AUDIT_AGENTS.includes(agentId)) {
+          this.spawnFrancesco(slotX + this._zoom * 20, slotY);
+        }
         break;
       }
 
@@ -270,11 +355,18 @@ export class BatCaveWorld {
             this.repackSlots();
           }, 500);
           this.exitTimers.set(agentId, timer);
+          // Francesco exits when audit agent exits (check if any audit agent still active).
+          if (AUDIT_AGENTS.includes(agentId)) {
+            const stillAuditing = AUDIT_AGENTS.some(
+              a => a !== agentId && this.agents.has(a)
+            );
+            if (!stillAuditing) this.despawnFrancesco();
+          }
         }
         break;
       }
 
-      case "tool_start":
+      case "tool_start": {
         this.currentTool = (event.toolName as string) || null;
         this.currentToolTimer = 3000; // Show icon for 3s.
         this.logEvent("tool", this.currentTool || "?");
@@ -285,8 +377,10 @@ export class BatCaveWorld {
         this.resetIdleTimer();
         bus.emit("tool:start", { toolName: this.currentTool || "?", x: this.alfred.x, y: this.alfred.y });
         bus.emit("particle:spawn", { preset: "tool-spark", x: this.alfred.x, y: this.alfred.y - 16 });
-        bus.emit("sound:play", { id: "tool-click" });
+        // Analytics: heatmap + breakdown + pace.
+        this.recordToolForAnalytics(this.currentTool || "?");
         break;
+      }
 
       case "tool_end":
         this.logEvent("tool_end", (event.toolName as string) || "?");
@@ -330,6 +424,13 @@ export class BatCaveWorld {
     this.giovanni.update(deltaMs);
     for (const agent of this.agents.values()) {
       agent.update(deltaMs);
+    }
+    // Update companions (casual spawn/stay/exit).
+    this.updateCompanions(deltaMs);
+    // Update Francesco if visible.
+    if (this.francesco && this.francescoVisible) {
+      this.francesco.update(deltaMs);
+      this.maybeWander(this.francesco, deltaMs);
     }
     // Idle wandering for Alfred and Giovanni.
     this.maybeWander(this.alfred, deltaMs);
@@ -414,12 +515,73 @@ export class BatCaveWorld {
     return this.batSignalTimer > 0;
   }
 
+  isSoundEnabled(): boolean {
+    return this._soundEnabled;
+  }
+
+  setSoundEnabled(on: boolean): void {
+    this._soundEnabled = on;
+  }
+
+  getHeatmapSlots(): number[] {
+    return this.heatmapSlots;
+  }
+
+  getToolBreakdown(): { read: number; write: number; bash: number; web: number; agent: number; other: number } {
+    return this.toolBreakdown;
+  }
+
+  /** Returns average tools/min over last N completed minutes, and current minute rate. */
+  getPace(): { avg: number; current: number; trend: "up" | "down" | "stable" } {
+    const elapsed = (Date.now() - this.paceMinuteStart) / 60_000;
+    const currentRate = elapsed > 0.1 ? this.paceMinuteCount / elapsed : 0;
+    const avg = this.paceHistory.length > 0
+      ? this.paceHistory.reduce((a, b) => a + b, 0) / this.paceHistory.length
+      : currentRate;
+    const diff = currentRate - avg;
+    const trend = diff > 1.5 ? "up" : diff < -1.5 ? "down" : "stable";
+    return { avg: Math.round(avg * 10) / 10, current: Math.round(currentRate * 10) / 10, trend };
+  }
+
   private logEvent(type: string, label: string): void {
     this.eventLog.push({ type, label, timestamp: Date.now() });
     // Keep max 64 entries.
     if (this.eventLog.length > 64) {
       this.eventLog.shift();
     }
+  }
+
+  private recordToolForAnalytics(toolName: string): void {
+    // Heatmap: increment current slot.
+    const elapsed = Date.now() - this.heatmapOrigin;
+    const slot = Math.min(
+      BatCaveWorld.HEATMAP_SLOTS - 1,
+      Math.floor(elapsed / BatCaveWorld.HEATMAP_SLOT_MS),
+    );
+    this.heatmapSlots[slot]++;
+
+    // Tool breakdown.
+    const cat = this.categoriseTool(toolName);
+    this.toolBreakdown[cat]++;
+
+    // Pace.
+    this.paceMinuteCount++;
+    const minElapsed = Date.now() - this.paceMinuteStart;
+    if (minElapsed >= 60_000) {
+      this.paceHistory.push(this.paceMinuteCount);
+      if (this.paceHistory.length > 10) this.paceHistory.shift();
+      this.paceMinuteCount = 0;
+      this.paceMinuteStart = Date.now();
+    }
+  }
+
+  private categoriseTool(tool: string): "read" | "write" | "bash" | "web" | "agent" | "other" {
+    if (["Read", "Grep", "Glob"].includes(tool)) return "read";
+    if (["Edit", "Write", "NotebookEdit"].includes(tool)) return "write";
+    if (tool === "Bash") return "bash";
+    if (["WebSearch", "WebFetch"].includes(tool)) return "web";
+    if (["Agent", "Skill"].includes(tool)) return "agent";
+    return "other";
   }
 
   private resetIdleTimer(): void {
@@ -490,25 +652,20 @@ export class BatCaveWorld {
     if (this.alfredState !== "idle" || this.currentQuip) return;
     this.quipTimer += dt;
     // Quip every 30-50s of idle.
-    const threshold = 30000 + (Date.now() % 20000);
-    if (this.quipTimer >= threshold) {
+    if (this.quipTimer >= this.quipThreshold) {
       this.quipTimer = 0;
+      this.quipThreshold = 30000 + Math.random() * 20000;
       const idx = Math.floor(Math.random() * BatCaveWorld.QUIPS.length);
       this.currentQuip = BatCaveWorld.QUIPS[idx];
       this.quipDisplayTimer = 4000;
     }
   }
 
-  // ── Write clicks ─────────────────────────────────────────
+  // ── Write clicks (disabled — only functional sounds now) ──
 
-  private updateWriteClicks(dt: number): void {
-    if (this.alfredState !== "writing") return;
-    this.writeClickTimer += dt;
-    const interval = 100 + Math.random() * 200;
-    if (this.writeClickTimer >= interval) {
-      this.writeClickTimer = 0;
-      bus.emit("sound:play", { id: "write-click" });
-    }
+  private updateWriteClicks(_dt: number): void {
+    // Intentionally empty — write clicks were ambient noise.
+    // Only agent-chime and agent-exit sounds remain as functional notifications.
   }
 
   // ── Bat Signal ───────────────────────────────────────────
@@ -536,9 +693,9 @@ export class BatCaveWorld {
 
     this.giovanniBcTimer += dt;
     // Every 15-25s, go to Batcomputer.
-    const threshold = 15000 + (Date.now() % 10000);
-    if (this.giovanniBcTimer >= threshold) {
+    if (this.giovanniBcTimer >= this.giovanniBcThreshold) {
       this.giovanniBcTimer = 0;
+      this.giovanniBcThreshold = 15000 + Math.random() * 10000;
       this.giovanniBcWorkTimer = 0;
       // Walk to chair position (in front of Batcomputer).
       const bcX = Math.floor(this.worldWidth / 2);
@@ -569,5 +726,108 @@ export class BatCaveWorld {
     if (pct < 100) {
       this.batSignalShown = false;
     }
+  }
+
+  // ── Companions (casual NPCs) ─────────────────────────
+
+  /** Get a spawn position in the companion's preferred zone. */
+  private getCompanionZonePosition(zone: "server" | "workbench" | "display"): { x: number; y: number } {
+    const floorY = this.wallH + Math.floor((this.worldHeight - this.wallH) * 0.82);
+    const zt = this._zt;
+    const zoom = this._zoom;
+    const bcTilesW = Math.min(5, Math.ceil(this.worldWidth / zt) - 1);
+    const bcW = zt * bcTilesW;
+    const bcX = Math.floor((this.worldWidth - bcW) / 2);
+
+    switch (zone) {
+      case "server":
+        return { x: bcX - zt * 2, y: floorY - zoom * 4 };
+      case "workbench":
+        return { x: Math.floor(bcX - zt * 5), y: floorY };
+      case "display":
+        return { x: bcX + bcW + zt * 2, y: floorY - zoom * 4 };
+    }
+  }
+
+  private updateCompanions(dt: number): void {
+    for (const c of this.companions) {
+      if (!c.present) {
+        // Not in cave — count toward next spawn.
+        c.spawnTimer += dt;
+        if (c.spawnTimer >= c.spawnThreshold) {
+          c.spawnTimer = 0;
+          c.stayTimer = 0;
+          c.stayThreshold = 30000 + Math.random() * 60000;
+          // Create or reuse character.
+          const pos = this.getCompanionZonePosition(c.preferredZone);
+          if (!c.char) {
+            const sprite = this.sprites.get(c.id);
+            if (!sprite) continue;
+            c.char = new Character(c.id, c.name, c.emoji, sprite, pos.x, this.worldHeight + 30);
+          }
+          c.char.enter(pos.x, pos.y);
+          c.present = true;
+        }
+      } else {
+        // In cave — update character, wander, count toward exit.
+        if (c.char) {
+          c.char.update(dt);
+          this.maybeWander(c.char, dt);
+        }
+        c.stayTimer += dt;
+        if (c.stayTimer >= c.stayThreshold) {
+          // Time to leave.
+          if (c.char) c.char.exit();
+          c.present = false;
+          c.spawnTimer = 0;
+          c.spawnThreshold = 20000 + Math.random() * 40000;
+          // Clean up after exit animation.
+          window.setTimeout(() => {
+            if (c.char && !c.present) c.char.visible = false;
+          }, 500);
+        }
+      }
+    }
+  }
+
+  /** Visible companions for rendering. */
+  getVisibleCompanions(): Character[] {
+    const result: Character[] = [];
+    for (const c of this.companions) {
+      if (c.present && c.char && c.char.visible) result.push(c.char);
+    }
+    return result;
+  }
+
+  /** Companion status for HUD. */
+  getCompanionStatus(): { name: string; present: boolean }[] {
+    return this.companions.map(c => ({ name: c.name, present: c.present }));
+  }
+
+  // ── Francesco (audit-triggered) ──────────────────────
+
+  private spawnFrancesco(x: number, y: number): void {
+    if (this.francescoVisible) return;
+    if (!this.francesco) {
+      const sprite = this.sprites.get("francesco");
+      if (!sprite) return;
+      this.francesco = new Character("francesco", "Francesco", "👔", sprite, x, this.worldHeight + 30);
+    }
+    this.francesco.enter(x, y);
+    this.francescoVisible = true;
+  }
+
+  private despawnFrancesco(): void {
+    if (!this.francescoVisible || !this.francesco) return;
+    this.francesco.exit();
+    this.francescoVisible = false;
+    window.setTimeout(() => {
+      if (this.francesco && !this.francescoVisible) this.francesco.visible = false;
+    }, 500);
+  }
+
+  /** Francesco character for rendering (null if not visible). */
+  getFrancesco(): Character | null {
+    return this.francescoVisible && this.francesco?.visible ? this.francesco : null;
   }
 }

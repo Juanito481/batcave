@@ -55,13 +55,25 @@ webview/src/
 - **SoundSystem**: `drip`, `tool-click`, `agent-chime`, `agent-exit`, `think-chime`, `write-click`. All synthesized via OscillatorNode. Muted by default, toggle via command or `batcave.soundEnabled` setting.
 
 ## Behaviors
-- **Alfred quips**: 8 butler phrases, shown every 30-50s idle, 4s display.
-- **Giovanni at Batcomputer**: walks to chair every 15-25s, works 6s, wanders away.
+- **Alfred quips**: 8 butler phrases, shown every 30-50s idle, 4s display. Fixed threshold per cycle.
+- **Giovanni at Batcomputer**: walks to chair every 15-25s, works 6s, wanders away. Fixed threshold per cycle.
 - **Bat Signal**: projects bat silhouette on ceiling when context hits 100%.
-- **Context pressure**: drip frequency scales from 2500ms (0%) to 800ms (100%).
+- **Context pressure**: drip frequency scales from 2500ms (0%) to 800ms (100%). Driven by `contextPressure` field, not overwritten per drip.
 - **Time-of-day**: warm amber tint daytime (10-16h), cool blue nighttime (21-5h).
 - **Batcomputer screens**: blue=thinking, green=writing, dim=idle. Labels change per state.
 - **Idle wandering**: pathfinder-based, 4-8s interval.
+- **Bat swoops**: accumulator-based (3-8s threshold), frame-rate independent.
+
+## HUD Dashboard
+
+- **Tool breakdown strip**: proportional colored bar — blue=Read, green=Write, orange=Bash, purple=Agent, amber=Web.
+- **Session heatmap**: 40 slots of 30s each, shows real tool activity over time. Replaces the old pseudo-random sparkline.
+- **Session duration**: elapsed time (Xm Ys) since session start.
+- **Pace indicator**: tools/min with trend arrow (up=green, down=red, stable=grey). Based on rolling 10-minute history.
+
+## Context Estimation
+
+Weighted formula: `(msgs * 2000 + tools * 1500) / 500_000 * 100`. Budget assumes ~500k effective tokens (1M context minus system prompt/memory overhead). Much more accurate than the old per-message counter.
 
 ## Commands
 - `Bat Cave: Show` — focus the panel

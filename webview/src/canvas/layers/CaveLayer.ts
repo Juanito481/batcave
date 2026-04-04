@@ -243,15 +243,17 @@ export function drawCaveEnvironment(rc: RenderContext): void {
   const hour = new Date().getHours();
   // Night (21-5): blue tint. Day (10-16): warm tint. Dawn/dusk: neutral.
   if (hour >= 21 || hour < 5) {
+    ctx.save();
     ctx.fillStyle = "#060818";
     ctx.globalAlpha = 0.12;
     ctx.fillRect(0, 0, width, height);
-    ctx.globalAlpha = 1;
+    ctx.restore();
   } else if (hour >= 10 && hour <= 16) {
+    ctx.save();
     ctx.fillStyle = "#181008";
     ctx.globalAlpha = 0.08;
     ctx.fillRect(0, 0, width, height);
-    ctx.globalAlpha = 1;
+    ctx.restore();
   }
 
   // ── Bat Signal (context 100%) ──

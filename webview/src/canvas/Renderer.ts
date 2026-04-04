@@ -93,7 +93,13 @@ export class Renderer {
 
     // Layer 3: Characters (Y-sorted).
     const agents = this.world.getAgentCharacters();
-    const allChars = [this.world.alfred, this.world.giovanni, ...agents].sort((a, b) => a.y - b.y);
+    const companions = this.world.getVisibleCompanions();
+    const francesco = this.world.getFrancesco();
+    const allChars = [
+      this.world.alfred, this.world.giovanni,
+      ...companions, ...agents,
+      ...(francesco ? [francesco] : []),
+    ].sort((a, b) => a.y - b.y);
     for (const char of allChars) {
       char.draw(rc.ctx, zoom);
     }

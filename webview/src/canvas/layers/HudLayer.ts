@@ -1,5 +1,6 @@
 import { darken } from "../../helpers/color";
-import { RenderContext, P, seed, outlineRect } from "./render-context";
+import { RenderContext, P, outlineRect } from "./render-context";
+import { AGENTS } from "../../../../shared/types";
 
 // ── Tool icon (floating pixel art above Alfred) ────────
 
@@ -193,7 +194,7 @@ function drawTimeline(rc: RenderContext): void {
   }
 }
 
-// ── HUD ────────────────────────────────────────────────
+// ── HUD (redesigned — mission control dashboard) ──────
 
 function drawHUD(rc: RenderContext): void {
   const { ctx, world, width, height, now } = rc;
@@ -201,7 +202,7 @@ function drawHUD(rc: RenderContext): void {
 
   const stats = world.getUsageStats();
   const pad = zoom * 4;
-  const barW = zoom * 44;
+  const barW = zoom * 56;
   const x = width - barW - pad * 2;
   const y = pad;
   const font = `"DM Mono", monospace`;
@@ -209,37 +210,74 @@ function drawHUD(rc: RenderContext): void {
   const medFont = Math.max(7, zoom * 4);
   const bigFont = Math.max(8, zoom * 5);
   const lineH = zoom * 5;
+  const theme = world.getRepoTheme();
+  const brd = Math.max(1, Math.floor(zoom / 2));
 
-  // -- Panel background --
+  // Helper: draw section header with accent bar.
+  let cursorY = y;
+  const sectionHeader = (label: string) => {
+    cursorY += zoom * 2;
+    ctx.fillStyle = "#141428";
+    ctx.fillRect(x, cursorY, barW, zoom);
+    cursorY += zoom * 3;
+    // Accent bar.
+    ctx.fillStyle = theme.accent;
+    ctx.fillRect(x, cursorY - zoom * 2, zoom, zoom * 3);
+    // Label.
+    ctx.fillStyle = "#555570";
+    ctx.font = `${smallFont}px ${font}`;
+    ctx.textAlign = "left";
+    ctx.fillText(label, x + zoom * 3, cursorY);
+  };
+
+  // ── Calculate total panel height ──
   const activeAgentNames = world.getActiveAgentNames();
+  const companionStatus = world.getCompanionStatus();
+  const presentCompanions = companionStatus.filter(c => c.present);
   const agentListH = activeAgentNames.length > 0 ? (activeAgentNames.length + 1) * lineH : 0;
-  const panelH = zoom * 56 + agentListH;
+  const crewH = presentCompanions.length > 0 ? (presentCompanions.length + 1) * lineH : 0;
+  const panelH = zoom * 120 + agentListH + crewH;
   const panelX = x - pad;
   const panelW = barW + pad * 2;
 
+  // Clamp panel to canvas height.
+  const maxPanelH = Math.min(panelH, height - pad * 2);
+
+  // ── Panel background ──
   ctx.fillStyle = "#06060c";
-  ctx.fillRect(panelX, y - pad, panelW, panelH);
-  // Inner slightly lighter area.
+  ctx.fillRect(panelX, y - pad, panelW, maxPanelH);
   ctx.fillStyle = "#08080f";
-  ctx.fillRect(panelX + zoom, y - pad + zoom, panelW - zoom * 2, panelH - zoom * 2);
-  // Left accent border (repo-themed).
-  const theme = world.getRepoTheme();
+  ctx.fillRect(panelX + zoom, y - pad + zoom, panelW - zoom * 2, maxPanelH - zoom * 2);
+  // Left accent border.
   ctx.fillStyle = theme.accent;
-  ctx.fillRect(panelX, y - pad, zoom, panelH);
-  // Top accent line.
+  ctx.fillRect(panelX, y - pad, zoom, maxPanelH);
+  // Top/bottom accent lines.
   ctx.fillStyle = theme.accentDark;
   ctx.fillRect(panelX, y - pad, panelW, zoom);
-  // Bottom accent line.
   ctx.fillStyle = darken(theme.accentDark, 0.3);
-  ctx.fillRect(panelX, y - pad + panelH - zoom, panelW, zoom);
+  ctx.fillRect(panelX, y - pad + maxPanelH - zoom, panelW, zoom);
+  // Corner brackets.
+  const cb = zoom * 3;
+  ctx.fillStyle = theme.accent;
+  // Top-left.
+  ctx.fillRect(panelX, y - pad, cb, brd);
+  ctx.fillRect(panelX, y - pad, brd, cb);
+  // Top-right.
+  ctx.fillRect(panelX + panelW - cb, y - pad, cb, brd);
+  ctx.fillRect(panelX + panelW - brd, y - pad, brd, cb);
+  // Bottom-left.
+  ctx.fillRect(panelX, y - pad + maxPanelH - brd, cb, brd);
+  ctx.fillRect(panelX, y - pad + maxPanelH - cb, brd, cb);
+  // Bottom-right.
+  ctx.fillRect(panelX + panelW - cb, y - pad + maxPanelH - brd, cb, brd);
+  ctx.fillRect(panelX + panelW - brd, y - pad + maxPanelH - cb, brd, cb);
 
-  // -- Title row --
+  // ── Title row ──
   ctx.fillStyle = theme.accent;
   ctx.font = `bold ${bigFont}px ${font}`;
   ctx.textAlign = "left";
   ctx.fillText("BAT CAVE", x, y + zoom * 4);
 
-  // Repo label (right of title).
   if (theme.label !== "---") {
     ctx.fillStyle = theme.accentDark;
     const lblW = ctx.measureText(theme.label).width + zoom * 3;
@@ -249,7 +287,7 @@ function drawHUD(rc: RenderContext): void {
     ctx.fillText(theme.label, x + zoom * 23, y + zoom * 3);
   }
 
-  // Model badge (pill shape).
+  // Model badge.
   const modelText = stats?.activeModel || "opus-4-6";
   const modelShort = modelText.replace("claude-", "");
   ctx.font = `${smallFont}px ${font}`;
@@ -258,185 +296,369 @@ function drawHUD(rc: RenderContext): void {
   const badgeY = y + zoom;
   ctx.fillStyle = "#141428";
   ctx.fillRect(badgeX, badgeY, badgeW, zoom * 4);
-  outlineRect(ctx, badgeX, badgeY, badgeW, zoom * 4, Math.max(1, Math.floor(zoom / 2)));
+  outlineRect(ctx, badgeX, badgeY, badgeW, zoom * 4, brd);
   ctx.fillStyle = "#8888AA";
   ctx.fillText(modelShort, badgeX + zoom * 2, badgeY + zoom * 3);
 
-  // -- Divider --
-  const div1Y = y + zoom * 6;
-  ctx.fillStyle = "#141428";
-  ctx.fillRect(x, div1Y, barW, zoom);
+  cursorY = y + zoom * 5;
 
-  // -- Context bar --
-  const ctxLabelY = div1Y + zoom * 3;
-  ctx.fillStyle = "#555570";
-  ctx.font = `${smallFont}px ${font}`;
-  ctx.fillText("CONTEXT", x, ctxLabelY);
-
-  const barY = ctxLabelY + zoom * 2;
+  // ── CONTEXT ──
+  sectionHeader("CONTEXT");
   const pct = stats ? stats.contextFillPct / 100 : 0;
   const barColor = pct < 0.5 ? "#2ECC71" : pct < 0.8 ? "#F39C12" : "#E74C3C";
-  const barH = zoom * 2;
-  // Track.
-  ctx.fillStyle = "#0e0e1e";
-  ctx.fillRect(x, barY, barW, barH);
-  // Fill.
-  ctx.fillStyle = barColor;
-  ctx.fillRect(x, barY, barW * pct, barH);
-  // Notch markers.
-  ctx.fillStyle = "#06060c";
-  for (const mark of [0.25, 0.5, 0.75]) {
-    ctx.fillRect(x + Math.floor(barW * mark), barY, Math.max(1, Math.floor(zoom / 2)), barH);
-  }
   // Percentage right-aligned.
   ctx.fillStyle = "#CCCCDD";
   ctx.font = `bold ${smallFont}px ${font}`;
   const pctText = `${stats?.contextFillPct ?? 0}%`;
-  ctx.fillText(pctText, x + barW - ctx.measureText(pctText).width, ctxLabelY);
+  ctx.fillText(pctText, x + barW - ctx.measureText(pctText).width, cursorY);
 
-  // -- Counters grid (2x2) --
-  const div2Y = barY + zoom * 4;
-  ctx.fillStyle = "#141428";
-  ctx.fillRect(x, div2Y, barW, zoom);
+  cursorY += zoom * 2;
+  const barH = zoom * 3;
+  ctx.fillStyle = "#0e0e1e";
+  ctx.fillRect(x, cursorY, barW, barH);
+  ctx.fillStyle = barColor;
+  ctx.fillRect(x, cursorY, barW * pct, barH);
+  // Notch markers with labels.
+  ctx.fillStyle = "#06060c";
+  for (const mark of [0.25, 0.5, 0.75]) {
+    ctx.fillRect(x + Math.floor(barW * mark), cursorY, brd, barH);
+  }
+  // Marker labels below bar.
+  cursorY += barH + zoom;
+  ctx.fillStyle = "#333348";
+  ctx.font = `${Math.max(5, zoom * 2.5)}px ${font}`;
+  for (const [mark, label] of [[0.25, "25%"], [0.5, "50%"], [0.75, "75%"]] as const) {
+    ctx.fillText(label, x + Math.floor(barW * mark) - zoom * 2, cursorY);
+  }
 
-  ctx.font = `${medFont}px ${font}`;
-  const gridY = div2Y + zoom * 4;
+  // ── STATUS (2x2 grid) ──
+  sectionHeader("STATUS");
+  cursorY += zoom * 2;
   const col2X = x + barW / 2;
 
-  // Row 1.
   ctx.fillStyle = "#555570";
   ctx.font = `${smallFont}px ${font}`;
-  ctx.fillText("MSG", x, gridY);
+  ctx.fillText("MSG", x, cursorY);
   ctx.fillStyle = "#CCCCDD";
   ctx.font = `bold ${medFont}px ${font}`;
-  ctx.fillText(`${stats?.messagesThisSession ?? 0}`, x + zoom * 10, gridY);
+  ctx.fillText(`${stats?.messagesThisSession ?? 0}`, x + zoom * 10, cursorY);
 
   ctx.fillStyle = "#555570";
   ctx.font = `${smallFont}px ${font}`;
-  ctx.fillText("TOOLS", col2X, gridY);
+  ctx.fillText("TOOLS", col2X, cursorY);
   ctx.fillStyle = "#CCCCDD";
   ctx.font = `bold ${medFont}px ${font}`;
-  ctx.fillText(`${stats?.toolCallsThisSession ?? 0}`, col2X + zoom * 12, gridY);
+  ctx.fillText(`${stats?.toolCallsThisSession ?? 0}`, col2X + zoom * 12, cursorY);
 
-  // Row 2.
-  const row2Y = gridY + lineH;
+  cursorY += lineH;
   ctx.fillStyle = "#555570";
   ctx.font = `${smallFont}px ${font}`;
-  ctx.fillText("SPAWN", x, row2Y);
+  ctx.fillText("SPAWN", x, cursorY);
   ctx.fillStyle = "#CCCCDD";
   ctx.font = `bold ${medFont}px ${font}`;
-  ctx.fillText(`${stats?.agentsSpawnedThisSession ?? 0}`, x + zoom * 12, row2Y);
+  ctx.fillText(`${stats?.agentsSpawnedThisSession ?? 0}`, x + zoom * 12, cursorY);
 
   const activeCount = world.getActiveAgentCount();
   ctx.fillStyle = "#555570";
   ctx.font = `${smallFont}px ${font}`;
-  ctx.fillText("ACTIVE", col2X, row2Y);
+  ctx.fillText("ACTIVE", col2X, cursorY);
   ctx.fillStyle = activeCount > 0 ? "#2ECC71" : "#555566";
   ctx.font = `bold ${medFont}px ${font}`;
-  ctx.fillText(`${activeCount}`, col2X + zoom * 13, row2Y);
+  ctx.fillText(`${activeCount}`, col2X + zoom * 13, cursorY);
 
-  // -- Divider --
-  const divY = row2Y + lineH;
-  ctx.fillStyle = "#141428";
-  ctx.fillRect(x, divY, barW, zoom);
-
-  // -- Active agents list --
-  let nextSectionY = divY + zoom * 2;
+  // ── AGENTS ──
   if (activeAgentNames.length > 0) {
-    const agentStartY = divY + lineH;
-    ctx.fillStyle = "#555570";
-    ctx.font = `${smallFont}px ${font}`;
-    ctx.fillText("AGENTS", x, agentStartY);
-
+    sectionHeader("AGENTS");
     for (let i = 0; i < activeAgentNames.length; i++) {
-      const ay = agentStartY + (i + 1) * lineH;
-      // Green dot.
+      cursorY += lineH;
       ctx.fillStyle = "#2ECC71";
-      ctx.fillRect(x, ay - zoom * 2, zoom * 2, zoom * 2);
-      // Name.
+      ctx.fillRect(x, cursorY - zoom * 2, zoom * 2, zoom * 2);
       ctx.fillStyle = "#AAAACC";
       ctx.font = `${smallFont}px ${font}`;
-      ctx.fillText(activeAgentNames[i], x + zoom * 4, ay);
+      ctx.fillText(activeAgentNames[i], x + zoom * 4, cursorY);
     }
-    nextSectionY = agentStartY + (activeAgentNames.length + 1) * lineH;
   }
 
-  // -- Activity sparkline --
-  const sparkY = nextSectionY + zoom * 2;
-  ctx.fillStyle = "#555570";
-  ctx.font = `${smallFont}px ${font}`;
-  ctx.fillText("ACTIVITY", x, sparkY);
+  // ── CREW (companions present) ──
+  if (presentCompanions.length > 0) {
+    sectionHeader("CREW");
+    for (let i = 0; i < presentCompanions.length; i++) {
+      cursorY += lineH;
+      ctx.fillStyle = "#F39C12";
+      ctx.fillRect(x, cursorY - zoom * 2, zoom * 2, zoom * 2);
+      ctx.fillStyle = "#AAAACC";
+      ctx.font = `${smallFont}px ${font}`;
+      ctx.fillText(presentCompanions[i].name, x + zoom * 4, cursorY);
+      ctx.fillStyle = "#555566";
+      ctx.fillText("in cave", x + zoom * 20, cursorY);
+    }
+  }
 
-  const sparkBarY = sparkY + zoom * 2;
-  const sparkBarH = zoom * 6;
-  const bars = 20;
-  const barWidth = Math.floor(barW / bars);
+  // ── TOOLS breakdown ──
+  sectionHeader("TOOLS");
+  cursorY += zoom * 2;
+  const stripH = zoom * 3;
+  const bd = world.getToolBreakdown();
+  const bdTotal = bd.read + bd.write + bd.bash + bd.web + bd.agent + bd.other;
 
-  // Sparkline background.
   ctx.fillStyle = "#0a0a14";
-  ctx.fillRect(x, sparkBarY, barW, sparkBarH);
+  ctx.fillRect(x, cursorY, barW, stripH);
 
-  for (let i = 0; i < bars; i++) {
-    const s = seed(i + Math.floor(now / 2000));
-    const activity = stats ? Math.min(1, (stats.toolCallsThisSession / 40) * s) : s * 0.08;
-    const h = Math.max(zoom, Math.floor(sparkBarH * activity));
-    const barActive = activity > 0.4;
-    ctx.fillStyle = barActive ? "#1a4a6e" : "#101828";
-    ctx.fillRect(x + i * barWidth, sparkBarY + sparkBarH - h, barWidth - Math.max(1, Math.floor(zoom / 2)), h);
-    // Bright top pixel on active bars.
-    if (barActive && h > zoom * 2) {
-      ctx.fillStyle = "#2a6a9e";
-      ctx.fillRect(x + i * barWidth, sparkBarY + sparkBarH - h, barWidth - Math.max(1, Math.floor(zoom / 2)), zoom);
+  const toolCats: { key: keyof typeof bd; color: string; label: string }[] = [
+    { key: "read", color: "#1E7FD8", label: "R" },
+    { key: "write", color: "#2ECC71", label: "W" },
+    { key: "bash", color: "#F39C12", label: "B" },
+    { key: "agent", color: "#9B59B6", label: "A" },
+    { key: "web", color: "#E67E22", label: "W" },
+    { key: "other", color: "#555566", label: "O" },
+  ];
+  if (bdTotal > 0) {
+    let cx2 = x;
+    for (const cat of toolCats) {
+      const w = Math.floor((bd[cat.key] / bdTotal) * barW);
+      if (w > 0) {
+        ctx.fillStyle = cat.color;
+        ctx.fillRect(cx2, cursorY, w, stripH);
+        cx2 += w;
+      }
     }
   }
-  // Sparkline border.
-  outlineRect(ctx, x, sparkBarY, barW, sparkBarH, Math.max(1, Math.floor(zoom / 2)));
+  outlineRect(ctx, x, cursorY, barW, stripH, brd);
 
-  // -- Session time --
-  const timeY = sparkBarY + sparkBarH + zoom * 4;
+  // Tool legend with counts.
+  cursorY += stripH + zoom * 2;
+  ctx.font = `${Math.max(5, zoom * 2.5)}px ${font}`;
+  let legendX = x;
+  for (const cat of toolCats) {
+    const count = bd[cat.key];
+    if (count === 0 && bdTotal > 0) continue;
+    ctx.fillStyle = cat.color;
+    ctx.fillRect(legendX, cursorY - zoom, zoom * 2, zoom * 2);
+    ctx.fillStyle = "#888899";
+    ctx.fillText(`${count}`, legendX + zoom * 3, cursorY);
+    legendX += zoom * 9;
+  }
+
+  // ── ACTIVITY heatmap ──
+  sectionHeader("ACTIVITY");
+  cursorY += zoom * 2;
+  const hmH = zoom * 8;
+  const slots = world.getHeatmapSlots();
+  const visibleSlots = 20;
+  const hmBarW = Math.floor(barW / visibleSlots);
+  const maxHeat = Math.max(1, ...slots);
+
+  ctx.fillStyle = "#0a0a14";
+  ctx.fillRect(x, cursorY, barW, hmH);
+
+  const slotOffset = Math.max(0, slots.findIndex((_, i) => i >= slots.length - visibleSlots));
+  for (let i = 0; i < visibleSlots; i++) {
+    const val = slots[slotOffset + i] || 0;
+    if (val === 0) continue;
+    const intensity = val / maxHeat;
+    const h = Math.max(zoom, Math.floor(hmH * intensity));
+    ctx.fillStyle = intensity > 0.6 ? "#2a6a9e" : intensity > 0.3 ? "#1a4a6e" : "#101828";
+    ctx.fillRect(x + i * hmBarW, cursorY + hmH - h, hmBarW - brd, h);
+    if (intensity > 0.5 && h > zoom * 2) {
+      ctx.fillStyle = "#3a8abe";
+      ctx.fillRect(x + i * hmBarW, cursorY + hmH - h, hmBarW - brd, zoom);
+    }
+  }
+  outlineRect(ctx, x, cursorY, barW, hmH, brd);
+
+  // Time labels below heatmap.
+  cursorY += hmH + zoom;
+  ctx.fillStyle = "#333348";
+  ctx.font = `${Math.max(5, zoom * 2.5)}px ${font}`;
+  ctx.fillText("0m", x, cursorY);
+  ctx.fillText("10m", x + Math.floor(barW / 2) - zoom * 3, cursorY);
+  ctx.fillText("20m", x + barW - zoom * 6, cursorY);
+
+  // ── SESSION duration + pace ──
+  sectionHeader("SESSION");
+  const sessionStart = stats?.sessionStartedAt ?? now;
+  const elapsed = now - sessionStart;
+  const mins = Math.floor(elapsed / 60_000);
+  const secs = Math.floor((elapsed % 60_000) / 1000);
+  const durStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+
+  // Clock right-aligned.
   const d = new Date();
   const timeStr = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   ctx.fillStyle = "#444458";
   ctx.font = `${smallFont}px ${font}`;
-  ctx.fillText(timeStr, x + barW - ctx.measureText(timeStr).width, timeY);
+  ctx.fillText(timeStr, x + barW - ctx.measureText(timeStr).width, cursorY);
 
-  // -- State indicator (bottom-left) --
+  cursorY += zoom * 2;
+  ctx.fillStyle = "#CCCCDD";
+  ctx.font = `bold ${medFont}px ${font}`;
+  ctx.fillText(durStr, x, cursorY);
+
+  // Pace.
+  const pace = world.getPace();
+  const paceStr = `${pace.current}/m`;
+  ctx.fillStyle = "#AAAACC";
+  ctx.font = `bold ${medFont}px ${font}`;
+  ctx.fillText(paceStr, x + zoom * 18, cursorY);
+
+  // Trend arrow.
+  const arrowX = x + zoom * 28;
+  const arrowY2 = cursorY - zoom * 3;
+  if (pace.trend === "up") {
+    ctx.fillStyle = "#2ECC71";
+    ctx.fillRect(arrowX + zoom, arrowY2, zoom, zoom);
+    ctx.fillRect(arrowX, arrowY2 + zoom, zoom * 3, zoom);
+    ctx.fillRect(arrowX + zoom, arrowY2 + zoom * 2, zoom, zoom);
+  } else if (pace.trend === "down") {
+    ctx.fillStyle = "#E74C3C";
+    ctx.fillRect(arrowX + zoom, arrowY2 + zoom * 2, zoom, zoom);
+    ctx.fillRect(arrowX, arrowY2 + zoom, zoom * 3, zoom);
+    ctx.fillRect(arrowX + zoom, arrowY2, zoom, zoom);
+  } else {
+    ctx.fillStyle = "#555570";
+    ctx.fillRect(arrowX, arrowY2 + zoom, zoom * 3, zoom);
+  }
+
+  // Sound toggle button.
+  cursorY += lineH;
+  const soundOn = world.isSoundEnabled();
+  const btnSize = zoom * 5;
+  const btnX = x;
+  const btnY2 = cursorY - zoom * 2;
+  const s = zoom;
+
+  ctx.fillStyle = soundOn ? "#0e2a0e" : "#0e0e1e";
+  ctx.fillRect(btnX, btnY2, btnSize, btnSize);
+  outlineRect(ctx, btnX, btnY2, btnSize, btnSize, brd);
+
+  const iconColor = soundOn ? "#2ECC71" : "#555566";
+  ctx.fillStyle = iconColor;
+  ctx.fillRect(btnX + s, btnY2 + s * 2, s, s);
+  ctx.fillRect(btnX + s * 2, btnY2 + s, s, s * 3);
+  if (soundOn) {
+    ctx.fillRect(btnX + s * 3, btnY2 + s, s, s);
+    ctx.fillRect(btnX + s * 3, btnY2 + s * 3, s, s);
+  } else {
+    ctx.fillStyle = "#E74C3C";
+    ctx.fillRect(btnX + s * 3, btnY2 + s, s, s);
+    ctx.fillRect(btnX + s * 3, btnY2 + s * 3, s, s);
+  }
+  _hitRegions.push({ x: btnX, y: btnY2, w: btnSize, h: btnSize, action: "toggleSound" });
+
+  // ── STATE indicator ──
+  sectionHeader("STATE");
+  cursorY += zoom * 2;
   const state = world.getAlfredState();
   const stateColor: Record<string, string> = {
     idle: "#555566", thinking: theme.accent, writing: "#2ECC71",
   };
   const dotSize = zoom * 3;
   ctx.fillStyle = stateColor[state] || "#555566";
-  ctx.fillRect(pad, height - pad - zoom * 6, dotSize, dotSize);
+  ctx.fillRect(x, cursorY - zoom, dotSize, dotSize);
   if (state !== "idle") {
     const pulse = Math.sin(now / 300) * 0.5 + 0.5;
     const ringSize = dotSize + Math.floor(pulse * zoom * 2);
     ctx.fillStyle = state === "thinking" ? "#0e2040" : "#0e2a0e";
     ctx.fillRect(
-      pad - Math.floor((ringSize - dotSize) / 2),
-      height - pad - zoom * 6 - Math.floor((ringSize - dotSize) / 2),
-      ringSize, ringSize
+      x - Math.floor((ringSize - dotSize) / 2),
+      cursorY - zoom - Math.floor((ringSize - dotSize) / 2),
+      ringSize, ringSize,
     );
     ctx.fillStyle = stateColor[state];
-    ctx.fillRect(pad, height - pad - zoom * 6, dotSize, dotSize);
+    ctx.fillRect(x, cursorY - zoom, dotSize, dotSize);
   }
   ctx.fillStyle = "#AAAACC";
   ctx.font = `bold ${medFont}px ${font}`;
-  ctx.textAlign = "left";
-  ctx.fillText(state.toUpperCase(), pad + zoom * 5, height - pad - zoom * 4);
-
+  ctx.fillText(state.toUpperCase(), x + zoom * 5, cursorY + zoom);
   if (state !== "idle") {
     ctx.fillStyle = "#555566";
     ctx.font = `${smallFont}px ${font}`;
-    ctx.fillText("working...", pad + zoom * 5, height - pad - zoom * 1);
+    ctx.fillText("working...", x + zoom * 20, cursorY + zoom);
   }
+
+  // ── Scan line (CRT effect) ��─
+  const scanY = y - pad + ((now / 40) % maxPanelH);
+  ctx.fillStyle = "#ffffff06";
+  ctx.fillRect(panelX, scanY, panelW, zoom);
+}
+
+// ── Agent toolbar (bottom bar) ─────────────────────────
+
+function drawAgentToolbar(rc: RenderContext): void {
+  const { ctx, world, width, height } = rc;
+  const zoom = rc.zoom;
+  const theme = world.getRepoTheme();
+  const brd = Math.max(1, Math.floor(zoom / 2));
+
+  const agentIds = Object.keys(AGENTS);
+  const cellW = zoom * 6;
+  const cellH = zoom * 6;
+  const totalW = agentIds.length * cellW;
+  const toolbarX = Math.floor((width - totalW) / 2);
+  const timelineH = zoom * 4;
+  const toolbarY = height - timelineH - cellH - zoom * 2;
+
+  // Background.
+  ctx.fillStyle = "#06060c";
+  ctx.fillRect(toolbarX - zoom, toolbarY - zoom, totalW + zoom * 2, cellH + zoom * 2);
+  outlineRect(ctx, toolbarX - zoom, toolbarY - zoom, totalW + zoom * 2, cellH + zoom * 2, brd);
+
+  const activeNames = world.getActiveAgentNames();
+  const font = `"DM Mono", monospace`;
+  const emojiFont = Math.max(8, zoom * 3.5);
+
+  for (let i = 0; i < agentIds.length; i++) {
+    const id = agentIds[i];
+    const agent = AGENTS[id];
+    const cx = toolbarX + i * cellW;
+
+    // Highlight active agents.
+    const isActive = activeNames.some(n => n === agent.name);
+    if (isActive) {
+      ctx.fillStyle = theme.accentDark;
+      ctx.fillRect(cx, toolbarY, cellW, cellH);
+    }
+
+    // Cell border.
+    ctx.fillStyle = "#141428";
+    ctx.fillRect(cx + cellW - brd, toolbarY, brd, cellH);
+
+    // Emoji.
+    ctx.font = `${emojiFont}px ${font}`;
+    ctx.textAlign = "center";
+    ctx.fillStyle = isActive ? "#CCCCDD" : "#555570";
+    ctx.fillText(agent.emoji, cx + cellW / 2, toolbarY + cellH / 2 + zoom);
+
+    // Hit region.
+    _hitRegions.push({ x: cx, y: toolbarY, w: cellW, h: cellH, action: `launchAgent:${id}` });
+  }
+
+  ctx.textAlign = "left";
+}
+
+// ── Clickable regions ─────────────────────────────────
+
+export interface HitRegion {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  action: string;
+}
+
+let _hitRegions: HitRegion[] = [];
+
+export function getHitRegions(): HitRegion[] {
+  return _hitRegions;
 }
 
 // ── Public entry point ─────────────────────────────────
 
 export function drawOverlay(rc: RenderContext): void {
+  _hitRegions = [];
   drawToolIcon(rc);
   drawSpeechBubbles(rc);
+  drawAgentToolbar(rc);
   drawTimeline(rc);
   drawHUD(rc);
 }

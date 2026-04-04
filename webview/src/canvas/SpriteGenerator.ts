@@ -127,6 +127,26 @@ const PALETTES: Record<string, CharacterPalette> = {
     skin: "#C0C0D0", hair: "#808090", shirt: "#505060",
     pants: "#404050", accent: "#1E7FD8", eyes: "#1E7FD8",
   },
+  // Ab — nordafricano, fototipo 2, ricci corti marroni, jeans + felpa nera
+  ab: {
+    skin: "#C8A882", hair: "#3D2B1F", shirt: "#1A1A1A",
+    pants: "#2B4570", accent: "#333333", eyes: "#1a1a2e",
+  },
+  // Andrea — ricci castano chiaro, vestito da caccia (gilet + pantalone)
+  andrea: {
+    skin: "#F0D0A0", hair: "#A0724A", shirt: "#5B6B3D",
+    pants: "#4A5A2D", accent: "#8B7355", eyes: "#1a1a2e",
+  },
+  // Arturo — tanti ricci rossi, tutto nero, stile metal hardcore
+  arturo: {
+    skin: "#E0C8A8", hair: "#B83200", shirt: "#0E0E0E",
+    pants: "#101010", accent: "#1A1A1A", eyes: "#1a1a2e",
+  },
+  // Francesco — camicia + golf mezza zip, capelli neri corti, bicipiti
+  francesco: {
+    skin: "#E8C8A0", hair: "#1A1A2A", shirt: "#2C3E50",
+    pants: "#3A3A3A", accent: "#4A6A7A", eyes: "#1a1a2e",
+  },
 };
 
 // ── Pixel templates (12 wide x 20 tall → drawn into 16x32 frame) ─

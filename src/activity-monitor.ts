@@ -34,7 +34,13 @@ export class ActivityMonitor {
   private lastState: "idle" | "thinking" | "writing" = "idle";
   private rescanTimer = 0;
   private static readonly RESCAN_INTERVAL_MS = 5000;
-  private static readonly ESTIMATED_MAX_MESSAGES = 80;
+  // 1M context ≈ 250 assistant messages + tool overhead.
+  // Each assistant msg ≈ 2k tokens avg; each tool call ≈ 1.5k tokens avg.
+  // Budget: ~500k tokens effective (system prompt + memory eats ~50%).
+  // (msgs * 2000 + tools * 1500) / 500_000 → simplified to weighted score.
+  private static readonly CONTEXT_BUDGET_TOKENS = 500_000;
+  private static readonly TOKENS_PER_MSG = 2000;
+  private static readonly TOKENS_PER_TOOL = 1500;
 
   constructor(onEvent: (event: BatCaveEvent) => void) {
     this.onEvent = onEvent;
@@ -323,7 +329,7 @@ export class ActivityMonitor {
 
     if (writingTools.includes(toolName)) return "writing";
     if (thinkingTools.includes(toolName)) return "thinking";
-    return "thinking";
+    return this.lastState; // unknown tools don't change state
   }
 
   private emitUsageUpdate(): void {
@@ -334,8 +340,12 @@ export class ActivityMonitor {
       agentsSpawnedThisSession: this.agentsSpawnedCount,
       activeModel: "claude-opus-4-6",
       sessionStartedAt: this.sessionStartedAt,
-      // Rough estimate: ~80 assistant messages fills the 200k context window.
-      contextFillPct: Math.min(100, Math.round((this.messagesCount / ActivityMonitor.ESTIMATED_MAX_MESSAGES) * 100)),
+      // Weighted estimate: messages + tool calls against 1M context budget.
+      contextFillPct: Math.min(100, Math.round(
+        ((this.messagesCount * ActivityMonitor.TOKENS_PER_MSG +
+          this.toolCallsCount * ActivityMonitor.TOKENS_PER_TOOL) /
+          ActivityMonitor.CONTEXT_BUDGET_TOKENS) * 100
+      )),
     });
   }
 }

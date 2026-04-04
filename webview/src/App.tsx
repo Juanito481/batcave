@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { GameLoop } from "./canvas/GameLoop";
 import { Renderer } from "./canvas/Renderer";
 import { BatCaveWorld } from "./world/BatCave";
+import { getHitRegions } from "./canvas/layers/HudLayer";
 
 // Acquire VS Code API (injected by the extension host).
 const vscode =
@@ -52,9 +53,32 @@ export function App() {
         const sound = renderer.getSoundSystem();
         sound.setEnabled(msg.payload.enabled);
         sound.setVolume(msg.payload.volume / 100);
+        world.setSoundEnabled(msg.payload.enabled);
       }
     };
     window.addEventListener("message", handleMessage);
+
+    // Canvas click handler for HUD buttons.
+    const handleClick = (e: MouseEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const cx = (e.clientX - rect.left) * scaleX;
+      const cy = (e.clientY - rect.top) * scaleY;
+
+      for (const region of getHitRegions()) {
+        if (cx >= region.x && cx <= region.x + region.w &&
+            cy >= region.y && cy <= region.y + region.h) {
+          if (region.action === "toggleSound") {
+            vscode?.postMessage({ command: "toggleSound" });
+          } else if (region.action.startsWith("launchAgent:")) {
+            const agentId = region.action.replace("launchAgent:", "");
+            vscode?.postMessage({ command: "launchAgent", agentId });
+          }
+        }
+      }
+    };
+    canvas.addEventListener("click", handleClick);
 
     // Tell the extension we're ready.
     vscode?.postMessage({ command: "ready" });
@@ -67,6 +91,7 @@ export function App() {
       renderer.dispose();
       resizeObserver.disconnect();
       window.removeEventListener("message", handleMessage);
+      canvas.removeEventListener("click", handleClick);
     };
   }, []);
 

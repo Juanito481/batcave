@@ -45,7 +45,7 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
     webviewView.webview.html = this.getHtml(webviewView.webview);
 
     // Listen for messages from webview.
-    webviewView.webview.onDidReceiveMessage((msg: WebviewToExtMessage) => {
+    webviewView.webview.onDidReceiveMessage((msg: Record<string, unknown>) => {
       if (msg.command === "ready") {
         this.webviewReady = true;
         // Send config + any queued events.
@@ -54,6 +54,16 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
           this.postEvent(event);
         }
         this.eventQueue = [];
+      } else if (msg.command === "toggleSound") {
+        this.toggleSound();
+      } else if (msg.command === "launchAgent") {
+        const agentId = msg.agentId as string;
+        if (agentId && AGENTS[agentId]) {
+          // Send the slash command to the active terminal.
+          vscode.commands.executeCommand("workbench.action.terminal.sendSequence", {
+            text: `/${agentId}\n`,
+          });
+        }
       }
     });
 

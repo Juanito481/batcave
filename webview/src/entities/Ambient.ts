@@ -17,6 +17,8 @@ interface Bat {
   wingTimer: number;
   swooping: boolean;
   swoopY: number;
+  swoopTimer: number;
+  swoopThreshold: number;
 }
 
 // --- Water drips ---
@@ -51,7 +53,6 @@ export class Ambient {
 
   // Timers.
   private dripTimer = 0;
-  private dripInterval = 2500; // ms until next drip
 
   // Cached world dimensions.
   private wW = 400;
@@ -62,10 +63,17 @@ export class Ambient {
     // Bats spawn lazily on first update when dimensions are known.
   }
 
+  // Context pressure (0-100) — controls base drip interval.
+  private contextPressure = 0;
+
   /** Increase drip frequency under context pressure. */
   setContextPressure(pct: number): void {
-    // 0% = 2500ms interval, 100% = 800ms interval.
-    this.dripInterval = Math.max(800, 2500 - pct * 17);
+    this.contextPressure = pct;
+  }
+
+  /** Compute drip interval from pressure: 0% = 25000ms, 100% = 8000ms. */
+  private getDripInterval(): number {
+    return Math.max(8000, 25000 - this.contextPressure * 170);
   }
 
   // --- Public API ---
@@ -118,6 +126,8 @@ export class Ambient {
       wingTimer: 0,
       swooping: false,
       swoopY: 0,
+      swoopTimer: 0,
+      swoopThreshold: 3000 + Math.random() * 5000,
     };
   }
 
@@ -129,10 +139,15 @@ export class Ambient {
       // Sine-wave float.
       bat.y = bat.baseY + Math.sin(bat.phase) * 8;
 
-      // Occasional swoop.
-      if (!bat.swooping && Math.random() < 0.0002 * dt) {
-        bat.swooping = true;
-        bat.swoopY = 0;
+      // Occasional swoop (accumulator-based, frame-rate independent).
+      if (!bat.swooping) {
+        bat.swoopTimer += dt;
+        if (bat.swoopTimer >= bat.swoopThreshold) {
+          bat.swooping = true;
+          bat.swoopY = 0;
+          bat.swoopTimer = 0;
+          bat.swoopThreshold = 3000 + Math.random() * 5000;
+        }
       }
       if (bat.swooping) {
         bat.swoopY += dt * 0.08;
@@ -187,9 +202,9 @@ export class Ambient {
   private updateDrips(dt: number): void {
     this.dripTimer += dt;
 
-    if (this.dripTimer >= this.dripInterval) {
+    const interval = this.getDripInterval();
+    if (this.dripTimer >= interval) {
       this.dripTimer = 0;
-      this.dripInterval = 2000 + Math.random() * 2000; // 2-4s
 
       // Spawn from a random stalactite position (distributed across width).
       const numSlots = Math.max(1, Math.floor(this.wW / 48));
