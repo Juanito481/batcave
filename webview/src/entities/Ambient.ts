@@ -1,5 +1,7 @@
 /**
- * Ambient cave life — bats, water drips, dust motes, screen glow.
+ * Ambient cave life — bats, water drips, dust motes, screen glow,
+ * spiders, rats, fireflies.
+ *
  * Draws behind characters/furniture to add depth to the Bat Cave.
  */
 
@@ -45,14 +47,55 @@ interface GlowPulse {
   phase: number;
 }
 
+// --- Spiders ---
+
+interface Spider {
+  x: number;
+  baseY: number; // anchor point on ceiling
+  y: number;     // current position (descends on silk)
+  targetY: number;
+  state: "hanging" | "descending" | "ascending" | "waiting";
+  waitTimer: number;
+  waitThreshold: number;
+  legFrame: 0 | 1;
+  legTimer: number;
+}
+
+// --- Rats ---
+
+interface Rat {
+  x: number;
+  y: number;
+  speedX: number;
+  frame: 0 | 1;
+  frameTimer: number;
+  active: boolean;
+}
+
+// --- Fireflies ---
+
+interface Firefly {
+  x: number;
+  y: number;
+  phase: number;
+  speedX: number;
+  speedY: number;
+  brightness: number; // 0-1
+}
+
 export class Ambient {
   private bats: Bat[] = [];
   private drips: Drip[] = [];
   private motes: Mote[] = [];
   private glow: GlowPulse = { phase: 0 };
+  private spiders: Spider[] = [];
+  private rats: Rat[] = [];
+  private fireflies: Firefly[] = [];
 
   // Timers.
   private dripTimer = 0;
+  private ratSpawnTimer = 0;
+  private ratSpawnThreshold = 20000 + Math.random() * 20000;
 
   // Cached world dimensions.
   private wW = 400;
@@ -60,7 +103,7 @@ export class Ambient {
   private wallH = 64;
 
   constructor() {
-    // Bats spawn lazily on first update when dimensions are known.
+    // Entities spawn lazily on first update when dimensions are known.
   }
 
   // Context pressure (0-100) — controls base drip interval.
@@ -107,16 +150,38 @@ export class Ambient {
       }
     }
 
+    // Lazy init spiders.
+    if (this.spiders.length === 0) {
+      const count = 2 + Math.floor(Math.random() * 2); // 2-3
+      for (let i = 0; i < count; i++) {
+        this.spiders.push(this.spawnSpider(i));
+      }
+    }
+
+    // Lazy init fireflies.
+    if (this.fireflies.length === 0) {
+      const count = 4 + Math.floor(Math.random() * 3); // 4-6
+      for (let i = 0; i < count; i++) {
+        this.fireflies.push(this.spawnFirefly());
+      }
+    }
+
     this.updateBats(deltaMs);
     this.updateDrips(deltaMs);
     this.updateMotes(deltaMs);
+    this.updateSpiders(deltaMs);
+    this.updateRats(deltaMs);
+    this.updateFireflies(deltaMs);
     this.glow.phase += deltaMs * 0.001;
   }
 
   draw(ctx: CanvasRenderingContext2D, zoom: number): void {
     this.drawGlow(ctx, zoom);
+    this.drawFireflies(ctx, zoom);
     this.drawMotes(ctx, zoom);
     this.drawDrips(ctx, zoom);
+    this.drawSpiders(ctx, zoom);
+    this.drawRats(ctx, zoom);
     this.drawBats(ctx, zoom);
   }
 
@@ -312,6 +377,264 @@ export class Ambient {
     }
   }
 
+  // --- Spiders ---
+
+  private spawnSpider(index: number): Spider {
+    const x = this.wW * 0.15 + (index / 3) * this.wW * 0.7;
+    return {
+      x,
+      baseY: this.wallH + 4,
+      y: this.wallH + 4,
+      targetY: this.wallH + 4,
+      state: "hanging",
+      waitTimer: 0,
+      waitThreshold: 8000 + Math.random() * 15000,
+      legFrame: 0,
+      legTimer: 0,
+    };
+  }
+
+  private updateSpiders(dt: number): void {
+    for (const spider of this.spiders) {
+      spider.legTimer += dt;
+      if (spider.legTimer >= 300) {
+        spider.legTimer -= 300;
+        spider.legFrame = spider.legFrame === 0 ? 1 : 0;
+      }
+
+      switch (spider.state) {
+        case "hanging":
+          spider.waitTimer += dt;
+          if (spider.waitTimer >= spider.waitThreshold) {
+            spider.waitTimer = 0;
+            spider.state = "descending";
+            // Descend 30-80px below ceiling.
+            spider.targetY = spider.baseY + 30 + Math.random() * 50;
+          }
+          break;
+
+        case "descending":
+          spider.y += dt * 0.02;
+          if (spider.y >= spider.targetY) {
+            spider.y = spider.targetY;
+            spider.state = "waiting";
+            spider.waitTimer = 0;
+            spider.waitThreshold = 3000 + Math.random() * 5000;
+          }
+          break;
+
+        case "waiting":
+          // Dangle slightly.
+          spider.y = spider.targetY + Math.sin(Date.now() * 0.002) * 2;
+          spider.waitTimer += dt;
+          if (spider.waitTimer >= spider.waitThreshold) {
+            spider.state = "ascending";
+          }
+          break;
+
+        case "ascending":
+          spider.y -= dt * 0.03;
+          if (spider.y <= spider.baseY) {
+            spider.y = spider.baseY;
+            spider.state = "hanging";
+            spider.waitTimer = 0;
+            spider.waitThreshold = 8000 + Math.random() * 15000;
+          }
+          break;
+      }
+    }
+  }
+
+  private drawSpiders(ctx: CanvasRenderingContext2D, zoom: number): void {
+    const s = Math.max(1, Math.floor(zoom * 0.4));
+
+    for (const spider of this.spiders) {
+      const sx = Math.round(spider.x);
+      const sy = Math.round(spider.y);
+
+      // Silk thread from ceiling to spider.
+      if (spider.y > spider.baseY + 2) {
+        ctx.fillStyle = "#1a1a30";
+        ctx.fillRect(sx + s, Math.round(spider.baseY), 1, sy - Math.round(spider.baseY));
+      }
+
+      // Body (dark, 3x2).
+      ctx.fillStyle = "#1a1020";
+      ctx.fillRect(sx, sy, s * 3, s * 2);
+
+      // Head (brighter, smaller).
+      ctx.fillStyle = "#2a2030";
+      ctx.fillRect(sx + s, sy - s, s, s);
+
+      // Legs (alternating frames).
+      ctx.fillStyle = "#1a1020";
+      if (spider.legFrame === 0) {
+        // Legs spread.
+        ctx.fillRect(sx - s, sy, s, s);
+        ctx.fillRect(sx - s, sy + s, s, s);
+        ctx.fillRect(sx + s * 3, sy, s, s);
+        ctx.fillRect(sx + s * 3, sy + s, s, s);
+      } else {
+        // Legs tucked.
+        ctx.fillRect(sx - s, sy + s, s, s);
+        ctx.fillRect(sx + s * 3, sy + s, s, s);
+      }
+
+      // Eyes (tiny red dots).
+      ctx.fillStyle = "#4a1a1a";
+      ctx.fillRect(sx + s, sy - s, 1, 1);
+      ctx.fillRect(sx + s + Math.max(1, Math.floor(s / 2)), sy - s, 1, 1);
+    }
+  }
+
+  // --- Rats ---
+
+  private updateRats(dt: number): void {
+    // Spawn timer.
+    this.ratSpawnTimer += dt;
+    if (this.ratSpawnTimer >= this.ratSpawnThreshold && this.rats.filter(r => r.active).length < 2) {
+      this.ratSpawnTimer = 0;
+      this.ratSpawnThreshold = 20000 + Math.random() * 25000;
+
+      const goingRight = Math.random() > 0.5;
+      this.rats.push({
+        x: goingRight ? -10 : this.wW + 10,
+        y: this.wH - 6,
+        speedX: (goingRight ? 1 : -1) * (0.06 + Math.random() * 0.04),
+        frame: 0,
+        frameTimer: 0,
+        active: true,
+      });
+    }
+
+    // Update active rats.
+    for (let i = this.rats.length - 1; i >= 0; i--) {
+      const rat = this.rats[i];
+      if (!rat.active) continue;
+
+      rat.x += rat.speedX * dt;
+      rat.frameTimer += dt;
+      if (rat.frameTimer >= 120) {
+        rat.frameTimer -= 120;
+        rat.frame = rat.frame === 0 ? 1 : 0;
+      }
+
+      // Remove when off-screen.
+      if ((rat.speedX > 0 && rat.x > this.wW + 20) ||
+          (rat.speedX < 0 && rat.x < -20)) {
+        rat.active = false;
+        this.rats.splice(i, 1);
+      }
+    }
+  }
+
+  private drawRats(ctx: CanvasRenderingContext2D, zoom: number): void {
+    const s = Math.max(1, Math.floor(zoom * 0.4));
+
+    for (const rat of this.rats) {
+      if (!rat.active) continue;
+      const rx = Math.round(rat.x);
+      const ry = Math.round(rat.y);
+      const dir = rat.speedX > 0 ? 1 : -1;
+
+      // Body (4x2).
+      ctx.fillStyle = "#201820";
+      ctx.fillRect(rx, ry, s * 4, s * 2);
+
+      // Head.
+      ctx.fillStyle = "#2a2028";
+      const hx = dir > 0 ? rx + s * 4 : rx - s;
+      ctx.fillRect(hx, ry, s, s * 2);
+
+      // Ears.
+      ctx.fillStyle = "#3a2830";
+      ctx.fillRect(hx, ry - s, s, s);
+
+      // Tail.
+      ctx.fillStyle = "#1a1018";
+      const tx = dir > 0 ? rx - s * 2 : rx + s * 4 + s;
+      ctx.fillRect(tx, ry + s, s * 2, 1);
+
+      // Legs (alternating).
+      ctx.fillStyle = "#201820";
+      if (rat.frame === 0) {
+        ctx.fillRect(rx + s, ry + s * 2, s, s);
+        ctx.fillRect(rx + s * 3, ry + s * 2, s, s);
+      } else {
+        ctx.fillRect(rx, ry + s * 2, s, s);
+        ctx.fillRect(rx + s * 2, ry + s * 2, s, s);
+      }
+
+      // Eye.
+      ctx.fillStyle = "#4a3a30";
+      ctx.fillRect(hx, ry + Math.floor(s / 2), 1, 1);
+    }
+  }
+
+  // --- Fireflies ---
+
+  private spawnFirefly(): Firefly {
+    return {
+      x: Math.random() * this.wW,
+      y: this.wallH * 0.3 + Math.random() * this.wallH * 0.8,
+      phase: Math.random() * Math.PI * 2,
+      speedX: (Math.random() - 0.5) * 0.008,
+      speedY: (Math.random() - 0.5) * 0.005,
+      brightness: Math.random(),
+    };
+  }
+
+  private updateFireflies(dt: number): void {
+    for (const ff of this.fireflies) {
+      ff.x += ff.speedX * dt;
+      ff.y += ff.speedY * dt;
+      ff.phase += dt * 0.002;
+      ff.brightness = (Math.sin(ff.phase) + 1) * 0.5;
+
+      // Gentle drift direction change.
+      if (Math.random() < 0.001) {
+        ff.speedX = (Math.random() - 0.5) * 0.008;
+        ff.speedY = (Math.random() - 0.5) * 0.005;
+      }
+
+      // Wrap.
+      if (ff.x < -5) ff.x = this.wW + 5;
+      if (ff.x > this.wW + 5) ff.x = -5;
+      if (ff.y < this.wallH * 0.2) ff.y = this.wallH * 1.2;
+      if (ff.y > this.wallH * 1.5) ff.y = this.wallH * 0.3;
+    }
+  }
+
+  private drawFireflies(ctx: CanvasRenderingContext2D, zoom: number): void {
+    const px = Math.max(1, Math.floor(zoom * 0.3));
+
+    // Opaque glow steps (warm yellow-green, no rgba).
+    const GLOW_DIM = "#181e10";
+    const GLOW_MID = "#2a3a14";
+    const GLOW_BRIGHT = "#4a6a20";
+
+    for (const ff of this.fireflies) {
+      const fx = Math.round(ff.x);
+      const fy = Math.round(ff.y);
+
+      if (ff.brightness > 0.7) {
+        // Bright: glow halo + core.
+        ctx.fillStyle = GLOW_DIM;
+        ctx.fillRect(fx - px, fy - px, px * 3, px * 3);
+        ctx.fillStyle = GLOW_BRIGHT;
+        ctx.fillRect(fx, fy, px, px);
+      } else if (ff.brightness > 0.3) {
+        // Medium: small glow.
+        ctx.fillStyle = GLOW_MID;
+        ctx.fillRect(fx, fy, px, px);
+      } else {
+        // Dim: barely visible.
+        ctx.fillStyle = GLOW_DIM;
+        ctx.fillRect(fx, fy, px, px);
+      }
+    }
+  }
+
   // --- Screen glow pulse ---
 
   private drawGlow(ctx: CanvasRenderingContext2D, zoom: number): void {
@@ -319,7 +642,6 @@ export class Ambient {
     const cy = this.wallH + zoom * 8;
 
     // Opaque glow using concentric rectangles (no rgba gradients).
-    // Creates a visible light pool from the batcomputer screens.
     const pulse = Math.sin(this.glow.phase * 0.8);
     const glowLayers = [
       { size: zoom * 6, color: pulse > 0 ? "#101830" : "#0e1428" },

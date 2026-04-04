@@ -53,7 +53,13 @@ export interface TodoEvent {
   timestamp: number;
 }
 
-export type BatCaveEvent = AgentEvent | ToolEvent | SessionEvent | UsageStats | GitEvent | TodoEvent;
+export interface SessionsListEvent {
+  type: "sessions_list";
+  sessions: { projectHash: string; label: string; lastActive: number; isCurrent: boolean }[];
+  timestamp: number;
+}
+
+export type BatCaveEvent = AgentEvent | ToolEvent | SessionEvent | UsageStats | GitEvent | TodoEvent | SessionsListEvent;
 
 export interface BatCaveConfig {
   activeRepo: string;

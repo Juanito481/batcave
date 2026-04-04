@@ -34,6 +34,9 @@ export class ActivityMonitor {
   private lastState: "idle" | "thinking" | "writing" = "idle";
   private rescanTimer = 0;
   private static readonly RESCAN_INTERVAL_MS = 5000;
+  // Multi-session tracking.
+  private static readonly SESSION_ACTIVE_THRESHOLD_MS = 5 * 60 * 1000; // 5 min
+  private knownSessions: { projectHash: string; label: string; filePath: string; lastActive: number }[] = [];
   // 1M context ≈ 250 assistant messages + tool overhead.
   // Each assistant msg ≈ 2k tokens avg; each tool call ≈ 1.5k tokens avg.
   // Budget: ~500k tokens effective (system prompt + memory eats ~50%).
@@ -59,7 +62,7 @@ export class ActivityMonitor {
     }
   }
 
-  /** Find the most recently modified JSONL transcript file. */
+  /** Find the most recently modified JSONL transcript file and track all sessions. */
   private findActiveTranscript(): void {
     const claudeDir = path.join(os.homedir(), ".claude", "projects");
     if (!fs.existsSync(claudeDir)) {
@@ -68,6 +71,8 @@ export class ActivityMonitor {
 
     let newestFile: string | null = null;
     let newestMtime = 0;
+    const now = Date.now();
+    const sessions: typeof this.knownSessions = [];
 
     try {
       const projectDirs = fs.readdirSync(claudeDir, { withFileTypes: true });
@@ -75,10 +80,18 @@ export class ActivityMonitor {
         if (!dir.isDirectory()) continue;
         const projectPath = path.join(claudeDir, dir.name);
         const files = fs.readdirSync(projectPath).filter((f) => f.endsWith(".jsonl"));
+
+        let dirNewest: string | null = null;
+        let dirNewestMtime = 0;
+
         for (const file of files) {
           const fullPath = path.join(projectPath, file);
           try {
             const stat = fs.statSync(fullPath);
+            if (stat.mtimeMs > dirNewestMtime) {
+              dirNewestMtime = stat.mtimeMs;
+              dirNewest = fullPath;
+            }
             if (stat.mtimeMs > newestMtime) {
               newestMtime = stat.mtimeMs;
               newestFile = fullPath;
@@ -87,9 +100,39 @@ export class ActivityMonitor {
             // File may have been deleted between readdir and stat.
           }
         }
+
+        // Track session if recently active.
+        if (dirNewest && (now - dirNewestMtime) < ActivityMonitor.SESSION_ACTIVE_THRESHOLD_MS) {
+          // Derive readable label from project hash directory name.
+          const label = this.projectHashToLabel(dir.name);
+          sessions.push({
+            projectHash: dir.name,
+            label,
+            filePath: dirNewest,
+            lastActive: dirNewestMtime,
+          });
+        }
       }
     } catch {
       // Claude dir may not be readable.
+    }
+
+    // Update known sessions and emit list.
+    this.knownSessions = sessions;
+    if (sessions.length > 0) {
+      const currentHash = this.currentFile
+        ? path.basename(path.dirname(this.currentFile))
+        : "";
+      this.onEvent({
+        type: "sessions_list",
+        sessions: sessions.map(s => ({
+          projectHash: s.projectHash,
+          label: s.label,
+          lastActive: s.lastActive,
+          isCurrent: s.projectHash === currentHash,
+        })),
+        timestamp: now,
+      });
     }
 
     if (newestFile && newestFile !== this.currentFile) {
@@ -107,7 +150,6 @@ export class ActivityMonitor {
       this.sessionStartedAt = Date.now();
       this.lastState = "idle";
       // Emit exit for any lingering agents from previous session.
-      const now = Date.now();
       for (const agentId of this.activeAgents) {
         this.onEvent({
           type: "agent_exit",
@@ -120,6 +162,20 @@ export class ActivityMonitor {
       this.toolToAgent.clear();
       this.toolIdToName.clear();
     }
+  }
+
+  /** Convert Claude project hash directory name to a readable label. */
+  private projectHashToLabel(dirName: string): string {
+    // Claude project dirs are named like: -Users-name-path-to-project
+    // Extract the last meaningful segment.
+    const parts = dirName.split("-").filter(Boolean);
+    if (parts.length === 0) return dirName;
+    // Skip "Users" and username, take the last 1-2 segments.
+    const meaningful = parts.filter(p => p !== "Users" && p.length > 1);
+    if (meaningful.length >= 2) {
+      return meaningful.slice(-2).join("/");
+    }
+    return meaningful[meaningful.length - 1] || dirName;
   }
 
   private poll(): void {

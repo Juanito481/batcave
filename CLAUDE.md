@@ -80,7 +80,7 @@ Each of the 13 chess-piece agents has:
 - **ParticleSystem**: presets — `tool-spark` (orange), `agent-enter` (green), `agent-exit` (red), `write-glow`, `think-pulse` (blue). Pool of 200, zero GC.
 - **SoundSystem**: `drip`, `tool-click`, `agent-chime`, `agent-exit`, `think-chime`, `write-click`. All synthesized via OscillatorNode. Muted by default, toggle via command or `batcave.soundEnabled` setting.
 
-## Ambient Intelligence (v0.4.0)
+## Ambient Intelligence (v2.0.0)
 
 The cave communicates Claude's state through environment, not UI overlays:
 
@@ -89,6 +89,9 @@ The cave communicates Claude's state through environment, not UI overlays:
 - **Agent enter pulse**: green wave travels along LED strip for 1.5s when any agent enters the cave.
 - **Screen tremor**: 1px jitter on Batcomputer screen content during writing state.
 - **Cave breathing**: drip frequency doubles during thinking via Ambient.setStateBoost(0.5).
+- **Spiders**: 2-3 spiders hang from ceiling, periodically descend on silk threads, dangle, retract.
+- **Rats**: scurry across the floor every 20-40s, animate with alternating leg frames.
+- **Fireflies**: 4-6 glowing dots near ceiling, pulsing brightness, gentle drift.
 
 ## Behaviors
 - **Alfred quips**: 8 butler phrases, shown every 30-50s idle, 4s display. Fixed threshold per cycle.
@@ -106,6 +109,12 @@ The cave communicates Claude's state through environment, not UI overlays:
 - **Info chip** (top-right): repo label + model badge + session duration.
 - **Active agents** (below state): green dots + emoji for each active agent.
 - **Pace** (top-right secondary): tools/min with trend arrow.
+- **Session indicators**: shows other active Claude sessions when multiple exist.
+- **Expanded panels**: click Batcomputer screens to expand files/stats/agents panels.
+
+## Multi-session (v2.0.0)
+
+Activity monitor scans all `~/.claude/projects/*/` directories. Sessions active within the last 5 minutes are tracked and displayed as indicators in the HUD. The current session is highlighted green.
 
 ## Context Estimation
 
@@ -127,6 +136,7 @@ Weighted formula: `(msgs * 2000 + tools * 1500) / 500_000 * 100`. Budget assumes
 - No external game engines — vanilla Canvas 2D only
 - No external audio files — all sound synthesized via Web Audio oscillators
 - Extension must work with zero configuration — auto-discovers Claude Code transcripts
+- Click handling uses canvas coordinate mapping for hit testing
 - Never modify Claude Code files — read only
 - Particles use opaque palette colors, no globalAlpha (flicker fade instead)
 - Use ctx.save()/restore() around any globalAlpha changes

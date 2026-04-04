@@ -150,6 +150,12 @@ export class BatCaveWorld {
   // Write clicks timer.
   private writeClickTimer = 0;
 
+  // Multi-session.
+  private otherSessions: { label: string; lastActive: number; isCurrent: boolean }[] = [];
+
+  // Interactive dashboard — expanded panel.
+  private expandedPanel: "files" | "stats" | "agents" | null = null;
+
   // Agent enter pulse — timestamp of last agent_enter for LED wave effect.
   private _agentPulseStart = 0;
 
@@ -473,6 +479,14 @@ export class BatCaveWorld {
         }
         break;
       }
+
+      case "sessions_list": {
+        const sessions = (event as Record<string, unknown>).sessions as { label: string; lastActive: number; isCurrent: boolean }[];
+        if (Array.isArray(sessions)) {
+          this.otherSessions = sessions;
+        }
+        break;
+      }
     }
   }
 
@@ -645,6 +659,53 @@ export class BatCaveWorld {
 
   isSoundEnabled(): boolean {
     return this._soundEnabled;
+  }
+
+  /** Other active Claude sessions. */
+  getOtherSessions(): { label: string; lastActive: number; isCurrent: boolean }[] {
+    return this.otherSessions;
+  }
+
+  /** Currently expanded panel (null = none). */
+  getExpandedPanel(): "files" | "stats" | "agents" | null {
+    return this.expandedPanel;
+  }
+
+  /** Toggle or set expanded panel. */
+  setExpandedPanel(panel: "files" | "stats" | "agents" | null): void {
+    this.expandedPanel = this.expandedPanel === panel ? null : panel;
+  }
+
+  /** Handle click at canvas coordinates — hit test Batcomputer screens. */
+  handleClick(cx: number, cy: number): void {
+    const zoom = this._zoom;
+    const zt = this._zt;
+    const bcTilesW = Math.min(5, Math.ceil(this.worldWidth / zt) - 1);
+    const bcW = zt * bcTilesW;
+    const bcX = Math.floor((this.worldWidth - bcW) / 2);
+    const bcY = this.wallH + zoom * 2;
+    const bcH = Math.floor(zt * 1.5);
+    const screenW = Math.floor((bcW - zoom * 4) / 3);
+
+    // Left screen (files).
+    if (cx >= bcX + zoom && cx <= bcX + zoom + screenW && cy >= bcY && cy <= bcY + bcH) {
+      this.setExpandedPanel("files");
+      return;
+    }
+    // Center screen (stats).
+    if (cx >= bcX + zoom + screenW + zoom && cx <= bcX + zoom + screenW * 2 + zoom && cy >= bcY && cy <= bcY + bcH) {
+      this.setExpandedPanel("stats");
+      return;
+    }
+    // Right screen (agents).
+    if (cx >= bcX + zoom + (screenW + zoom) * 2 && cx <= bcX + bcW - zoom && cy >= bcY && cy <= bcY + bcH) {
+      this.setExpandedPanel("agents");
+      return;
+    }
+    // Click elsewhere closes panel.
+    if (this.expandedPanel) {
+      this.expandedPanel = null;
+    }
   }
 
   setSoundEnabled(on: boolean): void {

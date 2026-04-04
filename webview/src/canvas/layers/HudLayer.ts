@@ -298,10 +298,166 @@ function drawOverlayHud(rc: RenderContext): void {
 
 
 
+// ── Multi-session indicators ──────────────────────────
+
+function drawSessionIndicators(rc: RenderContext): void {
+  const { ctx, world, width } = rc;
+  const zoom = rc.zoom;
+  const sessions = world.getOtherSessions();
+  if (sessions.length <= 1) return; // Only show when multiple sessions exist.
+
+  const font = `"DM Mono", monospace`;
+  const fontSize = Math.max(5, zoom * 2.5);
+  const pad = zoom * 3;
+  const y = zoom * 2 + pad + zoom * 2 + pad + zoom * 4; // Below agents row.
+
+  ctx.font = `${fontSize}px ${font}`;
+  ctx.textAlign = "left";
+
+  let x = pad;
+  for (const session of sessions) {
+    const age = (Date.now() - session.lastActive) / 1000;
+    const ageStr = age < 60 ? `${Math.floor(age)}s` : `${Math.floor(age / 60)}m`;
+
+    // Dot: green if current, dim if other.
+    ctx.fillStyle = session.isCurrent ? "#2ECC71" : "#444458";
+    ctx.fillRect(x, y, zoom, zoom);
+
+    // Label.
+    ctx.fillStyle = session.isCurrent ? "#888899" : "#444458";
+    ctx.fillText(`${session.label} (${ageStr})`, x + zoom * 2, y + zoom);
+    x += ctx.measureText(`${session.label} (${ageStr})`).width + zoom * 5;
+  }
+}
+
+// ── Expanded panel overlay ────────────────────────────
+
+function drawExpandedPanel(rc: RenderContext): void {
+  const { ctx, world, width, height } = rc;
+  const zoom = rc.zoom;
+  const panel = world.getExpandedPanel();
+  if (!panel) return;
+
+  const font = `"DM Mono", monospace`;
+  const fontSize = Math.max(7, zoom * 3);
+  const smallFont = Math.max(6, zoom * 2.5);
+  const pad = zoom * 4;
+
+  // Semi-transparent backdrop.
+  ctx.save();
+  ctx.fillStyle = "#0a0a12";
+  ctx.globalAlpha = 0.85;
+  const panelW = Math.min(width * 0.6, 400);
+  const panelH = Math.min(height * 0.65, 320);
+  const px = Math.floor((width - panelW) / 2);
+  const py = Math.floor((height - panelH) / 2);
+  ctx.fillRect(px, py, panelW, panelH);
+  ctx.restore();
+
+  // Border.
+  const theme = world.getRepoTheme();
+  ctx.fillStyle = theme.accent;
+  ctx.fillRect(px, py, panelW, Math.max(1, zoom));
+  ctx.fillRect(px, py + panelH - Math.max(1, zoom), panelW, Math.max(1, zoom));
+  ctx.fillRect(px, py, Math.max(1, zoom), panelH);
+  ctx.fillRect(px + panelW - Math.max(1, zoom), py, Math.max(1, zoom), panelH);
+
+  // Header.
+  ctx.fillStyle = theme.accent;
+  ctx.font = `bold ${fontSize}px ${font}`;
+  ctx.textAlign = "left";
+
+  const titles: Record<string, string> = {
+    files: "RECENT FILES",
+    stats: "SESSION STATS",
+    agents: "AGENT HISTORY",
+  };
+  ctx.fillText(titles[panel] || panel.toUpperCase(), px + pad, py + pad + fontSize);
+
+  // Close hint.
+  ctx.fillStyle = "#555566";
+  ctx.font = `${smallFont}px ${font}`;
+  ctx.textAlign = "right";
+  ctx.fillText("click to close", px + panelW - pad, py + pad + smallFont);
+
+  // Content area.
+  const contentY = py + pad + fontSize + pad;
+  const contentH = panelH - pad * 2 - fontSize - pad;
+  const lineH = Math.max(fontSize + zoom * 2, 14);
+  ctx.textAlign = "left";
+
+  if (panel === "files") {
+    const files = world.getRecentFiles();
+    ctx.font = `${smallFont}px ${font}`;
+    const toolColors: Record<string, string> = {
+      Read: "#1a3a5a", Edit: "#F39C12", Write: "#F39C12",
+      Grep: "#1a3a5a", Glob: "#1a3a5a", Bash: "#2ECC71",
+    };
+    for (let i = 0; i < files.length; i++) {
+      const fy = contentY + i * lineH;
+      if (fy > py + panelH - pad) break;
+      ctx.fillStyle = toolColors[files[i].tool] || "#555566";
+      ctx.fillRect(px + pad, fy + zoom, zoom * 2, zoom * 2);
+      ctx.fillStyle = "#888899";
+      ctx.fillText(files[i].name, px + pad + zoom * 4, fy + lineH * 0.7);
+      ctx.fillStyle = "#555566";
+      ctx.fillText(files[i].tool, px + panelW / 2, fy + lineH * 0.7);
+    }
+    if (files.length === 0) {
+      ctx.fillStyle = "#444458";
+      ctx.fillText("No files touched yet", px + pad, contentY + lineH * 0.7);
+    }
+  } else if (panel === "stats") {
+    const stats = world.getSessionStats();
+    const pace = world.getPace();
+    const breakdown = world.getToolBreakdown();
+    ctx.font = `${fontSize}px ${font}`;
+
+    const lines = [
+      { label: "Context", value: `${stats.contextPct}%`, color: stats.contextPct < 50 ? "#2ECC71" : stats.contextPct < 80 ? "#F39C12" : "#E74C3C" },
+      { label: "Tools", value: `${stats.toolCount}`, color: "#888899" },
+      { label: "Duration", value: stats.duration, color: "#888899" },
+      { label: "Pace", value: `${pace.current}/min`, color: pace.trend === "up" ? "#2ECC71" : pace.trend === "down" ? "#E74C3C" : "#888899" },
+      { label: "Read", value: `${breakdown.read}`, color: "#1a5a8a" },
+      { label: "Write", value: `${breakdown.write}`, color: "#F39C12" },
+      { label: "Bash", value: `${breakdown.bash}`, color: "#2ECC71" },
+      { label: "Agent", value: `${breakdown.agent}`, color: "#9B59B6" },
+    ];
+
+    for (let i = 0; i < lines.length; i++) {
+      const ly = contentY + i * lineH;
+      if (ly > py + panelH - pad) break;
+      ctx.fillStyle = "#555566";
+      ctx.fillText(lines[i].label, px + pad, ly + lineH * 0.7);
+      ctx.fillStyle = lines[i].color;
+      ctx.textAlign = "right";
+      ctx.fillText(lines[i].value, px + panelW - pad, ly + lineH * 0.7);
+      ctx.textAlign = "left";
+    }
+  } else if (panel === "agents") {
+    const history = world.getAgentHistory();
+    ctx.font = `${smallFont}px ${font}`;
+    for (let i = 0; i < history.length; i++) {
+      const ay = contentY + i * lineH;
+      if (ay > py + panelH - pad) break;
+      const entry = history[i];
+      ctx.fillStyle = entry.action === "enter" ? "#2ECC71" : "#E74C3C";
+      const arrow = entry.action === "enter" ? "\u25B6" : "\u25C0";
+      ctx.fillText(`${arrow} ${entry.emoji} ${entry.name}`, px + pad, ay + lineH * 0.7);
+    }
+    if (history.length === 0) {
+      ctx.fillStyle = "#444458";
+      ctx.fillText("No agents yet", px + pad, contentY + lineH * 0.7);
+    }
+  }
+}
+
 // ── Public entry point ─────────────────────────────────
 
 export function drawOverlay(rc: RenderContext): void {
   drawToolIcon(rc);
   drawSpeechBubbles(rc);
   drawOverlayHud(rc);
+  drawSessionIndicators(rc);
+  drawExpandedPanel(rc);
 }

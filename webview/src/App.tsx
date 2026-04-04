@@ -58,6 +58,18 @@ export function App() {
     window.addEventListener("message", handleMessage);
 
 
+    // Click handler for interactive Batcomputer screens.
+    const handleClick = (e: MouseEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const cx = (e.clientX - rect.left) * scaleX;
+      const cy = (e.clientY - rect.top) * scaleY;
+      world.handleClick(cx, cy);
+    };
+    canvas.addEventListener("click", handleClick);
+    canvas.style.cursor = "pointer";
+
     // Tell the extension we're ready.
     vscode?.postMessage({ command: "ready" });
 
@@ -68,6 +80,7 @@ export function App() {
       loop.stop();
       renderer.dispose();
       resizeObserver.disconnect();
+      canvas.removeEventListener("click", handleClick);
       window.removeEventListener("message", handleMessage);
     };
   }, []);
