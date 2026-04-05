@@ -14,6 +14,7 @@ import * as vscode from "vscode";
 import * as path from "path";
 import { ActivityMonitor } from "./activity-monitor";
 import { BatCaveEvent, AGENTS, ExtToWebviewMessage, WebviewToExtMessage, SessionSummary } from "./types";
+import { TeamClient } from "./team-client";
 
 const VIEW_ID = "batcave.mainView";
 const SESSION_HISTORY_KEY = "batcave.sessionHistory";
@@ -61,10 +62,35 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
   private monitor: ActivityMonitor;
   private eventQueue: BatCaveEvent[] = [];
   private globalState: vscode.Memento;
+  private teamClient: TeamClient | null = null;
 
   constructor(private readonly extensionUri: vscode.Uri, globalState: vscode.Memento) {
     this.globalState = globalState;
     this.monitor = new ActivityMonitor((event) => this.handleEvent(event));
+  }
+
+  /** Connect to team server if configured. */
+  connectTeam(): void {
+    const config = vscode.workspace.getConfiguration("batcave");
+    const serverUrl = config.get<string>("teamServer", "");
+    if (!serverUrl) return;
+
+    const role = config.get<string>("role", "member") as "master" | "member";
+    const name = config.get<string>("memberName", "") || require("os").userInfo().username || "anonymous";
+    const repo = vscode.workspace.workspaceFolders?.[0]?.name || "unknown";
+
+    this.teamClient = new TeamClient(serverUrl, name, role, repo, (msg) => {
+      // Forward all server messages to webview as "team-server" command.
+      if (this.view && this.webviewReady) {
+        this.view.webview.postMessage({ command: "team-server", payload: msg });
+      }
+    });
+    this.teamClient.connect();
+  }
+
+  disconnectTeam(): void {
+    this.teamClient?.disconnect();
+    this.teamClient = null;
   }
 
   resolveWebviewView(
@@ -112,14 +138,23 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
         this.sendWorkflows();
       } else if (msg.command === "requestTeamStats") {
         this.sendTeamStats();
+      } else if (msg.command === "team-command") {
+        // Forward team commands from webview to command server.
+        if (this.teamClient) {
+          this.teamClient.send(msg.payload as import("../shared/protocol").ClientMessage);
+        }
       }
     });
 
     // Start monitoring Claude Code activity.
     this.monitor.start();
 
+    // Connect to team server if configured.
+    this.connectTeam();
+
     webviewView.onDidDispose(() => {
       this.monitor.stop();
+      this.disconnectTeam();
       this.webviewReady = false;
     });
   }

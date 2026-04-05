@@ -63,6 +63,8 @@ export function App() {
         world.setWorkflows(msg.payload);
       } else if (msg.command === "team-stats") {
         world.setTeamStats(msg.payload.entries);
+      } else if (msg.command === "team-server") {
+        world.handleTeamServerMessage(msg.payload);
       }
     };
     window.addEventListener("message", handleMessage);
@@ -170,6 +172,10 @@ export function App() {
     });
     world.setRunWorkflowCallback((workflowId: string) => {
       vscode?.postMessage({ command: "runWorkflow", workflowId });
+    });
+
+    world.setTeamCommandCallback((msg: Record<string, unknown>) => {
+      vscode?.postMessage({ command: "team-command", payload: msg });
     });
 
     // Request workflows and team stats.

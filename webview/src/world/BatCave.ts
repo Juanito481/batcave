@@ -1013,6 +1013,121 @@ export class BatCaveWorld {
     };
   }
 
+  // ── Team Server (shared agent pool) ─────────────────
+
+  /** Connected team members from command server. */
+  private poolAgents: Map<string, { status: string; assignedTo: string | null; task: string | null; queue: number }> = new Map();
+  private teamMembers: Map<string, { name: string; role: string; status: string; repo: string }> = new Map();
+  private teamConnected = false;
+
+  /** Handle messages from the command server (via extension). */
+  handleTeamServerMessage(msg: Record<string, unknown>): void {
+    const type = msg.type as string;
+    switch (type) {
+      case "welcome":
+        this.teamConnected = true;
+        break;
+
+      case "state": {
+        // Full state sync — update all pool agents and members.
+        const agents = msg.agents as { agentId: string; status: string; assignedTo: string | null; currentTask: string | null; queue: { id: string }[] }[];
+        const members = msg.members as { id: string; name: string; role: string; status: string; currentRepo: string }[];
+        this.poolAgents.clear();
+        for (const a of agents) {
+          this.poolAgents.set(a.agentId, { status: a.status, assignedTo: a.assignedTo, task: a.currentTask, queue: a.queue.length });
+          // Visualize working agents in the cave.
+          if ((a.status === "working" || a.status === "assigned") && !this.agents.has(a.agentId)) {
+            this.spawnPoolAgent(a.agentId, a.assignedTo, a.currentTask);
+          } else if (a.status === "idle" && this.agents.has(a.agentId) && !this.isLocalAgent(a.agentId)) {
+            this.despawnPoolAgent(a.agentId);
+          }
+        }
+        this.teamMembers.clear();
+        for (const m of members) {
+          this.teamMembers.set(m.id, { name: m.name, role: m.role, status: m.status, repo: m.currentRepo });
+        }
+        break;
+      }
+
+      case "agent_updated": {
+        const a = msg.agent as { agentId: string; status: string; assignedTo: string | null; currentTask: string | null; queue: { id: string }[] };
+        this.poolAgents.set(a.agentId, { status: a.status, assignedTo: a.assignedTo, task: a.currentTask, queue: a.queue.length });
+        if ((a.status === "working" || a.status === "assigned") && !this.agents.has(a.agentId)) {
+          this.spawnPoolAgent(a.agentId, a.assignedTo, a.currentTask);
+        } else if (a.status === "idle" && this.agents.has(a.agentId) && !this.isLocalAgent(a.agentId)) {
+          this.despawnPoolAgent(a.agentId);
+        }
+        break;
+      }
+
+      case "member_joined":
+      case "member_updated": {
+        const m = msg.member as { id: string; name: string; role: string; status: string; currentRepo: string };
+        this.teamMembers.set(m.id, { name: m.name, role: m.role, status: m.status, repo: m.currentRepo });
+        break;
+      }
+
+      case "member_left": {
+        this.teamMembers.delete(msg.memberId as string);
+        break;
+      }
+    }
+  }
+
+  /** Spawn a pool agent as a character in the cave (from team server). */
+  private spawnPoolAgent(agentId: string, assignedTo: string | null, task: string | null): void {
+    const meta = this.config.agents?.[agentId];
+    const sprite = this.sprites.get(agentId);
+    if (!sprite) return;
+
+    const slot = this.nextAgentSlot++;
+    const { x: slotX, y: slotY } = this.getAgentSlotPosition(slot, agentId);
+
+    const char = new Character(
+      agentId, meta?.name || agentId, meta?.emoji || "?", sprite,
+      slotX, this.worldHeight + 30,
+    );
+    char.setIdleStyle(this.getIdleStyleForAgent(agentId));
+    char.enter(slotX, slotY);
+    if (task) char.setAction(); // show working animation
+    this.agents.set(agentId, char);
+    this._agentPulseStart = Date.now();
+    bus.emit("particle:spawn", { preset: "agent-enter", x: slotX, y: slotY });
+    bus.emit("sound:play", { id: "agent-chime" });
+  }
+
+  /** Remove a pool agent from the cave. */
+  private despawnPoolAgent(agentId: string): void {
+    const char = this.agents.get(agentId);
+    if (char) {
+      char.exit();
+      bus.emit("particle:spawn", { preset: "agent-exit", x: char.x, y: char.y });
+      setTimeout(() => {
+        if (this.agents.get(agentId) === char) {
+          this.agents.delete(agentId);
+          this.repackSlots();
+        }
+      }, 500);
+    }
+  }
+
+  /** Check if an agent was spawned by local activity (not pool). */
+  private isLocalAgent(agentId: string): boolean {
+    // If we have audit trail entries for this agent, it's local.
+    return this.auditTrail.some(e => e.agentId === agentId && e.action === "agent_enter");
+  }
+
+  isTeamConnected(): boolean { return this.teamConnected; }
+  getPoolAgents(): Map<string, { status: string; assignedTo: string | null; task: string | null; queue: number }> { return this.poolAgents; }
+  getTeamMembers(): Map<string, { name: string; role: string; status: string; repo: string }> { return this.teamMembers; }
+
+  /** Callback for team commands. */
+  private _onTeamCommand: ((msg: Record<string, unknown>) => void) | null = null;
+  setTeamCommandCallback(cb: (msg: Record<string, unknown>) => void): void { this._onTeamCommand = cb; }
+  sendTeamCommand(msg: Record<string, unknown>): void {
+    if (this._onTeamCommand) this._onTeamCommand(msg);
+  }
+
   // ── Workflow & Team API ─────────────────────────────
 
   setWorkflows(data: { workflows: Record<string, unknown>; schedules: Record<string, unknown> }): void {

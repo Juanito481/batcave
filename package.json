@@ -77,11 +77,31 @@
           "default": 0,
           "minimum": 0,
           "description": "Session cost budget in USD (0 = no limit). Shows alert when exceeded."
+        },
+        "batcave.role": {
+          "type": "string",
+          "enum": [
+            "master",
+            "member"
+          ],
+          "default": "member",
+          "description": "Team role: master can assign agents and manage schedules."
+        },
+        "batcave.teamServer": {
+          "type": "string",
+          "default": "",
+          "description": "BatCave Command Server URL (e.g. ws://localhost:7777). Leave empty for solo mode."
+        },
+        "batcave.memberName": {
+          "type": "string",
+          "default": "",
+          "description": "Your display name in the team cave. Defaults to OS username."
         }
       }
     }
   },
   "scripts": {
+    "server": "npx tsx server/index.ts",
     "vscode:prepublish": "npm run build",
     "build": "npm run build:ext && npm run build:webview",
     "build:ext": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify",
@@ -96,9 +116,13 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/vscode": "^1.100.0",
+    "@types/ws": "^8.18.1",
     "concurrently": "^9.1.0",
     "esbuild": "^0.25.0",
     "typescript": "^5.8.0",
     "vitest": "^4.1.2"
+  },
+  "dependencies": {
+    "ws": "^8.20.0"
   }
 }
