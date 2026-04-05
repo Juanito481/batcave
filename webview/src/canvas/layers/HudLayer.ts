@@ -293,7 +293,24 @@ function drawOverlayHud(rc: RenderContext): void {
     ctx.fillText(trendChar, rightX, paceY + zoom * 2);
   }
 
-  // ── 6. Cost alert — flashing warning when over budget ──
+  // ── 6. Activity heatmap — 40 slots along bottom of context bar ──
+  const heatSlots = world.getHeatmapSlots();
+  const maxHeat = Math.max(1, ...heatSlots);
+  const slotW = Math.max(1, Math.floor(width / heatSlots.length));
+  const heatY = ctxBarH + brd;
+  const heatH = Math.max(1, Math.floor(zoom * 0.8));
+  for (let i = 0; i < heatSlots.length; i++) {
+    if (heatSlots[i] === 0) continue;
+    const intensity = heatSlots[i] / maxHeat;
+    // Color gradient: dark blue → bright accent.
+    const r = Math.floor(30 + intensity * 0);
+    const g = Math.floor(30 + intensity * 127);
+    const b = Math.floor(60 + intensity * 156);
+    ctx.fillStyle = `rgb(${r},${g},${b})`;
+    ctx.fillRect(i * slotW, heatY, slotW - (slotW > 2 ? 1 : 0), heatH);
+  }
+
+  // ── 7. Cost alert — flashing warning when over budget ──
   if (world.isOverBudget()) {
     const alertY = chipY + dotSize + zoom * 8;
     const flash = Math.sin(now / 250) > 0;
@@ -399,6 +416,7 @@ function drawExpandedPanel(rc: RenderContext): void {
     agents: "AGENTS",
     "agent-detail": "AGENT DETAIL",
     history: "SESSION HISTORY",
+    audit: "AUDIT TRAIL",
   };
   ctx.fillText(titles[panel] || panel.toUpperCase(), px + pad, py + pad + fontSize);
 
@@ -502,6 +520,30 @@ function drawExpandedPanel(rc: RenderContext): void {
         const durStr = durSec >= 60 ? `${Math.floor(durSec / 60)}m${durSec % 60}s` : `${durSec}s`;
         ctx.fillText(durStr, px + panelW - pad, ay + lineH * 0.7);
         ctx.textAlign = "left";
+      }
+      // Efficiency ranking below the agent table.
+      const efficiency = world.getAgentEfficiency();
+      if (efficiency.length > 0) {
+        const effY = contentY + (allStats.length + 2) * lineH;
+        if (effY < py + panelH - pad) {
+          ctx.fillStyle = theme.accent;
+          ctx.fillRect(px + pad, effY - lineH * 0.5, panelW - pad * 2, Math.max(1, zoom));
+          ctx.font = `bold ${smallFont}px ${font}`;
+          ctx.fillStyle = "#555566";
+          ctx.fillText("EFFICIENCY RANKING", px + pad, effY + lineH * 0.3);
+          ctx.font = `${smallFont}px ${font}`;
+          for (let i = 0; i < Math.min(efficiency.length, 5); i++) {
+            const ey = effY + (i + 1) * lineH;
+            if (ey > py + panelH - pad) break;
+            const e = efficiency[i];
+            ctx.fillStyle = i === 0 ? "#FFD700" : i === 1 ? "#C0C0C0" : i === 2 ? "#CD7F32" : "#777790";
+            ctx.fillText(`#${e.rank} ${e.emoji} ${e.name}`, px + pad, ey + lineH * 0.7);
+            ctx.textAlign = "right";
+            ctx.fillStyle = "#888899";
+            ctx.fillText(`${e.toolsPerMin}/m  score:${e.score}`, px + panelW - pad, ey + lineH * 0.7);
+            ctx.textAlign = "left";
+          }
+        }
       }
     } else {
       // Fallback to history if no stats yet.
@@ -631,6 +673,45 @@ function drawExpandedPanel(rc: RenderContext): void {
     } else {
       ctx.fillStyle = "#444458";
       ctx.fillText("No session history yet", px + pad, contentY + lineH * 0.7);
+    }
+  } else if (panel === "audit") {
+    const trail = world.getAuditTrail();
+    ctx.font = `${smallFont}px ${font}`;
+
+    if (trail.length > 0) {
+      // Show most recent entries first.
+      const maxRows = Math.floor(contentH / lineH) - 1;
+      const start = Math.max(0, trail.length - maxRows);
+      const catColors: Record<string, string> = {
+        tool: "#1E7FD8", agent: "#2ECC71", state: "#F39C12", git: "#9B59B6", system: "#555566",
+      };
+
+      for (let i = trail.length - 1; i >= start; i--) {
+        const rowIdx = trail.length - 1 - i;
+        const ay = contentY + rowIdx * lineH;
+        if (ay > py + panelH - pad) break;
+        const e = trail[i];
+
+        // Timestamp.
+        const ago = Date.now() - e.timestamp;
+        const agoStr = ago < 60000 ? `${Math.floor(ago / 1000)}s` : `${Math.floor(ago / 60000)}m`;
+        ctx.fillStyle = "#444458";
+        ctx.fillText(agoStr, px + pad, ay + lineH * 0.7);
+
+        // Category dot.
+        ctx.fillStyle = catColors[e.category] || "#555566";
+        const dotX = px + pad + zoom * 8;
+        ctx.fillRect(dotX, ay + lineH * 0.3, zoom, zoom);
+
+        // Detail text (truncated).
+        ctx.fillStyle = "#888899";
+        const maxW = panelW - pad * 2 - zoom * 12;
+        const txt = e.detail.length > 50 ? e.detail.slice(0, 47) + "..." : e.detail;
+        ctx.fillText(txt, dotX + zoom * 2, ay + lineH * 0.7);
+      }
+    } else {
+      ctx.fillStyle = "#444458";
+      ctx.fillText("No events recorded yet", px + pad, contentY + lineH * 0.7);
     }
   }
 }

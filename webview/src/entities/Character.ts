@@ -9,6 +9,9 @@ import { SpriteSheet } from "../canvas/SpriteGenerator";
 
 export type CharacterState = "idle" | "walk" | "action" | "entering" | "exiting";
 
+/** Unique idle animation style per archetype. */
+export type IdleStyle = "default" | "sway" | "stomp" | "twitch" | "float" | "rigid";
+
 export class Character {
   readonly id: string;
   readonly name: string;
@@ -27,6 +30,12 @@ export class Character {
   private frameIndex = 0;
   private frameTimer = 0;
   private flipped = false;
+
+  // Unique idle animation.
+  private idleStyle: IdleStyle = "default";
+  private idlePhase = Math.random() * Math.PI * 2;
+  private idleTwitchTimer = 0;
+  private idleTwitchFlip = false;
 
   // Movement.
   private speed = 0.03; // pixels per ms
@@ -58,6 +67,11 @@ export class Character {
     this.y = y;
     this.targetX = x;
     this.targetY = y;
+  }
+
+  /** Set the idle animation style for this character's archetype. */
+  setIdleStyle(style: IdleStyle): void {
+    this.idleStyle = style;
   }
 
   /** Start the enter animation (fade in from bottom). */
@@ -185,6 +199,17 @@ export class Character {
     // Breathing animation (subtle Y offset when idle).
     this.breathTimer += deltaMs;
     this.breathPhase += deltaMs * 0.0015;
+    this.idlePhase += deltaMs * 0.002;
+
+    // Unique idle micro-animations.
+    if (this.state === "idle") {
+      this.idleTwitchTimer += deltaMs;
+      if (this.idleStyle === "twitch" && this.idleTwitchTimer > 800 + Math.random() * 1200) {
+        this.idleTwitchTimer = 0;
+        this.idleTwitchFlip = !this.idleTwitchFlip;
+        this.flipped = this.idleTwitchFlip;
+      }
+    }
   }
 
   draw(ctx: CanvasRenderingContext2D, zoom: number): void {
@@ -200,11 +225,35 @@ export class Character {
 
     const dw = sw * zoom;
     const dh = sh * zoom;
-    // Breathing: subtle bob when idle (1px at zoom 4+).
-    const breathOffset = this.state === "idle"
-      ? Math.sin(this.breathPhase) * Math.max(0.5, zoom * 0.3)
-      : 0;
-    const dx = this.x - dw / 2;
+    // Idle animation offsets per archetype.
+    let breathOffset = 0;
+    let swayOffset = 0;
+    if (this.state === "idle") {
+      switch (this.idleStyle) {
+        case "sway": // Caped/robed — gentle lateral sway like cape/robe flowing.
+          breathOffset = Math.sin(this.breathPhase) * Math.max(0.3, zoom * 0.2);
+          swayOffset = Math.sin(this.idlePhase * 0.7) * Math.max(0.5, zoom * 0.4);
+          break;
+        case "stomp": // Armored/heavy — periodic sharp bob (stomping foot).
+          breathOffset = Math.abs(Math.sin(this.idlePhase * 1.5)) < 0.15
+            ? -Math.max(1, zoom * 0.5) : 0;
+          break;
+        case "twitch": // Glitch — jittery micro-offsets.
+          breathOffset = (Math.sin(this.idlePhase * 3) > 0.8 ? -1 : 0) * zoom * 0.3;
+          swayOffset = (Math.cos(this.idlePhase * 4) > 0.9 ? 1 : 0) * zoom * 0.3;
+          break;
+        case "float": // Hooded — slow ethereal hovering.
+          breathOffset = Math.sin(this.breathPhase * 0.6) * Math.max(0.8, zoom * 0.5);
+          break;
+        case "rigid": // Naval/standard — minimal movement, military posture.
+          breathOffset = Math.sin(this.breathPhase) * Math.max(0.2, zoom * 0.1);
+          break;
+        default: // Standard breathing bob.
+          breathOffset = Math.sin(this.breathPhase) * Math.max(0.5, zoom * 0.3);
+          break;
+      }
+    }
+    const dx = this.x - dw / 2 + swayOffset;
     const dy = this.y - dh + breathOffset;
 
     ctx.save();

@@ -3,13 +3,13 @@
  * Receives events from the extension host, drives Character entities.
  */
 
-import { Character } from "../entities/Character";
+import { Character, IdleStyle } from "../entities/Character";
 import { Ambient } from "../entities/Ambient";
 import { generateAllSprites, SpriteSheet } from "../canvas/SpriteGenerator";
 import { Pathfinder, Rect } from "./Pathfinder";
 import { AgentMeta, UsageStats } from "../../../shared/types";
 import { bus } from "../systems/EventBus";
-import { AGENT_PERSONALITIES, AGENT_INTERACTIONS, CAVE_MILESTONES, AgentZone } from "../data/agent-personalities";
+import { AGENT_PERSONALITIES, AGENT_INTERACTIONS, CAVE_MILESTONES, AgentZone, BodyType } from "../data/agent-personalities";
 
 /** Per-agent session statistics for enterprise observability. */
 export interface AgentSessionStats {
@@ -23,6 +23,18 @@ export interface AgentSessionStats {
   toolBreakdown: { read: number; write: number; bash: number; web: number; other: number };
   filesTouched: string[];   // unique file paths
   invocations: number;      // how many times spawned this session
+}
+
+/** Audit trail entry — immutable record of an AI action. */
+export interface AuditEntry {
+  seq: number;              // monotonic sequence number
+  timestamp: number;
+  category: "tool" | "agent" | "state" | "git" | "system";
+  action: string;           // e.g. "tool_start", "agent_enter", "git_commit"
+  detail: string;           // human-readable detail
+  filePath?: string;        // file involved (if any)
+  agentId?: string;         // agent involved (if any)
+  toolName?: string;        // tool name (if tool event)
 }
 
 /** Repo-specific color themes for the cave environment. */
@@ -126,7 +138,13 @@ export class BatCaveWorld {
   // Todo list — for whiteboard.
   private todoList: { content: string; status: "pending" | "in_progress" | "completed" }[] = [];
 
-  // Event log (for timeline).
+  // Audit trail — structured immutable log of all AI actions.
+  private auditTrail: AuditEntry[] = [];
+  private static readonly MAX_AUDIT_ENTRIES = 200;
+
+  private auditSeq = 0;
+
+  // Legacy event log (for timeline compatibility).
   private eventLog: { type: string; label: string; timestamp: number }[] = [];
 
   // Session analytics — heatmap, tool breakdown, pace.
@@ -177,7 +195,7 @@ export class BatCaveWorld {
   private otherSessions: { label: string; lastActive: number; isCurrent: boolean }[] = [];
 
   // Interactive dashboard — expanded panel.
-  private expandedPanel: "files" | "stats" | "agents" | "agent-detail" | "history" | null = null;
+  private expandedPanel: "files" | "stats" | "agents" | "agent-detail" | "history" | "audit" | null = null;
   private selectedAgentId: string | null = null;
 
   // Session history (from extension globalState).
@@ -361,6 +379,7 @@ export class BatCaveWorld {
         this.alfredState = "thinking";
         this.alfred.setAction();
         this.resetIdleTimer();
+        this.audit("state", "session_thinking", "Claude is thinking");
         bus.emit("session:state", { state: "thinking" });
         bus.emit("particle:spawn", { preset: "think-pulse", x: this.alfred.x, y: this.alfred.y - 20 });
         break;
@@ -369,6 +388,7 @@ export class BatCaveWorld {
         this.alfredState = "writing";
         this.alfred.setAction();
         this.resetIdleTimer();
+        this.audit("state", "session_writing", "Claude is writing");
         bus.emit("session:state", { state: "writing" });
         bus.emit("particle:spawn", { preset: "write-glow", x: this.alfred.x, y: this.alfred.y - 10 });
         break;
@@ -376,6 +396,7 @@ export class BatCaveWorld {
       case "session_idle":
         this.alfredState = "idle";
         this.alfred.setIdle();
+        this.audit("state", "session_idle", "Claude is idle");
         bus.emit("session:state", { state: "idle" });
         break;
 
@@ -406,9 +427,11 @@ export class BatCaveWorld {
           slotX,
           this.worldHeight + 30 // Start off-screen below.
         );
+        char.setIdleStyle(this.getIdleStyleForAgent(agentId));
         char.enter(slotX, slotY);
         this.agents.set(agentId, char);
         this.logEvent("agent_enter", meta?.name || agentId);
+        this.audit("agent", "agent_enter", `${meta?.emoji || "?"} ${meta?.name || agentId} entered`, { agentId });
         this._agentPulseStart = Date.now();
         this.trackAgentHistory(agentId, meta?.name || agentId, meta?.emoji || "?", "enter");
         this.trackAgentEnter(agentId, meta?.name || agentId, meta?.emoji || "?");
@@ -427,6 +450,7 @@ export class BatCaveWorld {
         const char = this.agents.get(agentId);
         if (char) {
           this.logEvent("agent_exit", char.name);
+          this.audit("agent", "agent_exit", `${char.emoji} ${char.name} exited`, { agentId });
           this.trackAgentHistory(agentId, char.name, char.emoji, "exit");
           this.trackAgentExit(agentId);
           bus.emit("agent:exit", { agentId, x: char.x, y: char.y });
@@ -463,6 +487,13 @@ export class BatCaveWorld {
         this.currentTool = (event.toolName as string) || null;
         this.currentToolTimer = 3000; // Show icon for 3s.
         this.logEvent("tool", this.currentTool || "?");
+        {
+          const fp = (event as Record<string, unknown>).filePath as string | undefined;
+          this.audit("tool", "tool_start", `${this.currentTool}${fp ? ` → ${fp.split("/").pop()}` : ""}`, {
+            toolName: this.currentTool || undefined,
+            filePath: fp || undefined,
+          });
+        }
 
         // Track file touched for Batcomputer screen.
         const filePath = (event as Record<string, unknown>).filePath as string | undefined;
@@ -515,14 +546,18 @@ export class BatCaveWorld {
         this.ambient.setContextPressure(this.usageStats.contextFillPct);
         break;
 
-      case "git_commit":
-        this.gitLog.push({ type: "commit", message: (event as Record<string, unknown>).message as string, timestamp: Date.now() });
+      case "git_commit": {
+        const msg = (event as Record<string, unknown>).message as string;
+        this.gitLog.push({ type: "commit", message: msg, timestamp: Date.now() });
         if (this.gitLog.length > BatCaveWorld.MAX_GIT_LOG) this.gitLog.shift();
+        this.audit("git", "git_commit", `commit: ${msg.slice(0, 60)}`);
         break;
+      }
 
       case "git_push":
         this.gitLog.push({ type: "push", message: "pushed to remote", timestamp: Date.now() });
         if (this.gitLog.length > BatCaveWorld.MAX_GIT_LOG) this.gitLog.shift();
+        this.audit("git", "git_push", "pushed to remote");
         break;
 
       case "todo_update": {
@@ -722,12 +757,12 @@ export class BatCaveWorld {
   }
 
   /** Currently expanded panel (null = none). */
-  getExpandedPanel(): "files" | "stats" | "agents" | "agent-detail" | "history" | null {
+  getExpandedPanel(): "files" | "stats" | "agents" | "agent-detail" | "history" | "audit" | null {
     return this.expandedPanel;
   }
 
   /** Toggle or set expanded panel. */
-  setExpandedPanel(panel: "files" | "stats" | "agents" | "agent-detail" | "history" | null): void {
+  setExpandedPanel(panel: "files" | "stats" | "agents" | "agent-detail" | "history" | "audit" | null): void {
     this.expandedPanel = this.expandedPanel === panel ? null : panel;
     if (panel !== "agent-detail") this.selectedAgentId = null;
   }
@@ -748,10 +783,12 @@ export class BatCaveWorld {
       this.setExpandedPanel("files");
       return;
     }
-    // Center screen (stats → history cycle).
+    // Center screen (stats → history → audit cycle).
     if (cx >= bcX + zoom + screenW + zoom && cx <= bcX + zoom + screenW * 2 + zoom && cy >= bcY && cy <= bcY + bcH) {
       if (this.expandedPanel === "stats") {
         this.setExpandedPanel("history");
+      } else if (this.expandedPanel === "history") {
+        this.setExpandedPanel("audit");
       } else {
         this.setExpandedPanel("stats");
       }
@@ -898,6 +935,46 @@ export class BatCaveWorld {
       agentSummaries,
       model: stats.activeModel,
     };
+  }
+
+  /** Get efficiency metrics per agent — tools/min, files/tool ratio, ranked. */
+  getAgentEfficiency(): { agentId: string; name: string; emoji: string; toolsPerMin: number; filesPerTool: number; score: number; rank: number }[] {
+    const stats = this.getAllAgentStats();
+    const ranked = stats
+      .filter(s => s.totalActiveMs > 5000 || s.exitTime === null) // at least 5s active
+      .map(s => {
+        const activeMs = s.exitTime !== null ? s.totalActiveMs : s.totalActiveMs + Date.now() - s.enterTime;
+        const activeMins = Math.max(0.1, activeMs / 60000);
+        const toolsPerMin = Math.round((s.toolCount / activeMins) * 10) / 10;
+        const filesPerTool = s.toolCount > 0 ? Math.round((s.filesTouched.length / s.toolCount) * 100) / 100 : 0;
+        // Composite score: weighted blend of throughput and breadth.
+        const score = Math.round((toolsPerMin * 0.7 + filesPerTool * 30 * 0.3) * 10) / 10;
+        return { agentId: s.agentId, name: s.agentName, emoji: s.emoji, toolsPerMin, filesPerTool, score, rank: 0 };
+      })
+      .sort((a, b) => b.score - a.score);
+    ranked.forEach((r, i) => { r.rank = i + 1; });
+    return ranked;
+  }
+
+  /** Map agent body type to idle animation style. */
+  private getIdleStyleForAgent(agentId: string): IdleStyle {
+    const personality = AGENT_PERSONALITIES[agentId];
+    if (!personality) return "default";
+    const map: Partial<Record<BodyType, IdleStyle>> = {
+      caped: "sway",
+      robed: "sway",
+      armored: "stomp",
+      heavy: "stomp",
+      glitch: "twitch",
+      hooded: "float",
+      naval: "rigid",
+      standard: "rigid",
+      compact: "default",
+      coated: "default",
+      labcoat: "default",
+      geared: "default",
+    };
+    return map[personality.bodyType] || "default";
   }
 
   /** Track agent enter for per-agent stats. */
@@ -1295,10 +1372,34 @@ export class BatCaveWorld {
 
   private logEvent(type: string, label: string): void {
     this.eventLog.push({ type, label, timestamp: Date.now() });
-    // Keep max 64 entries.
     if (this.eventLog.length > 64) {
       this.eventLog.shift();
     }
+  }
+
+  /** Record an immutable audit trail entry. */
+  private audit(
+    category: AuditEntry["category"],
+    action: string,
+    detail: string,
+    extra?: { filePath?: string; agentId?: string; toolName?: string },
+  ): void {
+    this.auditTrail.push({
+      seq: this.auditSeq++,
+      timestamp: Date.now(),
+      category,
+      action,
+      detail,
+      ...extra,
+    });
+    if (this.auditTrail.length > BatCaveWorld.MAX_AUDIT_ENTRIES) {
+      this.auditTrail.shift();
+    }
+  }
+
+  /** Get the full audit trail. */
+  getAuditTrail(): readonly AuditEntry[] {
+    return this.auditTrail;
   }
 
   private recordToolForAnalytics(toolName: string): void {
