@@ -13,19 +13,74 @@
  */
 
 import { WebSocketServer, WebSocket } from "ws";
+import * as fs from "fs";
+import * as path from "path";
 import {
   PoolAgent, TeamMember, ClientMessage, ServerMessage,
   PoolAgentStatus, QueuedTask, MemberRole,
   DEFAULT_PORT, HEARTBEAT_INTERVAL_MS, POOL_AGENT_IDS,
 } from "../shared/protocol";
 
+// ── Persistence ─────────────────────────────────────────
+
+const STATE_FILE = process.env.BATCAVE_STATE_FILE || path.join(__dirname, "..", "batcave-server-state.json");
+const SAVE_DEBOUNCE_MS = 2000;
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+interface PersistedState {
+  agents: PoolAgent[];
+  version: number;
+}
+
+function saveState(): void {
+  if (saveTimer) return; // debounce
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    const state: PersistedState = {
+      agents: Array.from(agents.values()),
+      version: 1,
+    };
+    try {
+      fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("[BatCave] Failed to save state:", (e as Error).message);
+    }
+  }, SAVE_DEBOUNCE_MS);
+}
+
+function loadState(): PersistedState | null {
+  try {
+    if (!fs.existsSync(STATE_FILE)) return null;
+    const raw = fs.readFileSync(STATE_FILE, "utf-8");
+    return JSON.parse(raw) as PersistedState;
+  } catch {
+    return null;
+  }
+}
+
 // ── State ───────────────────────────────────────────────
 
 const agents = new Map<string, PoolAgent>();
 const members = new Map<string, { member: TeamMember; ws: WebSocket }>();
 
-// Initialize agent pool.
+// Initialize agent pool — restore from disk or create fresh.
 function initPool(): void {
+  const saved = loadState();
+  if (saved && saved.agents.length > 0) {
+    for (const a of saved.agents) {
+      // Reset transient fields — working agents go idle on restart.
+      if (a.status === "working" || a.status === "assigned") {
+        a.status = a.queue.length > 0 ? "assigned" : (a.schedule?.enabled ? "scheduled" : "idle");
+        a.assignedTo = null;
+        a.currentTask = null;
+        a.taskStartedAt = null;
+      }
+      agents.set(a.agentId, a);
+    }
+    log(`Restored ${agents.size} agents from ${STATE_FILE}`);
+    return;
+  }
+
   const agentMeta: Record<string, { name: string; emoji: string; role: string }> = {
     king:           { name: "Il Sovrano",       emoji: "♔", role: "Vision & coherence" },
     queen:          { name: "La Stratega",      emoji: "👑", role: "Business analysis" },
@@ -69,6 +124,10 @@ function broadcast(msg: ServerMessage, except?: string): void {
     if (ws.readyState === WebSocket.OPEN) {
       ws.send(data);
     }
+  }
+  // Persist state on agent changes.
+  if (msg.type === "agent_updated" || msg.type === "task_assigned" || msg.type === "task_completed") {
+    saveState();
   }
 }
 

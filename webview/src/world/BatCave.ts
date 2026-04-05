@@ -873,6 +873,14 @@ export class BatCaveWorld {
         this.requestLaunchAgent(this.selectedAgentId);
         return;
       }
+      // ASSIGN button (left of LAUNCH).
+      if (this.teamConnected) {
+        const assignBtnX = launchBtnX - launchBtnW - zoom * 2;
+        if (cx >= assignBtnX && cx <= assignBtnX + launchBtnW && cy >= launchBtnY && cy <= launchBtnY + launchBtnH) {
+          this.requestAssignAgent(this.selectedAgentId);
+          return;
+        }
+      }
     }
 
     // Click on an agent character → agent detail panel.
@@ -1180,6 +1188,12 @@ export class BatCaveWorld {
   setLaunchAgentCallback(cb: (agentId: string) => void): void { this._onLaunchAgent = cb; }
   requestLaunchAgent(agentId: string): void {
     if (this._onLaunchAgent) this._onLaunchAgent(agentId);
+  }
+
+  private _onAssignAgent: ((agentId: string) => void) | null = null;
+  setAssignAgentCallback(cb: (agentId: string) => void): void { this._onAssignAgent = cb; }
+  requestAssignAgent(agentId: string): void {
+    if (this._onAssignAgent) this._onAssignAgent(agentId);
   }
 
   /** Enter replay mode — world stops processing live events. */

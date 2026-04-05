@@ -173,6 +173,9 @@ export function App() {
     world.setRunWorkflowCallback((workflowId: string) => {
       vscode?.postMessage({ command: "runWorkflow", workflowId });
     });
+    world.setAssignAgentCallback((agentId: string) => {
+      vscode?.postMessage({ command: "assignAgentPrompt", agentId });
+    });
 
     world.setTeamCommandCallback((msg: Record<string, unknown>) => {
       vscode?.postMessage({ command: "team-command", payload: msg });

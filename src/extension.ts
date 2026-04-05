@@ -140,10 +140,11 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
       } else if (msg.command === "requestTeamStats") {
         this.sendTeamStats();
       } else if (msg.command === "team-command") {
-        // Forward team commands from webview to command server.
         if (this.teamClient) {
           this.teamClient.send(msg.payload as import("../shared/protocol").ClientMessage);
         }
+      } else if (msg.command === "assignAgentPrompt") {
+        this.promptAssignAgent(msg.agentId as string);
       }
     });
 
@@ -286,6 +287,57 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
     terminal.sendText(`claude --system-prompt "${prompt.replace(/"/g, '\\"')}"`, true);
 
     vscode.window.showInformationMessage(`Bat Cave: Launched ${meta.emoji} ${meta.name} (${meta.role})`);
+  }
+
+  /** Prompt master to assign a task to an agent via input boxes. */
+  private async promptAssignAgent(agentId: string): Promise<void> {
+    if (!this.teamClient?.isConnected()) {
+      vscode.window.showWarningMessage("Bat Cave: Not connected to team server.");
+      return;
+    }
+    const meta = AGENTS[agentId];
+    const name = meta?.name || agentId;
+
+    const task = await vscode.window.showInputBox({
+      prompt: `Task for ${meta?.emoji || ""} ${name}`,
+      placeHolder: "e.g. Review PR #42 for security issues",
+    });
+    if (!task) return;
+
+    // Pick a team member to assign to (or self).
+    const members = Array.from(this.getConnectedMemberNames());
+    const assignTo = await vscode.window.showQuickPick(
+      ["(auto — next available)", ...members],
+      { placeHolder: `Assign ${name} to...` },
+    );
+    if (!assignTo) return;
+
+    const priority = await vscode.window.showQuickPick(
+      ["normal", "high", "urgent", "low"],
+      { placeHolder: "Priority" },
+    ) as "normal" | "high" | "urgent" | "low" | undefined;
+    if (!priority) return;
+
+    const memberName = assignTo.startsWith("(auto") ? "" : assignTo;
+    if (memberName) {
+      this.teamClient.assignAgent(agentId, task, memberName, priority);
+    } else {
+      this.teamClient.queueTask(agentId, task, priority);
+    }
+
+    vscode.window.showInformationMessage(
+      `${meta?.emoji || ""} ${name}: "${task}" — ${memberName || "queued"}`,
+    );
+  }
+
+  /** Get names of currently connected team members (from last state broadcast). */
+  private getConnectedMemberNames(): string[] {
+    // We store member names when we receive state from server.
+    // For now, return from the webview's world state via a simple approach.
+    // The TeamClient doesn't track members — we ask the webview.
+    // Simplification: return config memberName as fallback.
+    const config = vscode.workspace.getConfiguration("batcave");
+    return [config.get<string>("memberName", "") || "local"];
   }
 
   private buildAgentPrompt(agentId: string, meta: { name: string; emoji: string; role: string }): string {

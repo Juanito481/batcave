@@ -1,0 +1,21 @@
+{
+  "apps": {
+    "http": {
+      "servers": {
+        "batcave": {
+          "listen": [":443"],
+          "routes": [
+            {
+              "handle": [
+                {
+                  "handler": "reverse_proxy",
+                  "upstreams": [{ "dial": "batcave-server:7777" }]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}
