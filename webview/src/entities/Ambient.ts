@@ -270,8 +270,8 @@ export class Ambient {
   }
 
   private drawBats(ctx: CanvasRenderingContext2D, zoom: number): void {
-    const s = Math.max(1, Math.floor(zoom * 0.5)); // ~4px at zoom 8
-    ctx.fillStyle = "#1a1a2e";
+    const s = Math.max(1, Math.floor(zoom * 0.5));
+    ctx.fillStyle = "#2a2a40"; // brighter than bg for clear silhouette
 
     for (const bat of this.bats) {
       const bx = Math.round(bat.x);
@@ -280,15 +280,21 @@ export class Ambient {
       // Body (2x1 center).
       ctx.fillRect(bx, by, s * 2, s);
 
-      // Wings: frame 0 = flat, frame 1 = up.
+      // Wings: frame 0 = spread wide, frame 1 = up high (more dramatic).
       if (bat.wingFrame === 0) {
-        // Flat wings.
-        ctx.fillRect(bx - s * 2, by, s * 2, s);
-        ctx.fillRect(bx + s * 2, by, s * 2, s);
+        // Spread wings — wide and slightly down.
+        ctx.fillRect(bx - s * 3, by, s * 3, s);
+        ctx.fillRect(bx + s * 2, by, s * 3, s);
+        // Wingtips droop.
+        ctx.fillRect(bx - s * 3, by + s, s, s);
+        ctx.fillRect(bx + s * 4, by + s, s, s);
       } else {
-        // Wings up.
-        ctx.fillRect(bx - s * 2, by - s, s * 2, s);
-        ctx.fillRect(bx + s * 2, by - s, s * 2, s);
+        // Wings up — higher and narrower.
+        ctx.fillRect(bx - s * 2, by - s * 2, s * 2, s);
+        ctx.fillRect(bx + s * 2, by - s * 2, s * 2, s);
+        // Wing mids.
+        ctx.fillRect(bx - s * 2, by - s, s, s);
+        ctx.fillRect(bx + s * 3, by - s, s, s);
       }
     }
   }
@@ -475,10 +481,11 @@ export class Ambient {
       const sx = Math.round(spider.x);
       const sy = Math.round(spider.y);
 
-      // Silk thread from ceiling to spider.
+      // Silk thread from ceiling to spider — proportional thickness.
       if (spider.y > spider.baseY + 2) {
         ctx.fillStyle = "#1a1a30";
-        ctx.fillRect(sx + s, Math.round(spider.baseY), 1, sy - Math.round(spider.baseY));
+        const silkW = Math.max(1, Math.floor(zoom / 2));
+        ctx.fillRect(sx + s, Math.round(spider.baseY), silkW, sy - Math.round(spider.baseY));
       }
 
       // Body (dark, 3x2).
@@ -573,10 +580,10 @@ export class Ambient {
       ctx.fillStyle = "#3a2830";
       ctx.fillRect(hx, ry - s, s, s);
 
-      // Tail.
-      ctx.fillStyle = "#1a1018";
+      // Tail — proportional thickness.
+      ctx.fillStyle = "#241a24";
       const tx = dir > 0 ? rx - s * 2 : rx + s * 4 + s;
-      ctx.fillRect(tx, ry + s, s * 2, 1);
+      ctx.fillRect(tx, ry + s, s * 2, Math.max(1, Math.floor(zoom / 2)));
 
       // Legs (alternating).
       ctx.fillStyle = "#201820";

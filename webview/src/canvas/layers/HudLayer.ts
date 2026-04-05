@@ -341,10 +341,10 @@ function drawOverlayHud(rc: RenderContext): void {
   for (let i = 0; i < heatSlots.length; i++) {
     if (heatSlots[i] === 0) continue;
     const intensity = heatSlots[i] / maxHeat;
-    // Color gradient: dark blue → bright accent.
-    const r = Math.floor(30 + intensity * 0);
-    const g = Math.floor(30 + intensity * 127);
-    const b = Math.floor(60 + intensity * 156);
+    // Color gradient: dark indigo → bright cyan.
+    const r = Math.floor(20 + intensity * 10);
+    const g = Math.floor(30 + intensity * 150);
+    const b = Math.floor(60 + intensity * 180);
     ctx.fillStyle = `rgb(${r},${g},${b})`;
     ctx.fillRect(i * slotW, heatY, slotW - (slotW > 2 ? 1 : 0), heatH);
   }
@@ -352,18 +352,19 @@ function drawOverlayHud(rc: RenderContext): void {
   // ── 7. Cost alert — flashing warning when over budget ──
   if (world.isOverBudget()) {
     const alertY = chipY + dotSize + zoom * 8;
-    const flash = Math.sin(now / 250) > 0;
-    if (flash) {
-      const cost = world.getSessionCost();
-      const budget = world.getCostBudget();
-      ctx.fillStyle = "#E74C3C";
-      ctx.font = `bold ${smallFont}px ${font}`;
-      ctx.textAlign = "center";
-      ctx.fillText(
-        `BUDGET EXCEEDED  $${cost.costUsd.toFixed(2)} / $${budget.toFixed(2)}`,
-        width / 2, alertY,
-      );
-    }
+    const alertAlpha = Math.sin(now / 400) * 0.4 + 0.6; // fade 0.2–1.0, never fully off
+    const cost = world.getSessionCost();
+    const budget = world.getCostBudget();
+    ctx.save();
+    ctx.globalAlpha = alertAlpha;
+    ctx.fillStyle = "#E74C3C";
+    ctx.font = `bold ${smallFont}px ${font}`;
+    ctx.textAlign = "center";
+    ctx.fillText(
+      `BUDGET EXCEEDED  $${cost.costUsd.toFixed(2)} / $${budget.toFixed(2)}`,
+      width / 2, alertY,
+    );
+    ctx.restore();
   }
 
   ctx.textAlign = "left";
@@ -797,10 +798,12 @@ function drawReplayTimeline(rc: RenderContext): void {
   ctx.fillStyle = "#1E7FD8";
   ctx.fillRect(trackX, trackY, trackW * snap.progress, trackH);
 
-  // Scrubber head.
+  // Scrubber head — theme accent with highlight edge.
   const scrubX = trackX + trackW * snap.progress;
-  ctx.fillStyle = "#FFFFFF";
+  ctx.fillStyle = "#1E7FD8";
   ctx.fillRect(scrubX - zoom, trackY - zoom, zoom * 2, trackH + zoom * 2);
+  ctx.fillStyle = "#4AA0F0";
+  ctx.fillRect(scrubX - zoom, trackY - zoom, zoom * 2, Math.max(1, zoom / 2));
 
   // Play/pause indicator (left).
   ctx.fillStyle = snap.state === "playing" ? "#2ECC71" : "#F39C12";
@@ -812,10 +815,11 @@ function drawReplayTimeline(rc: RenderContext): void {
   // "REPLAY" label.
   ctx.fillStyle = "#E74C3C";
   ctx.font = `bold ${smallFont}px ${font}`;
-  const flash = Math.sin(now / 400) > 0;
-  if (flash || snap.state !== "playing") {
-    ctx.fillText("REPLAY", pad + zoom * 6, y + barH / 2 + smallFont * 0.35);
-  }
+  const replayAlpha = snap.state === "playing" ? Math.sin(now / 400) * 0.4 + 0.6 : 1;
+  ctx.save();
+  ctx.globalAlpha = replayAlpha;
+  ctx.fillText("REPLAY", pad + zoom * 6, y + barH / 2 + smallFont * 0.35);
+  ctx.restore();
 
   // Time display (right of progress bar).
   const posSec = Math.floor(snap.positionMs / 1000);

@@ -231,22 +231,22 @@ export class Character {
     if (this.state === "idle") {
       switch (this.idleStyle) {
         case "sway": // Caped/robed — gentle lateral sway like cape/robe flowing.
+          breathOffset = Math.sin(this.breathPhase) * Math.max(0.5, zoom * 0.3);
+          swayOffset = Math.sin(this.breathPhase * 0.7) * Math.max(0.5, zoom * 0.5);
+          break;
+        case "stomp": // Armored/heavy — slow deliberate stomp (1-2 per cycle).
+          breathOffset = Math.abs(Math.sin(this.idlePhase * 0.5)) < 0.12
+            ? -Math.max(1, zoom * 0.6) : 0;
+          break;
+        case "twitch": // Glitch — jittery micro-offsets + random flips.
+          breathOffset = (Math.sin(this.idlePhase * 3) > 0.85 ? -1 : 0) * zoom * 0.4;
+          swayOffset = (Math.cos(this.idlePhase * 4) > 0.92 ? 1 : 0) * zoom * 0.4;
+          break;
+        case "float": // Hooded — slow ethereal hovering, clearly visible.
+          breathOffset = Math.sin(this.breathPhase * 0.6) * Math.max(1, zoom * 0.8);
+          break;
+        case "rigid": // Naval/standard — subtle but alive military posture.
           breathOffset = Math.sin(this.breathPhase) * Math.max(0.3, zoom * 0.2);
-          swayOffset = Math.sin(this.idlePhase * 0.7) * Math.max(0.5, zoom * 0.4);
-          break;
-        case "stomp": // Armored/heavy — periodic sharp bob (stomping foot).
-          breathOffset = Math.abs(Math.sin(this.idlePhase * 1.5)) < 0.15
-            ? -Math.max(1, zoom * 0.5) : 0;
-          break;
-        case "twitch": // Glitch — jittery micro-offsets.
-          breathOffset = (Math.sin(this.idlePhase * 3) > 0.8 ? -1 : 0) * zoom * 0.3;
-          swayOffset = (Math.cos(this.idlePhase * 4) > 0.9 ? 1 : 0) * zoom * 0.3;
-          break;
-        case "float": // Hooded — slow ethereal hovering.
-          breathOffset = Math.sin(this.breathPhase * 0.6) * Math.max(0.8, zoom * 0.5);
-          break;
-        case "rigid": // Naval/standard — minimal movement, military posture.
-          breathOffset = Math.sin(this.breathPhase) * Math.max(0.2, zoom * 0.1);
           break;
         default: // Standard breathing bob.
           breathOffset = Math.sin(this.breathPhase) * Math.max(0.5, zoom * 0.3);
