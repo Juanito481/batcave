@@ -147,7 +147,40 @@ function getFullState(): ServerMessage {
 
 // ── Message Handling ────────────────────────────────────
 
+// ── Input Validation ────────────────────────────────────
+
+const MAX_STRING_LEN = 500;
+const MAX_QUEUE_DEPTH = 50;
+const MAX_MSG_SIZE = 4096; // 4KB
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX = 120; // messages per minute
+
+const rateLimits = new Map<string, { count: number; resetAt: number }>();
+
+function isRateLimited(clientId: string): boolean {
+  const now = Date.now();
+  let entry = rateLimits.get(clientId);
+  if (!entry || now > entry.resetAt) {
+    entry = { count: 0, resetAt: now + RATE_LIMIT_WINDOW_MS };
+    rateLimits.set(clientId, entry);
+  }
+  entry.count++;
+  return entry.count > RATE_LIMIT_MAX;
+}
+
+function sanitize(s: unknown): string {
+  if (typeof s !== "string") return "";
+  // Strip control characters and limit length.
+  return s.replace(/[\x00-\x1f\x7f]/g, "").slice(0, MAX_STRING_LEN);
+}
+
 function handleMessage(clientId: string, ws: WebSocket, msg: ClientMessage): void {
+  // Rate limiting.
+  if (isRateLimited(clientId)) {
+    send(ws, { type: "error", message: "Rate limited — slow down" });
+    return;
+  }
+
   const client = members.get(clientId);
 
   switch (msg.type) {
@@ -156,13 +189,13 @@ function handleMessage(clientId: string, ws: WebSocket, msg: ClientMessage): voi
       if (TEAM_TOKEN && msg.token !== TEAM_TOKEN) {
         send(ws, { type: "error", message: "Invalid team token" });
         ws.close();
-        log(`Rejected ${msg.name}: invalid token`);
+        log(`Rejected ${sanitize(msg.name)}: invalid token`);
         return;
       }
       const member: TeamMember = {
         id: clientId,
-        name: msg.name,
-        role: msg.role,
+        name: sanitize(msg.name) || "anonymous",
+        role: msg.role === "master" ? "master" : "member",
         status: "online",
         connectedAt: Date.now(),
         lastActiveAt: Date.now(),
@@ -196,8 +229,8 @@ function handleMessage(clientId: string, ws: WebSocket, msg: ClientMessage): voi
       const agent = agents.get(msg.agentId);
       if (!agent) return;
       agent.status = "assigned";
-      agent.assignedTo = msg.assignTo;
-      agent.currentTask = msg.task;
+      agent.assignedTo = sanitize(msg.assignTo);
+      agent.currentTask = sanitize(msg.task);
       agent.taskStartedAt = Date.now();
       broadcast({ type: "agent_updated", agent });
       broadcast({ type: "task_assigned", agentId: msg.agentId, task: msg.task, assignedTo: msg.assignTo });
@@ -233,9 +266,13 @@ function handleMessage(clientId: string, ws: WebSocket, msg: ClientMessage): voi
     case "queue_task": {
       const agent = agents.get(msg.agentId);
       if (!agent || !client) return;
+      if (agent.queue.length >= MAX_QUEUE_DEPTH) {
+        send(ws, { type: "error", message: `Queue full (max ${MAX_QUEUE_DEPTH})` });
+        return;
+      }
       const task: QueuedTask = {
         id: `task_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-        task: msg.task,
+        task: sanitize(msg.task),
         requestedBy: client.member.name,
         requestedAt: Date.now(),
         priority: msg.priority,
@@ -357,10 +394,15 @@ function startServer(port: number = DEFAULT_PORT): void {
     log(`Client connected: ${clientId}`);
 
     ws.on("message", (raw) => {
+      const data = raw.toString();
+      if (data.length > MAX_MSG_SIZE) {
+        send(ws, { type: "error", message: "Message too large" });
+        return;
+      }
       try {
-        const msg = JSON.parse(raw.toString()) as ClientMessage;
+        const msg = JSON.parse(data) as ClientMessage;
         handleMessage(clientId, ws, msg);
-      } catch (e) {
+      } catch {
         send(ws, { type: "error", message: "Invalid message format" });
       }
     });

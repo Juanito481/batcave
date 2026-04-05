@@ -16,6 +16,12 @@ import { ActivityMonitor } from "./activity-monitor";
 import { BatCaveEvent, AGENTS, ExtToWebviewMessage, WebviewToExtMessage, SessionSummary } from "./types";
 import { TeamClient } from "./team-client";
 
+/** Escape a string for safe use inside single-quoted shell arguments. */
+function escapeShellArg(s: string): string {
+  // Replace single quotes with '\'' (end quote, escaped quote, start quote).
+  return s.replace(/'/g, "'\\''");
+}
+
 const VIEW_ID = "batcave.mainView";
 const SESSION_HISTORY_KEY = "batcave.sessionHistory";
 const TEAM_STATS_KEY = "batcave.teamStats";
@@ -111,41 +117,35 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.html = this.getHtml(webviewView.webview);
 
-    // Listen for messages from webview.
-    webviewView.webview.onDidReceiveMessage((msg: Record<string, unknown>) => {
-      if (msg.command === "ready") {
+    // Message router — clean dispatch instead of 13 else-if blocks.
+    const router = new Map<string, (msg: Record<string, unknown>) => void>([
+      ["ready", () => {
         this.webviewReady = true;
-        // Send config + any queued events.
         this.sendConfig();
         this.sendSessionHistory();
         this.sendCostBudget();
-        for (const event of this.eventQueue) {
-          this.postEvent(event);
-        }
+        for (const event of this.eventQueue) { this.postEvent(event); }
         this.eventQueue = [];
-      } else if (msg.command === "toggleSound") {
-        this.toggleSound();
-      } else if (msg.command === "saveSession") {
-        this.saveSession(msg.payload as SessionSummary);
-      } else if (msg.command === "exportSession") {
-        this.exportSessionData();
-      } else if (msg.command === "launchAgent") {
-        this.launchAgent(msg.agentId as string);
-      } else if (msg.command === "runWorkflow") {
-        this.runWorkflow(msg.workflowId as string);
-      } else if (msg.command === "pushTeamStats") {
-        this.pushTeamStats(msg.payload as TeamStatsEntry);
-      } else if (msg.command === "requestWorkflows") {
-        this.sendWorkflows();
-      } else if (msg.command === "requestTeamStats") {
-        this.sendTeamStats();
-      } else if (msg.command === "team-command") {
+      }],
+      ["toggleSound", () => this.toggleSound()],
+      ["saveSession", (m) => this.saveSession(m.payload as SessionSummary)],
+      ["exportSession", () => this.exportSessionData()],
+      ["launchAgent", (m) => this.launchAgent(m.agentId as string)],
+      ["runWorkflow", (m) => this.runWorkflow(m.workflowId as string)],
+      ["pushTeamStats", (m) => this.pushTeamStats(m.payload as TeamStatsEntry)],
+      ["requestWorkflows", () => this.sendWorkflows()],
+      ["requestTeamStats", () => this.sendTeamStats()],
+      ["team-command", (m) => {
         if (this.teamClient) {
-          this.teamClient.send(msg.payload as import("../shared/protocol").ClientMessage);
+          this.teamClient.send(m.payload as import("../shared/protocol").ClientMessage);
         }
-      } else if (msg.command === "assignAgentPrompt") {
-        this.promptAssignAgent(msg.agentId as string);
-      }
+      }],
+      ["assignAgentPrompt", (m) => this.promptAssignAgent(m.agentId as string)],
+    ]);
+
+    webviewView.webview.onDidReceiveMessage((msg: Record<string, unknown>) => {
+      const handler = router.get(msg.command as string);
+      if (handler) handler(msg);
     });
 
     // Start monitoring Claude Code activity.
@@ -284,7 +284,7 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
     });
     terminal.show();
     // Use claude with --print for inline mode, or just start an interactive session with context.
-    terminal.sendText(`claude --system-prompt "${prompt.replace(/"/g, '\\"')}"`, true);
+    terminal.sendText(`claude --system-prompt '${escapeShellArg(prompt)}'`, true);
 
     vscode.window.showInformationMessage(`Bat Cave: Launched ${meta.emoji} ${meta.name} (${meta.role})`);
   }
@@ -349,21 +349,23 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
     return `You are ${meta.name} (${meta.emoji}), a specialized AI agent. Your role: ${meta.role}. Stay focused on your specialty. Be concise and expert.`;
   }
 
-  private getCustomAgentPrompt(agentId: string): string | null {
-    // Check for .batcave/agents.json in workspace root.
+  /** Load and parse a JSON config file from .batcave/ directory. */
+  private loadBatcaveConfig(filename: string): Record<string, unknown> | null {
     const folders = vscode.workspace.workspaceFolders;
     if (!folders || folders.length === 0) return null;
-
-    const configPath = vscode.Uri.joinPath(folders[0].uri, ".batcave", "agents.json");
+    const configPath = vscode.Uri.joinPath(folders[0].uri, ".batcave", filename);
     try {
       const fs = require("fs");
-      const content = fs.readFileSync(configPath.fsPath, "utf-8");
-      const config = JSON.parse(content);
-      const agentConfig = config.agents?.[agentId];
-      if (agentConfig?.systemPrompt) return agentConfig.systemPrompt;
+      return JSON.parse(fs.readFileSync(configPath.fsPath, "utf-8"));
     } catch {
-      // No custom config or invalid — fall through to defaults.
+      return null;
     }
+  }
+
+  private getCustomAgentPrompt(agentId: string): string | null {
+    const config = this.loadBatcaveConfig("agents.json");
+    const agentConfig = (config?.agents as Record<string, Record<string, unknown>> | undefined)?.[agentId];
+    if (agentConfig?.systemPrompt) return agentConfig.systemPrompt as string;
     return null;
   }
 
@@ -399,8 +401,8 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
       });
       terminal.show();
 
-      const fullPrompt = `${prompt} Your specific task: ${step.task}`;
-      terminal.sendText(`claude --system-prompt "${fullPrompt.replace(/"/g, '\\"')}"`, true);
+      const fullPrompt = `${prompt} Your specific task: ${escapeShellArg(step.task)}`;
+      terminal.sendText(`claude --system-prompt '${escapeShellArg(fullPrompt)}'`, true);
 
       // Wait a moment between steps so they don't collide.
       if (i < workflow.steps.length - 1) {
@@ -414,31 +416,13 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
   }
 
   private loadWorkflows(): Record<string, WorkflowDef> {
-    const folders = vscode.workspace.workspaceFolders;
-    if (!folders || folders.length === 0) return {};
-    const configPath = vscode.Uri.joinPath(folders[0].uri, ".batcave", "workflows.json");
-    try {
-      const fs = require("fs");
-      const content = fs.readFileSync(configPath.fsPath, "utf-8");
-      const config = JSON.parse(content);
-      return config.workflows || {};
-    } catch {
-      return {};
-    }
+    const config = this.loadBatcaveConfig("workflows.json");
+    return (config?.workflows as Record<string, WorkflowDef>) || {};
   }
 
   private loadSchedules(): Record<string, ScheduleDef> {
-    const folders = vscode.workspace.workspaceFolders;
-    if (!folders || folders.length === 0) return {};
-    const configPath = vscode.Uri.joinPath(folders[0].uri, ".batcave", "workflows.json");
-    try {
-      const fs = require("fs");
-      const content = fs.readFileSync(configPath.fsPath, "utf-8");
-      const config = JSON.parse(content);
-      return config.schedules || {};
-    } catch {
-      return {};
-    }
+    const config = this.loadBatcaveConfig("workflows.json");
+    return (config?.schedules as Record<string, ScheduleDef>) || {};
   }
 
   private sendWorkflows(): void {
