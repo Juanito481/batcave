@@ -716,6 +716,94 @@ function drawExpandedPanel(rc: RenderContext): void {
   }
 }
 
+// ── Replay timeline bar ──────────────────────────────
+
+function drawReplayTimeline(rc: RenderContext): void {
+  const { ctx, replay, width, height, now } = rc;
+  const zoom = rc.zoom;
+  if (!replay.isActive()) return;
+
+  const snap = replay.getSnapshot();
+  const font = `"DM Mono", monospace`;
+  const fontSize = Math.max(6, zoom * 3);
+  const smallFont = Math.max(5, zoom * 2.5);
+  const barH = Math.max(12, zoom * 5);
+  const pad = zoom * 2;
+  const y = height - barH - pad;
+
+  // Dark backdrop.
+  ctx.save();
+  ctx.fillStyle = "#06060c";
+  ctx.globalAlpha = 0.9;
+  ctx.fillRect(0, y - pad, width, barH + pad * 2);
+  ctx.restore();
+
+  // Progress bar track.
+  const trackX = pad * 4 + zoom * 20;
+  const trackW = width - trackX - pad * 4 - zoom * 25;
+  const trackY = y + barH / 2 - zoom;
+  const trackH = zoom * 2;
+
+  ctx.fillStyle = "#1a1a2e";
+  ctx.fillRect(trackX, trackY, trackW, trackH);
+
+  // Progress fill.
+  ctx.fillStyle = "#1E7FD8";
+  ctx.fillRect(trackX, trackY, trackW * snap.progress, trackH);
+
+  // Scrubber head.
+  const scrubX = trackX + trackW * snap.progress;
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fillRect(scrubX - zoom, trackY - zoom, zoom * 2, trackH + zoom * 2);
+
+  // Play/pause indicator (left).
+  ctx.fillStyle = snap.state === "playing" ? "#2ECC71" : "#F39C12";
+  ctx.font = `bold ${fontSize}px ${font}`;
+  ctx.textAlign = "left";
+  const stateIcon = snap.state === "playing" ? "▶" : snap.state === "paused" ? "⏸" : "⏹";
+  ctx.fillText(stateIcon, pad, y + barH / 2 + fontSize * 0.35);
+
+  // "REPLAY" label.
+  ctx.fillStyle = "#E74C3C";
+  ctx.font = `bold ${smallFont}px ${font}`;
+  const flash = Math.sin(now / 400) > 0;
+  if (flash || snap.state !== "playing") {
+    ctx.fillText("REPLAY", pad + zoom * 6, y + barH / 2 + smallFont * 0.35);
+  }
+
+  // Time display (right of progress bar).
+  const posSec = Math.floor(snap.positionMs / 1000);
+  const durSec = Math.floor(snap.durationMs / 1000);
+  const posStr = `${Math.floor(posSec / 60)}:${String(posSec % 60).padStart(2, "0")}`;
+  const durStr = `${Math.floor(durSec / 60)}:${String(durSec % 60).padStart(2, "0")}`;
+  ctx.fillStyle = "#888899";
+  ctx.font = `${smallFont}px ${font}`;
+  ctx.textAlign = "right";
+  ctx.fillText(`${posStr} / ${durStr}`, width - pad * 2 - zoom * 12, y + barH / 2 + smallFont * 0.35);
+
+  // Speed badge.
+  ctx.fillStyle = snap.speed !== 1 ? "#F39C12" : "#555566";
+  ctx.fillText(`${snap.speed}x`, width - pad, y + barH / 2 + smallFont * 0.35);
+
+  // Current event detail (above the bar).
+  if (snap.currentDetail) {
+    const catColors: Record<string, string> = {
+      tool: "#1E7FD8", agent: "#2ECC71", state: "#F39C12", git: "#9B59B6", system: "#555566",
+    };
+    ctx.fillStyle = catColors[snap.currentCategory || "system"] || "#555566";
+    ctx.font = `${smallFont}px ${font}`;
+    ctx.textAlign = "center";
+    const detail = snap.currentDetail.length > 60 ? snap.currentDetail.slice(0, 57) + "..." : snap.currentDetail;
+    ctx.fillText(detail, width / 2, y - pad);
+  }
+
+  // Entry counter.
+  ctx.fillStyle = "#444458";
+  ctx.font = `${smallFont}px ${font}`;
+  ctx.textAlign = "left";
+  ctx.fillText(`${snap.cursor}/${snap.totalEntries}`, trackX, y - pad);
+}
+
 // ── Public entry point ─────────────────────────────────
 
 export function drawOverlay(rc: RenderContext): void {
@@ -724,4 +812,5 @@ export function drawOverlay(rc: RenderContext): void {
   drawOverlayHud(rc);
   drawSessionIndicators(rc);
   drawExpandedPanel(rc);
+  drawReplayTimeline(rc);
 }

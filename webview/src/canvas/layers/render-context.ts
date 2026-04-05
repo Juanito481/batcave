@@ -1,9 +1,11 @@
 import { BatCaveWorld, RepoTheme } from "../../world/BatCave";
+import { ReplayEngine } from "../../systems/ReplayEngine";
 
 /** Snapshot of render state, built once per frame by Renderer. */
 export interface RenderContext {
   ctx: CanvasRenderingContext2D;
   world: BatCaveWorld;
+  replay: ReplayEngine;
   width: number;
   height: number;
   zoom: number;

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { GameLoop } from "./canvas/GameLoop";
 import { Renderer } from "./canvas/Renderer";
 import { BatCaveWorld } from "./world/BatCave";
+import { ReplayEngine } from "./systems/ReplayEngine";
 
 // Acquire VS Code API (injected by the extension host).
 const vscode =
@@ -22,7 +23,8 @@ export function App() {
     ctx.imageSmoothingEnabled = false;
 
     const world = new BatCaveWorld();
-    const renderer = new Renderer(ctx, world);
+    const replay = new ReplayEngine();
+    const renderer = new Renderer(ctx, world, replay);
     const loop = new GameLoop(renderer);
 
     // Handle resize.
@@ -62,17 +64,81 @@ export function App() {
     window.addEventListener("message", handleMessage);
 
 
-    // Click handler for interactive Batcomputer screens.
+    // Click handler for interactive Batcomputer screens + replay timeline.
     const handleClick = (e: MouseEvent) => {
       const rect = canvas.getBoundingClientRect();
       const scaleX = canvas.width / rect.width;
       const scaleY = canvas.height / rect.height;
       const cx = (e.clientX - rect.left) * scaleX;
       const cy = (e.clientY - rect.top) * scaleY;
+
+      // Replay timeline click handling.
+      if (replay.isActive()) {
+        const zoom = world.getZoom();
+        const barH = Math.max(12, zoom * 5);
+        const pad = zoom * 2;
+        const barY = canvas.height - barH - pad;
+
+        if (cy >= barY - pad && cy <= canvas.height) {
+          const trackX = pad * 4 + zoom * 20;
+          const trackW = canvas.width - trackX - pad * 4 - zoom * 25;
+
+          // Click on play/pause area (left).
+          if (cx < trackX) {
+            if (replay.getState() === "playing") {
+              replay.pause();
+            } else {
+              replay.play();
+            }
+            return;
+          }
+          // Click on speed area (right).
+          if (cx > trackX + trackW) {
+            replay.cycleSpeed();
+            return;
+          }
+          // Click on track → seek.
+          const progress = (cx - trackX) / trackW;
+          replay.seek(progress);
+          return;
+        }
+      }
+
       world.handleClick(cx, cy);
     };
     canvas.addEventListener("click", handleClick);
     canvas.style.cursor = "pointer";
+
+    // Keyboard shortcuts for replay.
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!replay.isActive()) {
+        // 'R' to start replay from current session audit trail.
+        if (e.key === "r" || e.key === "R") {
+          const trail = world.getAuditTrail();
+          if (trail.length > 5) {
+            world.enterReplayMode();
+            replay.load(trail);
+            replay.play();
+          }
+        }
+        return;
+      }
+      // Replay controls.
+      if (e.key === " " || e.key === "k") {
+        e.preventDefault();
+        replay.getState() === "playing" ? replay.pause() : replay.play();
+      } else if (e.key === "Escape" || e.key === "q") {
+        replay.stop();
+        world.exitReplayMode();
+      } else if (e.key === "ArrowRight") {
+        replay.seek(replay.getSnapshot().progress + 0.05);
+      } else if (e.key === "ArrowLeft") {
+        replay.seek(replay.getSnapshot().progress - 0.05);
+      } else if (e.key === "." || e.key === ">") {
+        replay.cycleSpeed();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
 
     // Restore persisted state.
     const savedState = vscode?.getState() as Record<string, unknown> | undefined;
@@ -105,6 +171,7 @@ export function App() {
       // Save state on teardown.
       vscode?.setState(world.getPersistedState());
       canvas.removeEventListener("click", handleClick);
+      window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("message", handleMessage);
     };
   }, []);
