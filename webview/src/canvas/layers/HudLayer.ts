@@ -346,7 +346,45 @@ function drawOverlayHud(rc: RenderContext): void {
     ctx.fillText(trendChar, rightX, paceY + zoom * 2);
   }
 
-  // ── 6. Activity heatmap — 40 slots along bottom of context bar ──
+  // ── 6. Director status indicator (bottom-right) ──
+  {
+    const director = rc.director;
+    const dirState = director.getState();
+    const pending = director.getPendingApprovals();
+    const dirY = height - zoom * 5;
+    const dirX = width - pad;
+    ctx.font = `${Math.max(5, zoom * 2.5)}px ${font}`;
+    ctx.textAlign = "right";
+
+    // Director eye — pulsing indicator.
+    const eyeColors: Record<string, string> = {
+      watching: "#1E7FD8", deciding: "#F39C12", deploying: "#2ECC71", idle: "#333344",
+    };
+    const eyePulse = dirState === "watching"
+      ? 0.5 + Math.sin(now / 1000) * 0.3
+      : dirState === "deploying" ? 1 : 0.4;
+    ctx.save();
+    ctx.globalAlpha = eyePulse;
+    ctx.fillStyle = eyeColors[dirState] || "#333344";
+    ctx.fillRect(dirX - zoom * 2, dirY - zoom, zoom * 2, zoom * 2);
+    ctx.restore();
+
+    ctx.fillStyle = "#555566";
+    ctx.fillText(director.isEnabled() ? "DIRECTOR" : "DIRECTOR OFF", dirX - zoom * 4, dirY);
+
+    // Pending approvals badge.
+    if (pending.length > 0) {
+      const badgeX = dirX - zoom * 4 - ctx.measureText("DIRECTOR").width - zoom * 3;
+      ctx.fillStyle = "#E74C3C";
+      ctx.fillRect(badgeX, dirY - zoom * 2, zoom * 4, zoom * 3);
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = `bold ${Math.max(4, zoom * 2)}px ${font}`;
+      ctx.textAlign = "center";
+      ctx.fillText(`${pending.length}`, badgeX + zoom * 2, dirY);
+    }
+  }
+
+  // ── 7. Activity heatmap — 40 slots along bottom of context bar ──
   const heatSlots = world.getHeatmapSlots();
   const maxHeat = Math.max(1, ...heatSlots);
   const slotW = Math.max(1, Math.floor(width / heatSlots.length));

@@ -1196,6 +1196,18 @@ export class BatCaveWorld {
     if (this._onAssignAgent) this._onAssignAgent(agentId);
   }
 
+  /** Handle Director autonomous agent deployment. */
+  handleDirectorDeployment(agentId: string, task: string, decisionId: string): void {
+    // Spawn the agent with a special "director" tag.
+    this.handleEvent({
+      type: "agent_enter",
+      agentId,
+      agentName: task.slice(0, 40),
+      timestamp: Date.now(),
+    });
+    this.audit("system", "director_deploy", `Director deployed ${agentId}: ${task.slice(0, 60)}`);
+  }
+
   /** Enter replay mode — world stops processing live events. */
   enterReplayMode(): void {
     this.replayMode = true;

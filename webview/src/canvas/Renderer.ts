@@ -2,6 +2,7 @@ import { BatCaveWorld } from "../world/BatCave";
 import { ParticleSystem } from "../systems/ParticleSystem";
 import { SoundSystem } from "../systems/SoundSystem";
 import { ReplayEngine } from "../systems/ReplayEngine";
+import { Director } from "../systems/Director";
 import { RenderContext, P } from "./layers/render-context";
 import { drawCaveEnvironment } from "./layers/CaveLayer";
 import { drawAllFurniture } from "./layers/FurnitureLayer";
@@ -15,6 +16,7 @@ export class Renderer {
   private ctx: CanvasRenderingContext2D;
   private world: BatCaveWorld;
   private replay: ReplayEngine;
+  private director: Director;
   private particles: ParticleSystem;
   private sound: SoundSystem;
   private width = 0;
@@ -26,15 +28,15 @@ export class Renderer {
     this.ctx = ctx;
     this.world = world;
     this.replay = replay;
+    this.director = new Director();
     this.particles = new ParticleSystem();
     this.particles.start();
     this.sound = new SoundSystem();
     this.sound.start();
   }
 
-  getReplayEngine(): ReplayEngine {
-    return this.replay;
-  }
+  getReplayEngine(): ReplayEngine { return this.replay; }
+  getDirector(): Director { return this.director; }
 
   resize(width: number, height: number): void {
     this.width = width;
@@ -59,6 +61,30 @@ export class Renderer {
     }
     this.world.update(deltaMs);
     this.particles.update(deltaMs);
+
+    // Director evaluates rules periodically.
+    if (this.director.isEnabled() && !this.replay.isActive()) {
+      const stats = this.world.getUsageStats();
+      const cost = this.world.getSessionCost();
+      const decisions = this.director.update(deltaMs, {
+        toolCount: stats?.toolCallsThisSession ?? 0,
+        costUsd: cost.costUsd,
+        costBudget: this.world.getCostBudget(),
+        contextPct: stats?.contextFillPct ?? 0,
+        activeAgentIds: this.world.getActiveAgentNames(),
+        sessionDurationMs: Date.now() - (stats?.sessionStartedAt ?? Date.now()),
+      });
+      // Auto-approved decisions → launch agents.
+      for (const d of decisions) {
+        if (d.status === "approved") {
+          for (const agentId of d.agentIds) {
+            const task = d.tasks.get(agentId) || "";
+            this.world.handleDirectorDeployment(agentId, task, d.id);
+          }
+          d.status = "executing";
+        }
+      }
+    }
   }
 
   dispose(): void {
@@ -81,6 +107,7 @@ export class Renderer {
       ctx: this.ctx,
       world: this.world,
       replay: this.replay,
+      director: this.director,
       width: this.width,
       height: this.height,
       zoom,
