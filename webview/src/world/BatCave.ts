@@ -177,8 +177,20 @@ export class BatCaveWorld {
   private otherSessions: { label: string; lastActive: number; isCurrent: boolean }[] = [];
 
   // Interactive dashboard — expanded panel.
-  private expandedPanel: "files" | "stats" | "agents" | "agent-detail" | null = null;
+  private expandedPanel: "files" | "stats" | "agents" | "agent-detail" | "history" | null = null;
   private selectedAgentId: string | null = null;
+
+  // Session history (from extension globalState).
+  private sessionHistory: import("../../../shared/types").SessionSummary[] = [];
+
+  // Cost budget.
+  private costBudgetUsd = 0;
+
+  // Session ID (unique per init).
+  private sessionId = `ses_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+  // Peak context tracking.
+  private contextPeakPct = 0;
 
   // Cave evolution — milestone tracking.
   private caveLevel = 1;
@@ -496,6 +508,9 @@ export class BatCaveWorld {
           sessionStartedAt: event.sessionStartedAt as number,
           contextFillPct: event.contextFillPct as number,
         };
+        if (this.usageStats.contextFillPct > this.contextPeakPct) {
+          this.contextPeakPct = this.usageStats.contextFillPct;
+        }
         this.checkBatSignal();
         this.ambient.setContextPressure(this.usageStats.contextFillPct);
         break;
@@ -707,12 +722,12 @@ export class BatCaveWorld {
   }
 
   /** Currently expanded panel (null = none). */
-  getExpandedPanel(): "files" | "stats" | "agents" | "agent-detail" | null {
+  getExpandedPanel(): "files" | "stats" | "agents" | "agent-detail" | "history" | null {
     return this.expandedPanel;
   }
 
   /** Toggle or set expanded panel. */
-  setExpandedPanel(panel: "files" | "stats" | "agents" | "agent-detail" | null): void {
+  setExpandedPanel(panel: "files" | "stats" | "agents" | "agent-detail" | "history" | null): void {
     this.expandedPanel = this.expandedPanel === panel ? null : panel;
     if (panel !== "agent-detail") this.selectedAgentId = null;
   }
@@ -733,9 +748,13 @@ export class BatCaveWorld {
       this.setExpandedPanel("files");
       return;
     }
-    // Center screen (stats).
+    // Center screen (stats → history cycle).
     if (cx >= bcX + zoom + screenW + zoom && cx <= bcX + zoom + screenW * 2 + zoom && cy >= bcY && cy <= bcY + bcH) {
-      this.setExpandedPanel("stats");
+      if (this.expandedPanel === "stats") {
+        this.setExpandedPanel("history");
+      } else {
+        this.setExpandedPanel("stats");
+      }
       return;
     }
     // Right screen (agents).
@@ -820,6 +839,64 @@ export class BatCaveWorld {
       inputTokens,
       outputTokens,
       costUsd: Math.round(costUsd * 100) / 100,
+    };
+  }
+
+  /** Set session history from extension host. */
+  setSessionHistory(sessions: import("../../../shared/types").SessionSummary[]): void {
+    this.sessionHistory = sessions;
+  }
+
+  /** Set cost budget from extension settings. */
+  setCostBudget(budgetUsd: number): void {
+    this.costBudgetUsd = budgetUsd;
+  }
+
+  /** Get cost budget. */
+  getCostBudget(): number {
+    return this.costBudgetUsd;
+  }
+
+  /** Is the current session over budget? */
+  isOverBudget(): boolean {
+    if (this.costBudgetUsd <= 0) return false;
+    return this.getSessionCost().costUsd >= this.costBudgetUsd;
+  }
+
+  /** Get session history for display. */
+  getSessionHistory(): import("../../../shared/types").SessionSummary[] {
+    return this.sessionHistory;
+  }
+
+  /** Generate a snapshot of the current session for persistence. */
+  getSessionSummary(): import("../../../shared/types").SessionSummary | null {
+    const stats = this.usageStats;
+    if (!stats) return null;
+    const cost = this.getSessionCost();
+    const agentSummaries = this.getAllAgentStats().map(a => ({
+      agentId: a.agentId,
+      agentName: a.agentName,
+      emoji: a.emoji,
+      invocations: a.invocations,
+      toolCount: a.toolCount,
+      filesTouched: a.filesTouched.length,
+      totalActiveMs: a.exitTime !== null ? a.totalActiveMs : a.totalActiveMs + Date.now() - a.enterTime,
+    }));
+    return {
+      id: this.sessionId,
+      repo: this.repoTheme.label || "unknown",
+      startedAt: stats.sessionStartedAt,
+      endedAt: Date.now(),
+      durationMs: Date.now() - stats.sessionStartedAt,
+      messages: stats.messagesThisSession,
+      toolCalls: stats.toolCallsThisSession,
+      agentsSpawned: stats.agentsSpawnedThisSession,
+      contextPeakPct: this.contextPeakPct,
+      estimatedTokens: cost.totalTokens,
+      estimatedCostUsd: cost.costUsd,
+      toolBreakdown: { ...this.toolBreakdown },
+      agentSummaries,
+      model: stats.activeModel,
     };
   }
 

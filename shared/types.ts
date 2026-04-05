@@ -66,16 +66,55 @@ export interface BatCaveConfig {
   agents: Record<string, AgentMeta>;
 }
 
+/** Persisted session summary — saved to VSCode globalState after each session. */
+export interface SessionSummary {
+  id: string;                    // unique session ID
+  repo: string;                  // workspace/repo name
+  startedAt: number;             // epoch ms
+  endedAt: number;               // epoch ms
+  durationMs: number;
+  messages: number;
+  toolCalls: number;
+  agentsSpawned: number;
+  contextPeakPct: number;        // highest context fill seen
+  estimatedTokens: number;
+  estimatedCostUsd: number;
+  toolBreakdown: { read: number; write: number; bash: number; web: number; agent: number; other: number };
+  agentSummaries: AgentSummary[];
+  model: string;
+}
+
+/** Per-agent summary within a session. */
+export interface AgentSummary {
+  agentId: string;
+  agentName: string;
+  emoji: string;
+  invocations: number;
+  toolCount: number;
+  filesTouched: number;
+  totalActiveMs: number;
+}
+
 /** Sound settings payload from extension to webview. */
 export interface SoundSettingsPayload {
   enabled: boolean;
   volume: number;
 }
 
+/** Session history payload from extension to webview. */
+export interface SessionHistoryPayload {
+  sessions: SessionSummary[];
+}
+
+/** Cost budget settings payload from extension to webview. */
+export interface CostBudgetPayload {
+  budgetUsd: number;  // 0 = no budget
+}
+
 /** Message from extension host to webview. */
 export interface ExtToWebviewMessage {
-  command: "event" | "reset" | "config" | "sound-settings";
-  payload: BatCaveEvent | BatCaveConfig | SoundSettingsPayload;
+  command: "event" | "reset" | "config" | "sound-settings" | "session-history" | "cost-budget";
+  payload: BatCaveEvent | BatCaveConfig | SoundSettingsPayload | SessionHistoryPayload | CostBudgetPayload;
 }
 
 /** Message from webview to extension host. */
@@ -83,7 +122,9 @@ export type WebviewToExtMessage =
   | { command: "ready" }
   | { command: "requestState" }
   | { command: "toggleSound" }
-  | { command: "launchAgent"; agentId: string };
+  | { command: "launchAgent"; agentId: string }
+  | { command: "saveSession"; payload: SessionSummary }
+  | { command: "exportSession" };
 
 /** Known Alfred chess-piece agents. */
 export const AGENTS: Record<string, AgentMeta> = {

@@ -53,6 +53,10 @@ export function App() {
         sound.setEnabled(msg.payload.enabled);
         sound.setVolume(msg.payload.volume / 100);
         world.setSoundEnabled(msg.payload.enabled);
+      } else if (msg.command === "session-history") {
+        world.setSessionHistory(msg.payload.sessions);
+      } else if (msg.command === "cost-budget") {
+        world.setCostBudget(msg.payload.budgetUsd);
       }
     };
     window.addEventListener("message", handleMessage);
@@ -76,10 +80,15 @@ export function App() {
       world.restoreState(savedState);
     }
 
-    // Auto-save state every 10 seconds.
+    // Auto-save state every 10 seconds + persist session summary.
     const saveInterval = setInterval(() => {
       const state = world.getPersistedState();
       vscode?.setState(state);
+      // Save current session summary to extension host for persistence.
+      const summary = world.getSessionSummary();
+      if (summary && summary.toolCalls > 0) {
+        vscode?.postMessage({ command: "saveSession", payload: summary });
+      }
     }, 10000);
 
     // Tell the extension we're ready.

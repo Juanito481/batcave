@@ -7,6 +7,7 @@ export {
   SessionEvent,
   BatCaveEvent,
   BatCaveConfig,
+  SessionSummary,
   ExtToWebviewMessage,
   WebviewToExtMessage,
   AGENTS,
