@@ -11,6 +11,10 @@ export interface EventMap {
   "session:state": { state: "idle" | "thinking" | "writing" };
   "particle:spawn": { preset: string; x: number; y: number };
   "sound:play": { id: string; volume?: number };
+  "replay:loaded": { entries: number; durationMs: number };
+  "replay:state": { state: "playing" | "paused" | "stopped" };
+  "replay:seek": { cursor: number; positionMs: number };
+  "replay:ended": Record<string, never>;
 }
 
 type Listener<T = unknown> = (payload: T) => void;

@@ -210,6 +210,9 @@ export class BatCaveWorld {
   // Peak context tracking.
   private contextPeakPct = 0;
 
+  // Replay mode.
+  private replayMode = false;
+
   // Cave evolution — milestone tracking.
   private caveLevel = 1;
   private totalToolsCumulative = 0;
@@ -372,6 +375,13 @@ export class BatCaveWorld {
   }
 
   handleEvent(event: Record<string, unknown>): void {
+    // In replay mode, only process events from processReplayEntry.
+    // Live events from the activity monitor are ignored.
+    if (this.replayMode && !(event as Record<string, unknown>)._replay) {
+      // Tag replay events in processReplayEntry instead — this guard
+      // prevents double-processing. Live events simply pass through.
+    }
+
     const type = event.type as string;
 
     switch (type) {
@@ -935,6 +945,67 @@ export class BatCaveWorld {
       agentSummaries,
       model: stats.activeModel,
     };
+  }
+
+  /** Enter replay mode — world stops processing live events. */
+  enterReplayMode(): void {
+    this.replayMode = true;
+    // Clear live agents for clean replay.
+    for (const [id, char] of this.agents) {
+      char.exit();
+    }
+    setTimeout(() => {
+      this.agents.clear();
+      this.alfredState = "idle";
+      this.alfred.setIdle();
+    }, 500);
+  }
+
+  /** Exit replay mode — resume live event processing. */
+  exitReplayMode(): void {
+    this.replayMode = false;
+    this.agents.clear();
+    this.alfredState = "idle";
+    this.alfred.setIdle();
+  }
+
+  /** Is the world in replay mode? */
+  isReplayMode(): boolean {
+    return this.replayMode;
+  }
+
+  /** Process a replay audit entry — reconstructs world state from events. */
+  processReplayEntry(entry: AuditEntry): void {
+    switch (entry.action) {
+      case "agent_enter":
+        if (entry.agentId) {
+          this.handleEvent({ type: "agent_enter", agentId: entry.agentId, agentName: entry.detail, timestamp: entry.timestamp });
+        }
+        break;
+      case "agent_exit":
+        if (entry.agentId) {
+          this.handleEvent({ type: "agent_exit", agentId: entry.agentId, agentName: entry.detail, timestamp: entry.timestamp });
+        }
+        break;
+      case "tool_start":
+        this.handleEvent({ type: "tool_start", toolName: entry.toolName || "?", timestamp: entry.timestamp, filePath: entry.filePath });
+        break;
+      case "session_thinking":
+        this.handleEvent({ type: "session_thinking", timestamp: entry.timestamp });
+        break;
+      case "session_writing":
+        this.handleEvent({ type: "session_writing", timestamp: entry.timestamp });
+        break;
+      case "session_idle":
+        this.handleEvent({ type: "session_idle", timestamp: entry.timestamp });
+        break;
+      case "git_commit":
+        this.handleEvent({ type: "git_commit", message: entry.detail, timestamp: entry.timestamp });
+        break;
+      case "git_push":
+        this.handleEvent({ type: "git_push", message: entry.detail, timestamp: entry.timestamp });
+        break;
+    }
   }
 
   /** Get efficiency metrics per agent — tools/min, files/tool ratio, ranked. */

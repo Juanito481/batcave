@@ -1,6 +1,7 @@
 import { BatCaveWorld } from "../world/BatCave";
 import { ParticleSystem } from "../systems/ParticleSystem";
 import { SoundSystem } from "../systems/SoundSystem";
+import { ReplayEngine } from "../systems/ReplayEngine";
 import { RenderContext, P } from "./layers/render-context";
 import { drawCaveEnvironment } from "./layers/CaveLayer";
 import { drawAllFurniture } from "./layers/FurnitureLayer";
@@ -13,6 +14,7 @@ import { drawOverlay } from "./layers/HudLayer";
 export class Renderer {
   private ctx: CanvasRenderingContext2D;
   private world: BatCaveWorld;
+  private replay: ReplayEngine;
   private particles: ParticleSystem;
   private sound: SoundSystem;
   private width = 0;
@@ -20,13 +22,18 @@ export class Renderer {
 
   private static readonly TILE = 16;
 
-  constructor(ctx: CanvasRenderingContext2D, world: BatCaveWorld) {
+  constructor(ctx: CanvasRenderingContext2D, world: BatCaveWorld, replay: ReplayEngine) {
     this.ctx = ctx;
     this.world = world;
+    this.replay = replay;
     this.particles = new ParticleSystem();
     this.particles.start();
     this.sound = new SoundSystem();
     this.sound.start();
+  }
+
+  getReplayEngine(): ReplayEngine {
+    return this.replay;
   }
 
   resize(width: number, height: number): void {
@@ -43,6 +50,13 @@ export class Renderer {
   }
 
   update(deltaMs: number): void {
+    // In replay mode, advance the replay engine and feed entries to world.
+    if (this.replay.isActive()) {
+      const entries = this.replay.update(deltaMs);
+      for (const entry of entries) {
+        this.world.processReplayEntry(entry);
+      }
+    }
     this.world.update(deltaMs);
     this.particles.update(deltaMs);
   }
@@ -66,6 +80,7 @@ export class Renderer {
     const rc: RenderContext = {
       ctx: this.ctx,
       world: this.world,
+      replay: this.replay,
       width: this.width,
       height: this.height,
       zoom,
