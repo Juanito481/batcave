@@ -210,25 +210,33 @@ export class Character {
     ctx.save();
     ctx.globalAlpha = this.opacity;
 
-    // Ground shadow — stays at ground level (targetY) even during enter/exit animations.
-    // Multi-layer elliptical shadow for depth.
-    const sz = Math.max(1, zoom);
-    const cx = Math.floor(this.x);
+    // Cast shadow — projected silhouette of the current animation frame.
+    // Light source: top-left → shadow falls to the right and slightly forward.
     const groundY = Math.floor(this.state === "entering" ? this.targetY : this.y);
-    // Outermost (widest, lightest).
-    ctx.fillStyle = "#0a0814";
-    ctx.fillRect(cx - sz * 6, groundY, sz * 12, sz);
-    // Outer ring.
-    ctx.fillStyle = "#0a0816";
-    ctx.fillRect(cx - sz * 5, groundY - sz, sz * 10, sz);
-    ctx.fillRect(cx - sz * 5, groundY, sz * 10, sz);
-    ctx.fillRect(cx - sz * 5, groundY + sz, sz * 10, sz);
-    // Middle ring.
-    ctx.fillStyle = "#08060e";
-    ctx.fillRect(cx - sz * 4, groundY, sz * 8, sz);
-    // Inner core (darkest).
-    ctx.fillStyle = "#06040e";
-    ctx.fillRect(cx - sz * 3, groundY, sz * 6, sz);
+    const shadowW = dw * 1.15;
+    const shadowH = dh * 0.28;
+    const shadowOffX = dw * 0.18;
+    const shadowX = dx + shadowOffX;
+    const shadowY = groundY - shadowH * 0.4;
+
+    ctx.save();
+    ctx.globalAlpha = this.opacity * 0.55;
+    if (this.flipped) {
+      ctx.save();
+      ctx.translate(shadowX + shadowW, shadowY);
+      ctx.scale(-1, 1);
+      ctx.drawImage(
+        this.sprite.shadowCanvas, sx, sy, sw, sh,
+        0, 0, shadowW, shadowH,
+      );
+      ctx.restore();
+    } else {
+      ctx.drawImage(
+        this.sprite.shadowCanvas, sx, sy, sw, sh,
+        shadowX, shadowY, shadowW, shadowH,
+      );
+    }
+    ctx.restore();
 
     // Sprite.
     if (this.flipped) {

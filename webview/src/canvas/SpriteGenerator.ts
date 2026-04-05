@@ -16,6 +16,7 @@ import { AGENT_PERSONALITIES, BodyType } from "../data/agent-personalities";
 
 export interface SpriteSheet {
   canvas: OffscreenCanvas;
+  shadowCanvas: OffscreenCanvas;
   frameWidth: number;
   frameHeight: number;
   animations: Record<string, { row: number; frames: number; speed: number }>;
@@ -815,8 +816,17 @@ export function generateSpriteSheet(characterId: string): SpriteSheet {
     }
   }
 
+  // Generate shadow sheet: same layout, all opaque pixels → single dark color.
+  const shadowCanvas = new OffscreenCanvas(canvas.width, canvas.height);
+  const shadowCtx = shadowCanvas.getContext("2d")!;
+  shadowCtx.drawImage(canvas, 0, 0);
+  shadowCtx.globalCompositeOperation = "source-in";
+  shadowCtx.fillStyle = "#06040c";
+  shadowCtx.fillRect(0, 0, shadowCanvas.width, shadowCanvas.height);
+
   return {
     canvas,
+    shadowCanvas,
     frameWidth: FW,
     frameHeight: FH,
     animations: {
