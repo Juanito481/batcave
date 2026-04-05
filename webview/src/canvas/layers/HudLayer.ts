@@ -330,6 +330,15 @@ function drawSessionIndicators(rc: RenderContext): void {
   }
 }
 
+// ── Helpers ───────────────────────────────────────────
+
+function formatDuration(ms: number): string {
+  const sec = Math.floor(ms / 1000);
+  if (sec < 60) return `${sec}s`;
+  const min = Math.floor(sec / 60);
+  return `${min}m ${sec % 60}s`;
+}
+
 // ── Expanded panel overlay ────────────────────────────
 
 function drawExpandedPanel(rc: RenderContext): void {
@@ -370,7 +379,8 @@ function drawExpandedPanel(rc: RenderContext): void {
   const titles: Record<string, string> = {
     files: "RECENT FILES",
     stats: "SESSION STATS",
-    agents: "AGENT HISTORY",
+    agents: "AGENTS",
+    "agent-detail": "AGENT DETAIL",
   };
   ctx.fillText(titles[panel] || panel.toUpperCase(), px + pad, py + pad + fontSize);
 
@@ -411,10 +421,13 @@ function drawExpandedPanel(rc: RenderContext): void {
     const stats = world.getSessionStats();
     const pace = world.getPace();
     const breakdown = world.getToolBreakdown();
+    const cost = world.getSessionCost();
     ctx.font = `${fontSize}px ${font}`;
 
     const lines = [
       { label: "Context", value: `${stats.contextPct}%`, color: stats.contextPct < 50 ? "#2ECC71" : stats.contextPct < 80 ? "#F39C12" : "#E74C3C" },
+      { label: "Est. cost", value: `$${cost.costUsd.toFixed(2)}`, color: cost.costUsd > 1 ? "#F39C12" : "#888899" },
+      { label: "Est. tokens", value: cost.totalTokens > 1000 ? `${(cost.totalTokens / 1000).toFixed(1)}k` : `${cost.totalTokens}`, color: "#888899" },
       { label: "Tools", value: `${stats.toolCount}`, color: "#888899" },
       { label: "Duration", value: stats.duration, color: "#888899" },
       { label: "Pace", value: `${pace.current}/min`, color: pace.trend === "up" ? "#2ECC71" : pace.trend === "down" ? "#E74C3C" : "#888899" },
@@ -435,19 +448,117 @@ function drawExpandedPanel(rc: RenderContext): void {
       ctx.textAlign = "left";
     }
   } else if (panel === "agents") {
-    const history = world.getAgentHistory();
+    // Show all agents with cumulative stats (enterprise view).
+    const allStats = world.getAllAgentStats();
     ctx.font = `${smallFont}px ${font}`;
-    for (let i = 0; i < history.length; i++) {
-      const ay = contentY + i * lineH;
-      if (ay > py + panelH - pad) break;
-      const entry = history[i];
-      ctx.fillStyle = entry.action === "enter" ? "#2ECC71" : "#E74C3C";
-      const arrow = entry.action === "enter" ? "\u25B6" : "\u25C0";
-      ctx.fillText(`${arrow} ${entry.emoji} ${entry.name}`, px + pad, ay + lineH * 0.7);
+    if (allStats.length > 0) {
+      // Header row.
+      ctx.fillStyle = "#555566";
+      ctx.fillText("AGENT", px + pad, contentY + lineH * 0.5);
+      ctx.textAlign = "right";
+      ctx.fillText("TOOLS", px + panelW * 0.55, contentY + lineH * 0.5);
+      ctx.fillText("FILES", px + panelW * 0.72, contentY + lineH * 0.5);
+      ctx.fillText("TIME", px + panelW - pad, contentY + lineH * 0.5);
+      ctx.textAlign = "left";
+
+      for (let i = 0; i < allStats.length; i++) {
+        const ay = contentY + (i + 1) * lineH;
+        if (ay > py + panelH - pad) break;
+        const s = allStats[i];
+        const isActive = s.exitTime === null;
+
+        // Active dot.
+        ctx.fillStyle = isActive ? "#2ECC71" : "#555566";
+        ctx.fillRect(px + pad, ay + lineH * 0.3, zoom, zoom);
+
+        // Name.
+        ctx.fillStyle = isActive ? "#AAAACC" : "#777790";
+        ctx.fillText(`${s.emoji} ${s.agentName}`, px + pad + zoom * 2, ay + lineH * 0.7);
+
+        // Stats columns.
+        ctx.textAlign = "right";
+        ctx.fillStyle = "#888899";
+        ctx.fillText(`${s.toolCount}`, px + panelW * 0.55, ay + lineH * 0.7);
+        ctx.fillText(`${s.filesTouched.length}`, px + panelW * 0.72, ay + lineH * 0.7);
+        const durSec = Math.floor((s.exitTime !== null ? s.totalActiveMs : s.totalActiveMs + Date.now() - s.enterTime) / 1000);
+        const durStr = durSec >= 60 ? `${Math.floor(durSec / 60)}m${durSec % 60}s` : `${durSec}s`;
+        ctx.fillText(durStr, px + panelW - pad, ay + lineH * 0.7);
+        ctx.textAlign = "left";
+      }
+    } else {
+      // Fallback to history if no stats yet.
+      const history = world.getAgentHistory();
+      for (let i = 0; i < history.length; i++) {
+        const ay = contentY + i * lineH;
+        if (ay > py + panelH - pad) break;
+        const entry = history[i];
+        ctx.fillStyle = entry.action === "enter" ? "#2ECC71" : "#E74C3C";
+        const arrow = entry.action === "enter" ? "\u25B6" : "\u25C0";
+        ctx.fillText(`${arrow} ${entry.emoji} ${entry.name}`, px + pad, ay + lineH * 0.7);
+      }
+      if (history.length === 0) {
+        ctx.fillStyle = "#444458";
+        ctx.fillText("No agents yet", px + pad, contentY + lineH * 0.7);
+      }
     }
-    if (history.length === 0) {
+  } else if (panel === "agent-detail") {
+    // Per-agent detail panel — enterprise observability.
+    const selectedId = world.getSelectedAgentId();
+    const agentStat = selectedId ? world.getAgentStats(selectedId) : null;
+
+    if (agentStat) {
+      // Agent header.
+      ctx.font = `bold ${fontSize}px ${font}`;
+      ctx.fillStyle = theme.accent;
+      ctx.fillText(`${agentStat.emoji} ${agentStat.agentName}`, px + pad, contentY + lineH * 0.7);
+
+      const isActive = agentStat.exitTime === null;
+      ctx.font = `${smallFont}px ${font}`;
+      ctx.fillStyle = isActive ? "#2ECC71" : "#E74C3C";
+      ctx.fillText(isActive ? "ACTIVE" : "EXITED", px + panelW / 2, contentY + lineH * 0.7);
+
+      // Stats grid.
+      ctx.font = `${fontSize}px ${font}`;
+      const grid = [
+        { label: "Invocations", value: `${agentStat.invocations}`, color: "#888899" },
+        { label: "Tools used", value: `${agentStat.toolCount}`, color: "#888899" },
+        { label: "Files touched", value: `${agentStat.filesTouched.length}`, color: "#888899" },
+        { label: "Active time", value: formatDuration(isActive ? agentStat.totalActiveMs + Date.now() - agentStat.enterTime : agentStat.totalActiveMs), color: "#888899" },
+        { label: "  Read", value: `${agentStat.toolBreakdown.read}`, color: "#1a5a8a" },
+        { label: "  Write", value: `${agentStat.toolBreakdown.write}`, color: "#F39C12" },
+        { label: "  Bash", value: `${agentStat.toolBreakdown.bash}`, color: "#2ECC71" },
+        { label: "  Web", value: `${agentStat.toolBreakdown.web}`, color: theme.accent },
+      ];
+
+      for (let i = 0; i < grid.length; i++) {
+        const ly = contentY + (i + 1.5) * lineH;
+        if (ly > py + panelH - pad * 2) break;
+        ctx.fillStyle = "#555566";
+        ctx.fillText(grid[i].label, px + pad, ly + lineH * 0.7);
+        ctx.fillStyle = grid[i].color;
+        ctx.textAlign = "right";
+        ctx.fillText(grid[i].value, px + panelW - pad, ly + lineH * 0.7);
+        ctx.textAlign = "left";
+      }
+
+      // Recent files.
+      const filesStart = contentY + 10 * lineH;
+      if (agentStat.filesTouched.length > 0 && filesStart < py + panelH - pad) {
+        ctx.font = `bold ${smallFont}px ${font}`;
+        ctx.fillStyle = "#555566";
+        ctx.fillText("RECENT FILES", px + pad, filesStart);
+        ctx.font = `${smallFont}px ${font}`;
+        for (let i = 0; i < Math.min(agentStat.filesTouched.length, 4); i++) {
+          const fy = filesStart + (i + 1) * lineH * 0.8;
+          if (fy > py + panelH - pad) break;
+          const parts = agentStat.filesTouched[agentStat.filesTouched.length - 1 - i].split("/");
+          ctx.fillStyle = "#777790";
+          ctx.fillText(parts[parts.length - 1] || "?", px + pad + zoom * 2, fy);
+        }
+      }
+    } else {
       ctx.fillStyle = "#444458";
-      ctx.fillText("No agents yet", px + pad, contentY + lineH * 0.7);
+      ctx.fillText("No data for this agent", px + pad, contentY + lineH * 0.7);
     }
   }
 }
