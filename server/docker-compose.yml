@@ -1,0 +1,34 @@
+version: "3.8"
+services:
+  batcave-server:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    expose:
+      - "7777"
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - BATCAVE_TOKEN=${BATCAVE_TOKEN:-}
+
+  # TLS reverse proxy — auto HTTPS with Let's Encrypt.
+  # Set BATCAVE_DOMAIN env to enable (e.g. batcave.yourcompany.com).
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      - DOMAIN=${BATCAVE_DOMAIN:-localhost}
+    command: caddy reverse-proxy --from ${BATCAVE_DOMAIN:-localhost} --to batcave-server:7777
+    depends_on:
+      - batcave-server
+    profiles:
+      - tls
+
+volumes:
+  caddy_data:
+  caddy_config:

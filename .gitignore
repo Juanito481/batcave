@@ -4,3 +4,4 @@ dist/
 .vscode-test/
 webview/node_modules/
 .DS_Store
+batcave-server-state.json

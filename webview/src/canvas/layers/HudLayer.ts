@@ -113,9 +113,22 @@ function drawSpeechBubbles(rc: RenderContext): void {
     drawBubble(ctx, alf.x, alf.y - zoom * 20, text, zoom, fontSize);
   }
 
+  // Pool agent data (from team server).
+  const poolAgents = world.getPoolAgents();
+
   for (const agent of agents) {
     if (!agent.visible) continue;
-    // Show agent-specific quip if available, otherwise "working..." when active.
+
+    // Pool agent task bubble — shows task + assignee from command server.
+    const poolData = poolAgents.get(agent.id);
+    if (poolData && poolData.task && (poolData.status === "working" || poolData.status === "assigned")) {
+      const taskLabel = poolData.task.length > 30 ? poolData.task.slice(0, 27) + "..." : poolData.task;
+      const assignLabel = poolData.assignedTo ? ` [${poolData.assignedTo}]` : "";
+      drawBubble(ctx, agent.x, agent.y - zoom * 18, taskLabel + assignLabel, zoom, fontSize);
+      continue;
+    }
+
+    // Regular quip or working indicator.
     const agentQuip = world.getAgentQuip(agent.id);
     if (agentQuip) {
       drawBubble(ctx, agent.x, agent.y - zoom * 18, agentQuip, zoom, fontSize);
@@ -333,7 +346,83 @@ function drawOverlayHud(rc: RenderContext): void {
     ctx.fillText(trendChar, rightX, paceY + zoom * 2);
   }
 
-  // ── 6. Activity heatmap — 40 slots along bottom of context bar ──
+  // ── 6. Director — lavender constellation (bottom-right) ──
+  {
+    const director = rc.director;
+    const dirState = director.getState();
+    const pending = director.getPendingApprovals();
+    const active = director.getActiveDecisions();
+    const LAVENDER = "#B8A0FF";
+    const dirY = height - zoom * 6;
+    const dirX = width - pad;
+    ctx.font = `${Math.max(5, zoom * 2.5)}px ${font}`;
+    ctx.textAlign = "right";
+
+    // Constellation glyph — 5-point diamond pattern.
+    const gx = dirX - zoom * 2;
+    const gy = dirY - zoom;
+    const gs = Math.max(1, Math.floor(zoom * 0.6));
+    const pulse = dirState === "watching"
+      ? 0.4 + Math.sin(now / 1200) * 0.3
+      : dirState === "deciding" ? 0.7 + Math.sin(now / 300) * 0.3
+      : dirState === "deploying" ? 1 : 0.25;
+
+    ctx.save();
+    ctx.globalAlpha = pulse;
+    ctx.fillStyle = LAVENDER;
+    // Center point.
+    ctx.fillRect(gx, gy, gs * 2, gs * 2);
+    // Four corners.
+    ctx.fillRect(gx - gs * 2, gy - gs * 2, gs, gs);
+    ctx.fillRect(gx + gs * 3, gy - gs * 2, gs, gs);
+    ctx.fillRect(gx - gs * 2, gy + gs * 3, gs, gs);
+    ctx.fillRect(gx + gs * 3, gy + gs * 3, gs, gs);
+    // Connecting lines (pulse).
+    if (dirState === "deploying" || dirState === "deciding") {
+      ctx.fillRect(gx - gs, gy, gs, gs);
+      ctx.fillRect(gx + gs * 2, gy, gs, gs);
+      ctx.fillRect(gx, gy - gs, gs, gs);
+      ctx.fillRect(gx, gy + gs * 2, gs, gs);
+    }
+    ctx.restore();
+
+    // Label.
+    ctx.fillStyle = director.isEnabled() ? LAVENDER : "#333344";
+    ctx.save();
+    ctx.globalAlpha = pulse;
+    ctx.fillText("DIRECTOR", dirX - zoom * 5, dirY + zoom * 2);
+    ctx.restore();
+
+    // Pending approvals badge.
+    if (pending.length > 0) {
+      const badgeX = dirX - zoom * 5 - ctx.measureText("DIRECTOR").width - zoom * 3;
+      ctx.fillStyle = "#E74C3C";
+      ctx.fillRect(badgeX, dirY, zoom * 4, zoom * 3);
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = `bold ${Math.max(4, zoom * 2)}px ${font}`;
+      ctx.textAlign = "center";
+      ctx.fillText(`${pending.length}`, badgeX + zoom * 2, dirY + zoom * 2);
+    }
+
+    // Active decisions — lavender ticker above Director.
+    if (active.length > 0) {
+      const latest = active[active.length - 1];
+      const age = now - latest.timestamp;
+      if (age < 8000) { // show for 8s
+        const alpha = age < 6000 ? 0.9 : 0.9 * (1 - (age - 6000) / 2000);
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = LAVENDER;
+        ctx.font = `${Math.max(5, zoom * 2.5)}px ${font}`;
+        ctx.textAlign = "right";
+        const agents = latest.agentIds.join("+");
+        ctx.fillText(`► ${latest.triggerDetail}: deploy ${agents}`, dirX, dirY - zoom * 3);
+        ctx.restore();
+      }
+    }
+  }
+
+  // ── 7. Activity heatmap — 40 slots along bottom of context bar ──
   const heatSlots = world.getHeatmapSlots();
   const maxHeat = Math.max(1, ...heatSlots);
   const slotW = Math.max(1, Math.floor(width / heatSlots.length));
@@ -504,6 +593,8 @@ function drawExpandedPanel(rc: RenderContext): void {
     audit: "AUDIT TRAIL",
     achievements: "ACHIEVEMENTS",
     "workspace-map": "WORKSPACE MAP",
+    workflows: "WORKFLOWS",
+    team: "TEAM DASHBOARD",
   };
   ctx.fillText(titles[panel] || panel.toUpperCase(), px + pad, py + pad + fontSize);
 
@@ -669,17 +760,49 @@ function drawExpandedPanel(rc: RenderContext): void {
       ctx.fillStyle = isActive ? "#2ECC71" : "#E74C3C";
       ctx.fillText(isActive ? "ACTIVE" : "EXITED", px + panelW / 2, contentY + lineH * 0.7);
 
-      // Launch button (top-right of panel).
+      // Action buttons (top-right of panel).
+      const btnH = lineH * 0.9;
+      const btnW = zoom * 14;
+      const btnY = contentY - lineH * 0.2;
+
+      // LAUNCH button.
+      const launchBtnX = px + panelW - pad - btnW;
       ctx.fillStyle = "#1E7FD8";
-      const launchBtnX = px + panelW - pad - zoom * 16;
-      const launchBtnY = contentY - lineH * 0.2;
-      const launchBtnW = zoom * 14;
-      const launchBtnH = lineH * 0.9;
-      ctx.fillRect(launchBtnX, launchBtnY, launchBtnW, launchBtnH);
+      ctx.fillRect(launchBtnX, btnY, btnW, btnH);
       ctx.fillStyle = "#FFFFFF";
       ctx.font = `bold ${smallFont}px ${font}`;
       ctx.textAlign = "center";
-      ctx.fillText("LAUNCH", launchBtnX + launchBtnW / 2, launchBtnY + launchBtnH * 0.7);
+      ctx.fillText("LAUNCH", launchBtnX + btnW / 2, btnY + btnH * 0.7);
+
+      // ASSIGN button (only when team-connected + pool agent idle).
+      if (world.isTeamConnected()) {
+        const poolData = world.getPoolAgents().get(selectedId!);
+        const poolStatus = poolData?.status || "idle";
+        const assignBtnX = launchBtnX - btnW - zoom * 2;
+        ctx.fillStyle = poolStatus === "idle" ? "#2ECC71" : "#555566";
+        ctx.fillRect(assignBtnX, btnY, btnW, btnH);
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillText(poolStatus === "working" ? "BUSY" : "ASSIGN", assignBtnX + btnW / 2, btnY + btnH * 0.7);
+
+        // Pool status info below buttons.
+        if (poolData) {
+          ctx.textAlign = "left";
+          ctx.font = `${smallFont}px ${font}`;
+          const poolInfoY = btnY + btnH + zoom * 2;
+          if (poolData.task) {
+            ctx.fillStyle = "#F39C12";
+            ctx.fillText(`Task: ${poolData.task}`, px + pad, poolInfoY);
+          }
+          if (poolData.assignedTo) {
+            ctx.fillStyle = "#2ECC71";
+            ctx.fillText(`Assigned to: ${poolData.assignedTo}`, px + pad, poolInfoY + lineH * 0.8);
+          }
+          if (poolData.queue > 0) {
+            ctx.fillStyle = "#888899";
+            ctx.fillText(`Queue: ${poolData.queue} pending`, px + panelW / 2, poolInfoY);
+          }
+        }
+      }
       ctx.textAlign = "left";
 
       // Stats grid.
@@ -909,6 +1032,149 @@ function drawExpandedPanel(rc: RenderContext): void {
     } else {
       ctx.fillStyle = "#444458";
       ctx.fillText("No files touched yet", px + pad, contentY + lineH * 0.7);
+    }
+  } else if (panel === "workflows") {
+    const workflows = world.getWorkflows();
+    const schedules = world.getSchedules();
+    ctx.font = `${smallFont}px ${font}`;
+
+    if (workflows.length > 0) {
+      ctx.fillStyle = "#555566";
+      ctx.fillText("AVAILABLE PIPELINES", px + pad, contentY + lineH * 0.5);
+
+      for (let i = 0; i < workflows.length; i++) {
+        const wy = contentY + (i + 1) * lineH;
+        if (wy > py + panelH - pad * 4) break;
+        const w = workflows[i];
+
+        // Run button.
+        ctx.fillStyle = "#1E7FD8";
+        ctx.fillRect(px + pad, wy + lineH * 0.15, zoom * 5, lineH * 0.7);
+        ctx.fillStyle = "#FFFFFF";
+        ctx.font = `bold ${Math.max(4, zoom * 2)}px ${font}`;
+        ctx.fillText("RUN", px + pad + zoom * 0.8, wy + lineH * 0.65);
+
+        // Workflow info.
+        ctx.font = `bold ${smallFont}px ${font}`;
+        ctx.fillStyle = "#CCCCDD";
+        ctx.fillText(`${w.emoji} ${w.name}`, px + pad + zoom * 7, wy + lineH * 0.5);
+        ctx.font = `${smallFont}px ${font}`;
+        ctx.fillStyle = "#666678";
+        ctx.fillText(`${w.steps} steps — ${w.description}`, px + pad + zoom * 7, wy + lineH * 0.9);
+      }
+
+      // Schedules section.
+      if (schedules.length > 0) {
+        const schedY = contentY + (workflows.length + 2) * lineH;
+        if (schedY < py + panelH - pad) {
+          ctx.fillStyle = "#1a1a2e";
+          ctx.fillRect(px + pad, schedY - lineH * 0.3, panelW - pad * 2, Math.max(1, zoom));
+          ctx.fillStyle = "#555566";
+          ctx.font = `bold ${smallFont}px ${font}`;
+          ctx.fillText("SCHEDULES", px + pad, schedY + lineH * 0.3);
+          ctx.font = `${smallFont}px ${font}`;
+          for (let i = 0; i < schedules.length; i++) {
+            const sy = schedY + (i + 1) * lineH;
+            if (sy > py + panelH - pad) break;
+            const s = schedules[i];
+            ctx.fillStyle = s.enabled ? "#2ECC71" : "#555566";
+            ctx.fillRect(px + pad, sy + lineH * 0.3, zoom, zoom);
+            ctx.fillStyle = s.enabled ? "#AAAACC" : "#555566";
+            ctx.fillText(`${s.cron}  ${s.description}`, px + pad + zoom * 3, sy + lineH * 0.7);
+          }
+        }
+      }
+    } else {
+      ctx.fillStyle = "#444458";
+      ctx.fillText("No workflows defined", px + pad, contentY + lineH * 0.7);
+      ctx.fillText("Add .batcave/workflows.json", px + pad, contentY + lineH * 1.7);
+    }
+  } else if (panel === "team") {
+    const leaderboard = world.getTeamLeaderboard();
+    const teamStats = world.getTeamStats();
+    ctx.font = `${smallFont}px ${font}`;
+
+    if (leaderboard.length > 0) {
+      // Header.
+      ctx.fillStyle = "#555566";
+      ctx.fillText("USER", px + pad, contentY + lineH * 0.5);
+      ctx.textAlign = "right";
+      ctx.fillText("SCORE", px + panelW * 0.45, contentY + lineH * 0.5);
+      ctx.fillText("TOOLS", px + panelW * 0.6, contentY + lineH * 0.5);
+      ctx.fillText("COST", px + panelW * 0.78, contentY + lineH * 0.5);
+      ctx.fillText("SESSIONS", px + panelW - pad, contentY + lineH * 0.5);
+      ctx.textAlign = "left";
+
+      for (let i = 0; i < leaderboard.length; i++) {
+        const ly = contentY + (i + 1) * lineH;
+        if (ly > py + panelH - pad * 3) break;
+        const e = leaderboard[i];
+
+        // Rank medal.
+        ctx.fillStyle = i === 0 ? "#FFD700" : i === 1 ? "#C0C0C0" : i === 2 ? "#CD7F32" : "#777790";
+        ctx.font = `bold ${smallFont}px ${font}`;
+        ctx.fillText(`#${i + 1} ${e.user}`, px + pad, ly + lineH * 0.7);
+
+        ctx.font = `${smallFont}px ${font}`;
+        ctx.textAlign = "right";
+        ctx.fillStyle = "#888899";
+        ctx.fillText(`${e.totalScore}`, px + panelW * 0.45, ly + lineH * 0.7);
+        ctx.fillText(`${e.totalTools}`, px + panelW * 0.6, ly + lineH * 0.7);
+        ctx.fillStyle = e.totalCost > 10 ? "#F39C12" : "#888899";
+        ctx.fillText(`$${e.totalCost.toFixed(2)}`, px + panelW * 0.78, ly + lineH * 0.7);
+        ctx.fillStyle = "#888899";
+        ctx.fillText(`${e.sessions}`, px + panelW - pad, ly + lineH * 0.7);
+        ctx.textAlign = "left";
+      }
+
+      // Totals.
+      const totY = contentY + (leaderboard.length + 2) * lineH;
+      if (totY < py + panelH - pad) {
+        const totalCost = teamStats.reduce((s, e) => s + e.cost, 0);
+        const totalTools = teamStats.reduce((s, e) => s + e.tools, 0);
+        ctx.fillStyle = "#1a1a2e";
+        ctx.fillRect(px + pad, totY - lineH * 0.3, panelW - pad * 2, Math.max(1, zoom));
+        ctx.fillStyle = theme.accent;
+        ctx.font = `bold ${smallFont}px ${font}`;
+        ctx.fillText(`TEAM TOTAL`, px + pad, totY + lineH * 0.3);
+        ctx.textAlign = "right";
+        ctx.fillText(`${totalTools} tools  $${totalCost.toFixed(2)}`, px + panelW - pad, totY + lineH * 0.3);
+        ctx.textAlign = "left";
+      }
+    } else {
+      ctx.fillStyle = "#444458";
+      ctx.fillText("No team data yet", px + pad, contentY + lineH * 0.7);
+      ctx.fillText("Stats accumulate across sessions", px + pad, contentY + lineH * 1.7);
+    }
+
+    // Live team members (from command server).
+    if (world.isTeamConnected()) {
+      const members = world.getTeamMembers();
+      if (members.size > 0) {
+        const memY = py + panelH - pad - lineH * (members.size + 1);
+        if (memY > contentY) {
+          ctx.fillStyle = "#1a1a2e";
+          ctx.fillRect(px + pad, memY - lineH * 0.3, panelW - pad * 2, Math.max(1, zoom));
+          ctx.fillStyle = "#555566";
+          ctx.font = `bold ${smallFont}px ${font}`;
+          ctx.fillText("LIVE MEMBERS", px + pad, memY + lineH * 0.3);
+          ctx.font = `${smallFont}px ${font}`;
+          let mi = 0;
+          const statusColors: Record<string, string> = {
+            online: "#2ECC71", thinking: "#1E7FD8", writing: "#F39C12", idle: "#555566", offline: "#333344",
+          };
+          for (const [, m] of members) {
+            const my = memY + (mi + 1) * lineH;
+            ctx.fillStyle = statusColors[m.status] || "#555566";
+            ctx.fillRect(px + pad, my + lineH * 0.3, zoom, zoom);
+            ctx.fillStyle = "#AAAACC";
+            ctx.fillText(`${m.name}`, px + pad + zoom * 3, my + lineH * 0.7);
+            ctx.fillStyle = "#555566";
+            ctx.fillText(`${m.status} — ${m.repo}`, px + pad + zoom * 20, my + lineH * 0.7);
+            mi++;
+          }
+        }
+      }
     }
   }
 }

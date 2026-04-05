@@ -113,8 +113,8 @@ export interface CostBudgetPayload {
 
 /** Message from extension host to webview. */
 export interface ExtToWebviewMessage {
-  command: "event" | "reset" | "config" | "sound-settings" | "session-history" | "cost-budget";
-  payload: BatCaveEvent | BatCaveConfig | SoundSettingsPayload | SessionHistoryPayload | CostBudgetPayload;
+  command: "event" | "reset" | "config" | "sound-settings" | "session-history" | "cost-budget" | "workflows" | "team-stats";
+  payload: BatCaveEvent | BatCaveConfig | SoundSettingsPayload | SessionHistoryPayload | CostBudgetPayload | Record<string, unknown>;
 }
 
 /** Message from webview to extension host. */
@@ -124,7 +124,11 @@ export type WebviewToExtMessage =
   | { command: "toggleSound" }
   | { command: "launchAgent"; agentId: string }
   | { command: "saveSession"; payload: SessionSummary }
-  | { command: "exportSession" };
+  | { command: "exportSession" }
+  | { command: "runWorkflow"; workflowId: string }
+  | { command: "pushTeamStats"; payload: unknown }
+  | { command: "requestWorkflows" }
+  | { command: "requestTeamStats" };
 
 /** Known Alfred chess-piece agents. */
 export const AGENTS: Record<string, AgentMeta> = {

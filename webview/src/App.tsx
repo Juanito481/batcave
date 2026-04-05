@@ -59,6 +59,12 @@ export function App() {
         world.setSessionHistory(msg.payload.sessions);
       } else if (msg.command === "cost-budget") {
         world.setCostBudget(msg.payload.budgetUsd);
+      } else if (msg.command === "workflows") {
+        world.setWorkflows(msg.payload);
+      } else if (msg.command === "team-stats") {
+        world.setTeamStats(msg.payload.entries);
+      } else if (msg.command === "team-server") {
+        world.handleTeamServerMessage(msg.payload);
       }
     };
     window.addEventListener("message", handleMessage);
@@ -154,13 +160,30 @@ export function App() {
       const summary = world.getSessionSummary();
       if (summary && summary.toolCalls > 0) {
         vscode?.postMessage({ command: "saveSession", payload: summary });
+        // Push team stats.
+        const leaderboard = world.getLeaderboardEntry();
+        vscode?.postMessage({ command: "pushTeamStats", payload: { ...leaderboard, sessionId: summary.id, timestamp: Date.now() } });
       }
     }, 10000);
 
-    // Wire agent launcher.
+    // Wire agent launcher + workflow runner.
     world.setLaunchAgentCallback((agentId: string) => {
       vscode?.postMessage({ command: "launchAgent", agentId });
     });
+    world.setRunWorkflowCallback((workflowId: string) => {
+      vscode?.postMessage({ command: "runWorkflow", workflowId });
+    });
+    world.setAssignAgentCallback((agentId: string) => {
+      vscode?.postMessage({ command: "assignAgentPrompt", agentId });
+    });
+
+    world.setTeamCommandCallback((msg: Record<string, unknown>) => {
+      vscode?.postMessage({ command: "team-command", payload: msg });
+    });
+
+    // Request workflows and team stats.
+    vscode?.postMessage({ command: "requestWorkflows" });
+    vscode?.postMessage({ command: "requestTeamStats" });
 
     // Tell the extension we're ready.
     vscode?.postMessage({ command: "ready" });
