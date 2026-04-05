@@ -324,4 +324,5 @@ function startServer(port: number = DEFAULT_PORT): void {
   log(`${agents.size} agents in pool, waiting for connections...`);
 }
 
-startServer();
+const port = parseInt(process.env.PORT || String(DEFAULT_PORT), 10);
+startServer(port);
