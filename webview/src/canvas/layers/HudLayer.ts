@@ -1,6 +1,7 @@
 import { darken } from "../../helpers/color";
 import { RenderContext, outlineRect } from "./render-context";
 import { AGENTS } from "../../../../shared/types";
+import { ACHIEVEMENTS } from "../../data/gamification";
 
 // ── Tool icon (floating pixel art above Alfred) ────────
 
@@ -160,7 +161,7 @@ function drawBubble(
 // ── Overlay HUD (gaming-style, no sidebar) ────────────
 
 function drawOverlayHud(rc: RenderContext): void {
-  const { ctx, world, width, now } = rc;
+  const { ctx, world, width, height, now } = rc;
   const zoom = rc.zoom;
   const theme = world.getRepoTheme();
   const stats = world.getUsageStats();
@@ -349,7 +350,49 @@ function drawOverlayHud(rc: RenderContext): void {
     ctx.fillRect(i * slotW, heatY, slotW - (slotW > 2 ? 1 : 0), heatH);
   }
 
-  // ── 7. Cost alert — flashing warning when over budget ──
+  // ── 7. Smart alerts (below agents row) ──
+  const alerts = world.getSmartAlerts();
+  if (alerts.length > 0) {
+    const alertY = chipY + dotSize + zoom * 6;
+    const latestAlert = alerts[alerts.length - 1];
+    const alertAge = now - latestAlert.timestamp;
+    if (alertAge < 15000) { // show for 15s
+      const alertAlpha = alertAge < 12000 ? 1 : 1 - (alertAge - 12000) / 3000;
+      const sevColors: Record<string, string> = { info: "#1E7FD8", warning: "#F39C12", critical: "#E74C3C" };
+      ctx.save();
+      ctx.globalAlpha = alertAlpha;
+      // Alert pill background.
+      ctx.font = `bold ${Math.max(5, zoom * 2.5)}px ${font}`;
+      const alertText = `${latestAlert.severity === "critical" ? "!" : "i"} ${latestAlert.title}: ${latestAlert.detail}`;
+      const alertTextW = ctx.measureText(alertText).width;
+      ctx.fillStyle = "#06060c";
+      ctx.fillRect(chipX - zoom, alertY - zoom, alertTextW + zoom * 4, zoom * 5);
+      // Alert text.
+      ctx.fillStyle = sevColors[latestAlert.severity] || "#888899";
+      ctx.textAlign = "left";
+      ctx.fillText(alertText, chipX, alertY + zoom * 2.5);
+      ctx.restore();
+    }
+  }
+
+  // ── 8. Cave depth + achievement count (bottom-left) ──
+  {
+    const depthLayer = world.getCaveDepthLayer();
+    const achievements = world.getUnlockedAchievements();
+    const depthY = height - zoom * 5;
+    ctx.font = `${Math.max(5, zoom * 2.5)}px ${font}`;
+    ctx.textAlign = "left";
+    // Depth indicator.
+    ctx.fillStyle = depthLayer.palette.accent;
+    ctx.fillText(`DEPTH ${depthLayer.depth}: ${depthLayer.name}`, pad, depthY);
+    // Achievement count.
+    if (achievements.length > 0) {
+      ctx.fillStyle = "#FFD700";
+      ctx.fillText(`  ${achievements.length}/${ACHIEVEMENTS.length}`, pad + ctx.measureText(`DEPTH ${depthLayer.depth}: ${depthLayer.name}`).width, depthY);
+    }
+  }
+
+  // ── 9. Cost alert — flashing warning when over budget ──
   if (world.isOverBudget()) {
     const alertY = chipY + dotSize + zoom * 8;
     const alertAlpha = Math.sin(now / 400) * 0.4 + 0.6; // fade 0.2–1.0, never fully off
@@ -459,6 +502,8 @@ function drawExpandedPanel(rc: RenderContext): void {
     "agent-detail": "AGENT DETAIL",
     history: "SESSION HISTORY",
     audit: "AUDIT TRAIL",
+    achievements: "ACHIEVEMENTS",
+    "workspace-map": "WORKSPACE MAP",
   };
   ctx.fillText(titles[panel] || panel.toUpperCase(), px + pad, py + pad + fontSize);
 
@@ -759,6 +804,98 @@ function drawExpandedPanel(rc: RenderContext): void {
     } else {
       ctx.fillStyle = "#444458";
       ctx.fillText("No events recorded yet", px + pad, contentY + lineH * 0.7);
+    }
+  } else if (panel === "achievements") {
+    const unlocked = world.getUnlockedAchievements();
+    const tierColors: Record<string, string> = {
+      bronze: "#CD7F32", silver: "#C0C0C0", gold: "#FFD700", legendary: "#E74C3C",
+    };
+    ctx.font = `${smallFont}px ${font}`;
+
+    for (let i = 0; i < ACHIEVEMENTS.length; i++) {
+      const ay = contentY + i * lineH;
+      if (ay > py + panelH - pad) break;
+      const a = ACHIEVEMENTS[i];
+      const isUnlocked = unlocked.some(u => u.id === a.id);
+
+      // Tier dot.
+      ctx.fillStyle = isUnlocked ? tierColors[a.tier] || "#888899" : "#222233";
+      ctx.fillRect(px + pad, ay + lineH * 0.3, zoom * 1.5, zoom * 1.5);
+
+      // Name + description.
+      ctx.fillStyle = isUnlocked ? "#CCCCDD" : "#444458";
+      ctx.font = `bold ${smallFont}px ${font}`;
+      ctx.fillText(a.name, px + pad + zoom * 4, ay + lineH * 0.5);
+      ctx.font = `${smallFont}px ${font}`;
+      ctx.fillStyle = isUnlocked ? "#888899" : "#333344";
+      ctx.fillText(a.description, px + pad + zoom * 4, ay + lineH * 0.9);
+    }
+
+    // Summary at bottom.
+    const summY = contentY + Math.min(ACHIEVEMENTS.length, Math.floor(contentH / lineH) - 1) * lineH + lineH;
+    if (summY < py + panelH - pad) {
+      ctx.fillStyle = "#1a1a2e";
+      ctx.fillRect(px + pad, summY - lineH * 0.3, panelW - pad * 2, Math.max(1, zoom));
+      ctx.fillStyle = "#FFD700";
+      ctx.font = `bold ${smallFont}px ${font}`;
+      ctx.fillText(`${unlocked.length} / ${ACHIEVEMENTS.length} unlocked`, px + pad, summY + lineH * 0.3);
+    }
+  } else if (panel === "workspace-map") {
+    const nodes = world.getFileNodes();
+    ctx.font = `${smallFont}px ${font}`;
+
+    if (nodes.length > 0) {
+      const maxHits = Math.max(1, ...nodes.map(n => n.hitCount));
+
+      // Header.
+      ctx.fillStyle = "#555566";
+      ctx.fillText("FILE", px + pad, contentY + lineH * 0.5);
+      ctx.textAlign = "right";
+      ctx.fillText("HITS", px + panelW * 0.6, contentY + lineH * 0.5);
+      ctx.fillText("TOOL", px + panelW * 0.8, contentY + lineH * 0.5);
+      ctx.fillText("AGO", px + panelW - pad, contentY + lineH * 0.5);
+      ctx.textAlign = "left";
+
+      const catColors: Record<string, string> = {
+        read: "#1E7FD8", write: "#F39C12", bash: "#2ECC71", other: "#555566",
+      };
+
+      for (let i = 0; i < nodes.length; i++) {
+        const ny = contentY + (i + 1) * lineH;
+        if (ny > py + panelH - pad * 2) break;
+        const n = nodes[i];
+        const intensity = n.hitCount / maxHits;
+
+        // Heat bar behind name.
+        ctx.save();
+        ctx.fillStyle = catColors[n.category] || "#555566";
+        ctx.globalAlpha = intensity * 0.3;
+        ctx.fillRect(px + pad, ny, (panelW - pad * 2) * intensity, lineH * 0.8);
+        ctx.restore();
+
+        // File name.
+        ctx.fillStyle = intensity > 0.5 ? "#CCCCDD" : "#888899";
+        ctx.fillText(n.name.slice(0, 20), px + pad + zoom, ny + lineH * 0.7);
+
+        // Hit count.
+        ctx.textAlign = "right";
+        ctx.fillStyle = "#888899";
+        ctx.fillText(`${n.hitCount}`, px + panelW * 0.6, ny + lineH * 0.7);
+
+        // Last tool.
+        ctx.fillStyle = catColors[n.category] || "#555566";
+        ctx.fillText(n.lastTool, px + panelW * 0.8, ny + lineH * 0.7);
+
+        // Time ago.
+        const ago = Date.now() - n.lastTimestamp;
+        const agoStr = ago < 60000 ? `${Math.floor(ago / 1000)}s` : `${Math.floor(ago / 60000)}m`;
+        ctx.fillStyle = "#555566";
+        ctx.fillText(agoStr, px + panelW - pad, ny + lineH * 0.7);
+        ctx.textAlign = "left";
+      }
+    } else {
+      ctx.fillStyle = "#444458";
+      ctx.fillText("No files touched yet", px + pad, contentY + lineH * 0.7);
     }
   }
 }
