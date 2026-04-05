@@ -15,6 +15,9 @@ import { bus } from "./EventBus";
 
 // ── Types ───────────────────────────────────────────────
 
+/** Director's signature color — lavender, distinct from all agents. */
+export const DIRECTOR_COLOR = "#B8A0FF";
+
 export type TriggerType =
   | "pr_opened"
   | "pr_review_requested"
@@ -24,7 +27,11 @@ export type TriggerType =
   | "pattern_match"
   | "schedule"
   | "file_change"
-  | "agent_sequence";
+  | "agent_sequence"
+  | "ci_failure"
+  | "ui_change"
+  | "infra_change"
+  | "test_change";
 
 export type DirectorState = "watching" | "deciding" | "deploying" | "idle";
 
@@ -174,7 +181,58 @@ export class Director {
         autoApprove: true,
       },
 
-      // Rule 6: Agent sequence pattern — if Bishop always follows Knight.
+      // Rule 6: UI file changes → deploy Scout.
+      {
+        id: "ui-file-guard",
+        name: "UI File Visual Check",
+        trigger: "ui_change",
+        condition: (ctx) => ctx.recentFiles.some(f =>
+          /component|\.tsx|\.jsx|\.css|\.scss|ui\/|view|layout|style/i.test(f),
+        ),
+        deploy: (ctx) => {
+          const uiFile = ctx.recentFiles.find(f =>
+            /component|\.tsx|\.jsx|\.css|\.scss|ui\/|view|layout|style/i.test(f),
+          ) || "UI files";
+          return [
+            { agentId: "scout", task: `UI change detected: ${uiFile}. Check visual consistency and responsive layout.` },
+          ];
+        },
+        priority: "normal",
+        autoApprove: false,
+      },
+
+      // Rule 7: Infrastructure changes → deploy Chancellor + Knight.
+      {
+        id: "infra-file-guard",
+        name: "Infrastructure Change Review",
+        trigger: "infra_change",
+        condition: (ctx) => ctx.recentFiles.some(f =>
+          /docker|\.yml|\.yaml|ci\/|\.github|deploy|infra|terraform|k8s|helm/i.test(f),
+        ),
+        deploy: () => [
+          { agentId: "chancellor", task: "Infrastructure file modified. Verify CI/CD pipeline and deployment config." },
+          { agentId: "knight", task: "Review infrastructure change for architectural impact." },
+        ],
+        priority: "high",
+        autoApprove: false,
+      },
+
+      // Rule 8: Test file changes → deploy Cardinal + Black Knight.
+      {
+        id: "test-file-guard",
+        name: "Test File Change",
+        trigger: "test_change",
+        condition: (ctx) => ctx.recentFiles.some(f =>
+          /\.test\.|\.spec\.|__test__|__spec__/i.test(f),
+        ),
+        deploy: () => [
+          { agentId: "cardinal", task: "Test files modified. Verify all tests pass and coverage is adequate." },
+        ],
+        priority: "normal",
+        autoApprove: true,
+      },
+
+      // Rule 9: Agent sequence pattern — if Bishop always follows Knight.
       {
         id: "learned-sequence",
         name: "Learned Agent Sequence",

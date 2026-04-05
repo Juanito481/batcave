@@ -346,41 +346,79 @@ function drawOverlayHud(rc: RenderContext): void {
     ctx.fillText(trendChar, rightX, paceY + zoom * 2);
   }
 
-  // ── 6. Director status indicator (bottom-right) ──
+  // ── 6. Director — lavender constellation (bottom-right) ──
   {
     const director = rc.director;
     const dirState = director.getState();
     const pending = director.getPendingApprovals();
-    const dirY = height - zoom * 5;
+    const active = director.getActiveDecisions();
+    const LAVENDER = "#B8A0FF";
+    const dirY = height - zoom * 6;
     const dirX = width - pad;
     ctx.font = `${Math.max(5, zoom * 2.5)}px ${font}`;
     ctx.textAlign = "right";
 
-    // Director eye — pulsing indicator.
-    const eyeColors: Record<string, string> = {
-      watching: "#1E7FD8", deciding: "#F39C12", deploying: "#2ECC71", idle: "#333344",
-    };
-    const eyePulse = dirState === "watching"
-      ? 0.5 + Math.sin(now / 1000) * 0.3
-      : dirState === "deploying" ? 1 : 0.4;
+    // Constellation glyph — 5-point diamond pattern.
+    const gx = dirX - zoom * 2;
+    const gy = dirY - zoom;
+    const gs = Math.max(1, Math.floor(zoom * 0.6));
+    const pulse = dirState === "watching"
+      ? 0.4 + Math.sin(now / 1200) * 0.3
+      : dirState === "deciding" ? 0.7 + Math.sin(now / 300) * 0.3
+      : dirState === "deploying" ? 1 : 0.25;
+
     ctx.save();
-    ctx.globalAlpha = eyePulse;
-    ctx.fillStyle = eyeColors[dirState] || "#333344";
-    ctx.fillRect(dirX - zoom * 2, dirY - zoom, zoom * 2, zoom * 2);
+    ctx.globalAlpha = pulse;
+    ctx.fillStyle = LAVENDER;
+    // Center point.
+    ctx.fillRect(gx, gy, gs * 2, gs * 2);
+    // Four corners.
+    ctx.fillRect(gx - gs * 2, gy - gs * 2, gs, gs);
+    ctx.fillRect(gx + gs * 3, gy - gs * 2, gs, gs);
+    ctx.fillRect(gx - gs * 2, gy + gs * 3, gs, gs);
+    ctx.fillRect(gx + gs * 3, gy + gs * 3, gs, gs);
+    // Connecting lines (pulse).
+    if (dirState === "deploying" || dirState === "deciding") {
+      ctx.fillRect(gx - gs, gy, gs, gs);
+      ctx.fillRect(gx + gs * 2, gy, gs, gs);
+      ctx.fillRect(gx, gy - gs, gs, gs);
+      ctx.fillRect(gx, gy + gs * 2, gs, gs);
+    }
     ctx.restore();
 
-    ctx.fillStyle = "#555566";
-    ctx.fillText(director.isEnabled() ? "DIRECTOR" : "DIRECTOR OFF", dirX - zoom * 4, dirY);
+    // Label.
+    ctx.fillStyle = director.isEnabled() ? LAVENDER : "#333344";
+    ctx.save();
+    ctx.globalAlpha = pulse;
+    ctx.fillText("DIRECTOR", dirX - zoom * 5, dirY + zoom * 2);
+    ctx.restore();
 
     // Pending approvals badge.
     if (pending.length > 0) {
-      const badgeX = dirX - zoom * 4 - ctx.measureText("DIRECTOR").width - zoom * 3;
+      const badgeX = dirX - zoom * 5 - ctx.measureText("DIRECTOR").width - zoom * 3;
       ctx.fillStyle = "#E74C3C";
-      ctx.fillRect(badgeX, dirY - zoom * 2, zoom * 4, zoom * 3);
+      ctx.fillRect(badgeX, dirY, zoom * 4, zoom * 3);
       ctx.fillStyle = "#FFFFFF";
       ctx.font = `bold ${Math.max(4, zoom * 2)}px ${font}`;
       ctx.textAlign = "center";
-      ctx.fillText(`${pending.length}`, badgeX + zoom * 2, dirY);
+      ctx.fillText(`${pending.length}`, badgeX + zoom * 2, dirY + zoom * 2);
+    }
+
+    // Active decisions — lavender ticker above Director.
+    if (active.length > 0) {
+      const latest = active[active.length - 1];
+      const age = now - latest.timestamp;
+      if (age < 8000) { // show for 8s
+        const alpha = age < 6000 ? 0.9 : 0.9 * (1 - (age - 6000) / 2000);
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = LAVENDER;
+        ctx.font = `${Math.max(5, zoom * 2.5)}px ${font}`;
+        ctx.textAlign = "right";
+        const agents = latest.agentIds.join("+");
+        ctx.fillText(`► ${latest.triggerDetail}: deploy ${agents}`, dirX, dirY - zoom * 3);
+        ctx.restore();
+      }
     }
   }
 
