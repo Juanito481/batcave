@@ -27,9 +27,12 @@ function drawToolIcon(rc: RenderContext): void {
   ctx.globalAlpha = alpha;
 
   // Icon background bubble.
-  ctx.fillStyle = "#0e0e1e";
+  const iconBrd = Math.max(1, Math.floor(zoom / 2));
+  ctx.fillStyle = "#0c0c1a";
   ctx.fillRect(iconX - s, iy - s, s * 6, s * 6);
-  outlineRect(ctx, iconX - s, iy - s, s * 6, s * 6, Math.max(1, Math.floor(zoom / 2)));
+  ctx.fillStyle = "#2a2a4a";
+  ctx.fillRect(iconX - s, iy - s, s * 6, iconBrd); // accent top
+  outlineRect(ctx, iconX - s, iy - s, s * 6, s * 6, iconBrd);
 
   // Draw tool-specific pixel icon.
   const cat = toolCategory(tool);
@@ -132,15 +135,23 @@ function drawBubble(
   const bh = fontSize + pad * 2;
   const bx = Math.floor(x - bw / 2);
   const by = Math.floor(y - bh);
+  const brd = Math.max(1, Math.floor(zoom / 2));
 
-  ctx.fillStyle = "#0e0e1e";
+  // Bubble body.
+  ctx.fillStyle = "#0c0c1a";
   ctx.fillRect(bx, by, bw, bh);
-  outlineRect(ctx, bx, by, bw, bh, Math.max(1, Math.floor(zoom / 2)));
-  ctx.fillStyle = "#0e0e1e";
+  // Subtle top accent line.
+  ctx.fillStyle = "#2a2a4a";
+  ctx.fillRect(bx, by, bw, brd);
+  // Side + bottom borders.
+  outlineRect(ctx, bx, by, bw, bh, brd);
+  // Tail.
+  ctx.fillStyle = "#0c0c1a";
   ctx.fillRect(Math.floor(x - zoom), by + bh, zoom * 2, zoom);
   ctx.fillRect(Math.floor(x), by + bh + zoom, zoom, zoom);
 
-  ctx.fillStyle = "#8888AA";
+  // Text.
+  ctx.fillStyle = "#AAAACC";
   ctx.textAlign = "center";
   ctx.fillText(text, x, by + fontSize + pad - zoom);
 }
@@ -182,8 +193,22 @@ function drawOverlayHud(rc: RenderContext): void {
   const chipY = ctxBarH + pad;
   const chipX = pad;
 
-  // State dot.
+  // Chip background pill.
+  const stateLabel = state.toUpperCase();
+  ctx.font = `bold ${smallFont}px ${font}`;
+  const pctVal = stats?.contextFillPct ?? 0;
+  const pctText = pctVal > 0 ? `  ${pctVal}%` : "";
+  const chipTextW = ctx.measureText(stateLabel + pctText).width;
   const dotSize = zoom * 2;
+  const chipPillW = dotSize + zoom * 3 + chipTextW + zoom * 2;
+  const chipPillH = dotSize + zoom * 2;
+  ctx.save();
+  ctx.fillStyle = "#06060c";
+  ctx.globalAlpha = 0.75;
+  ctx.fillRect(chipX - zoom, chipY - zoom, chipPillW, chipPillH);
+  ctx.restore();
+
+  // State dot.
   ctx.fillStyle = stateColor[state] || "#555566";
   ctx.fillRect(chipX, chipY, dotSize, dotSize);
 
@@ -205,7 +230,6 @@ function drawOverlayHud(rc: RenderContext): void {
   ctx.fillText(state.toUpperCase(), chipX + dotSize + zoom * 2, chipY + dotSize - brd);
 
   // Context percentage next to state.
-  const pctVal = stats?.contextFillPct ?? 0;
   if (pctVal > 0) {
     const stateTextW = ctx.measureText(state.toUpperCase()).width;
     ctx.fillStyle = barColor;
@@ -233,15 +257,30 @@ function drawOverlayHud(rc: RenderContext): void {
   const secs = Math.floor((elapsed % 60_000) / 1000);
   const durStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
 
-  // Compose right chip: "HARRIET  opus-4-6  5m 42s"
+  // Measure right chip total width for background pill.
+  const durW = ctx.measureText(durStr).width;
+  ctx.fillStyle = "#444458";
+  const modelW = ctx.measureText(modelShort).width;
+  ctx.font = `bold ${smallFont}px ${font}`;
+  const labelW = theme.label !== "---" ? ctx.measureText(theme.label).width + zoom * 3 : 0;
+  const rightTotalW = durW + zoom * 3 + modelW + labelW + zoom * 2;
+
+  // Right chip background pill.
   const rightY = chipY + dotSize - brd;
+  ctx.save();
+  ctx.fillStyle = "#06060c";
+  ctx.globalAlpha = 0.75;
+  ctx.fillRect(rightX - rightTotalW, chipY - zoom, rightTotalW + zoom, chipPillH);
+  ctx.restore();
+
+  // Compose right chip: "HARRIET  opus-4-6  5m 42s"
+  ctx.font = `${smallFont}px ${font}`;
+  ctx.textAlign = "right";
   ctx.fillStyle = "#555566";
   ctx.fillText(durStr, rightX, rightY);
-  const durW = ctx.measureText(durStr).width;
 
   ctx.fillStyle = "#444458";
   ctx.fillText(modelShort, rightX - durW - zoom * 3, rightY);
-  const modelW = ctx.measureText(modelShort).width;
 
   if (theme.label !== "---") {
     ctx.fillStyle = theme.accent;
@@ -386,24 +425,26 @@ function drawExpandedPanel(rc: RenderContext): void {
   const smallFont = Math.max(6, zoom * 2.5);
   const pad = zoom * 4;
 
-  // Semi-transparent backdrop.
+  // Semi-transparent backdrop — larger, more room for content.
   ctx.save();
   ctx.fillStyle = "#0a0a12";
-  ctx.globalAlpha = 0.85;
-  const panelW = Math.min(width * 0.6, 400);
-  const panelH = Math.min(height * 0.65, 320);
+  ctx.globalAlpha = 0.92;
+  const panelW = Math.min(width * 0.7, 440);
+  const panelH = Math.min(height * 0.7, 360);
   const px = Math.floor((width - panelW) / 2);
   const py = Math.floor((height - panelH) / 2);
   ctx.fillRect(px, py, panelW, panelH);
   ctx.restore();
 
-  // Border.
+  // Border — accent top, subtle sides/bottom.
   const theme = world.getRepoTheme();
+  const brdW = Math.max(1, zoom);
   ctx.fillStyle = theme.accent;
-  ctx.fillRect(px, py, panelW, Math.max(1, zoom));
-  ctx.fillRect(px, py + panelH - Math.max(1, zoom), panelW, Math.max(1, zoom));
-  ctx.fillRect(px, py, Math.max(1, zoom), panelH);
-  ctx.fillRect(px + panelW - Math.max(1, zoom), py, Math.max(1, zoom), panelH);
+  ctx.fillRect(px, py, panelW, brdW * 2); // thicker accent top
+  ctx.fillStyle = "#1a1a2e";
+  ctx.fillRect(px, py + panelH - brdW, panelW, brdW);
+  ctx.fillRect(px, py, brdW, panelH);
+  ctx.fillRect(px + panelW - brdW, py, brdW, panelH);
 
   // Header.
   ctx.fillStyle = theme.accent;
@@ -421,13 +462,18 @@ function drawExpandedPanel(rc: RenderContext): void {
   ctx.fillText(titles[panel] || panel.toUpperCase(), px + pad, py + pad + fontSize);
 
   // Close hint.
-  ctx.fillStyle = "#555566";
+  ctx.fillStyle = "#444458";
   ctx.font = `${smallFont}px ${font}`;
   ctx.textAlign = "right";
-  ctx.fillText("click to close", px + panelW - pad, py + pad + smallFont);
+  ctx.fillText("[click to close]", px + panelW - pad, py + pad + smallFont);
+
+  // Header separator line.
+  const sepY = py + pad + fontSize + Math.floor(pad * 0.6);
+  ctx.fillStyle = "#1a1a2e";
+  ctx.fillRect(px + pad, sepY, panelW - pad * 2, Math.max(1, Math.floor(zoom / 2)));
 
   // Content area.
-  const contentY = py + pad + fontSize + pad;
+  const contentY = sepY + pad;
   const contentH = panelH - pad * 2 - fontSize - pad;
   const lineH = Math.max(fontSize + zoom * 2, 14);
   ctx.textAlign = "left";
