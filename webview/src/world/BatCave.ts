@@ -10,6 +10,12 @@ import { Pathfinder, Rect } from "./Pathfinder";
 import { AgentMeta, UsageStats } from "../../../shared/types";
 import { bus } from "../systems/EventBus";
 import { AGENT_PERSONALITIES, AGENT_INTERACTIONS, CAVE_MILESTONES, AgentZone, BodyType } from "../data/agent-personalities";
+import {
+  Achievement, ACHIEVEMENTS, AchievementContext, UnlockedAchievement,
+  CaveDepthLayer, CAVE_DEPTHS,
+  SmartAlert, AlertSeverity,
+  FileNode,
+} from "../data/gamification";
 
 /** Per-agent session statistics for enterprise observability. */
 export interface AgentSessionStats {
@@ -195,7 +201,7 @@ export class BatCaveWorld {
   private otherSessions: { label: string; lastActive: number; isCurrent: boolean }[] = [];
 
   // Interactive dashboard — expanded panel.
-  private expandedPanel: "files" | "stats" | "agents" | "agent-detail" | "history" | "audit" | null = null;
+  private expandedPanel: "files" | "stats" | "agents" | "agent-detail" | "history" | "audit" | "achievements" | "workspace-map" | null = null;
   private selectedAgentId: string | null = null;
 
   // Session history (from extension globalState).
@@ -212,6 +218,22 @@ export class BatCaveWorld {
 
   // Replay mode.
   private replayMode = false;
+
+  // ── Gamification ─────────────────────────────────────
+  private unlockedAchievements: UnlockedAchievement[] = [];
+  private caveDepth = 1;
+  private sessionsUnderBudget = 0;
+  private totalSessionsCumulative = 0;
+
+  // ── Workspace Map ────────────────────────────────────
+  private fileNodes = new Map<string, FileNode>();
+  private static readonly MAX_FILE_NODES = 40;
+
+  // ── Smart Alerts ─────────────────────────────────────
+  private smartAlerts: SmartAlert[] = [];
+  private static readonly MAX_ALERTS = 10;
+  private alertSeq = 0;
+  private fileReadRepeatTracker = new Map<string, number>(); // path → consecutive reads without write
 
   // Cave evolution — milestone tracking.
   private caveLevel = 1;
@@ -530,8 +552,15 @@ export class BatCaveWorld {
         // Analytics: heatmap + breakdown + pace + evolution.
         this.recordToolForAnalytics(this.currentTool || "?");
         this.attributeToolToAgents(this.currentTool || "?", filePath || null);
+        if (filePath) this.trackFileNode(filePath, this.currentTool || "?");
+        this.detectSmartAlerts(this.currentTool || "?", filePath || null);
         this.totalToolsCumulative++;
         this.checkCaveEvolution();
+        // Gamification checks every 20 tools.
+        if (this.totalToolsCumulative % 20 === 0) {
+          this.checkAchievements();
+          this.checkCaveDepth();
+        }
         break;
       }
 
@@ -767,12 +796,12 @@ export class BatCaveWorld {
   }
 
   /** Currently expanded panel (null = none). */
-  getExpandedPanel(): "files" | "stats" | "agents" | "agent-detail" | "history" | "audit" | null {
+  getExpandedPanel(): "files" | "stats" | "agents" | "agent-detail" | "history" | "audit" | "achievements" | "workspace-map" | null {
     return this.expandedPanel;
   }
 
   /** Toggle or set expanded panel. */
-  setExpandedPanel(panel: "files" | "stats" | "agents" | "agent-detail" | "history" | "audit" | null): void {
+  setExpandedPanel(panel: "files" | "stats" | "agents" | "agent-detail" | "history" | "audit" | "achievements" | "workspace-map" | null): void {
     this.expandedPanel = this.expandedPanel === panel ? null : panel;
     if (panel !== "agent-detail") this.selectedAgentId = null;
   }
@@ -804,9 +833,15 @@ export class BatCaveWorld {
       }
       return;
     }
-    // Right screen (agents).
+    // Right screen (agents → achievements → workspace-map cycle).
     if (cx >= bcX + zoom + (screenW + zoom) * 2 && cx <= bcX + bcW - zoom && cy >= bcY && cy <= bcY + bcH) {
-      this.setExpandedPanel("agents");
+      if (this.expandedPanel === "agents") {
+        this.setExpandedPanel("achievements");
+      } else if (this.expandedPanel === "achievements") {
+        this.setExpandedPanel("workspace-map");
+      } else {
+        this.setExpandedPanel("agents");
+      }
       return;
     }
     // Click on an agent character → agent detail panel.
@@ -1025,6 +1060,195 @@ export class BatCaveWorld {
       .sort((a, b) => b.score - a.score);
     ranked.forEach((r, i) => { r.rank = i + 1; });
     return ranked;
+  }
+
+  // ── Achievement system ──────────────────────────────
+
+  /** Build context for achievement checks. */
+  private buildAchievementContext(): AchievementContext {
+    const stats = this.usageStats;
+    const cost = this.getSessionCost();
+    const pace = this.getPace();
+    const hour = new Date().getHours();
+    const allAgentIds = Array.from(this.agentStats.keys());
+    return {
+      sessionMessages: stats?.messagesThisSession ?? 0,
+      sessionToolCalls: stats?.toolCallsThisSession ?? 0,
+      sessionAgentsSpawned: stats?.agentsSpawnedThisSession ?? 0,
+      contextPeakPct: this.contextPeakPct,
+      costUsd: cost.costUsd,
+      costBudget: this.costBudgetUsd,
+      durationMs: Date.now() - (stats?.sessionStartedAt ?? Date.now()),
+      toolBreakdown: { ...this.toolBreakdown },
+      uniqueAgentIds: allAgentIds,
+      toolsPerMin: pace.current,
+      sessionsUnderBudget: this.sessionsUnderBudget,
+      totalToolsCumulative: this.totalToolsCumulative,
+      totalSessionsCumulative: this.totalSessionsCumulative,
+      isNightSession: hour >= 22 || hour < 5,
+      filesCount: this.fileNodes.size,
+    };
+  }
+
+  /** Check and unlock new achievements. */
+  checkAchievements(): UnlockedAchievement[] {
+    const ctx = this.buildAchievementContext();
+    const newlyUnlocked: UnlockedAchievement[] = [];
+    for (const a of ACHIEVEMENTS) {
+      if (this.unlockedAchievements.some(u => u.id === a.id)) continue;
+      if (a.check(ctx)) {
+        const unlocked: UnlockedAchievement = {
+          id: a.id, unlockedAt: Date.now(), sessionId: this.sessionId,
+        };
+        this.unlockedAchievements.push(unlocked);
+        newlyUnlocked.push(unlocked);
+        bus.emit("sound:play", { id: "agent-chime" });
+        bus.emit("particle:spawn", { preset: "agent-enter", x: this.worldWidth / 2, y: this.wallH + 20 });
+      }
+    }
+    return newlyUnlocked;
+  }
+
+  getUnlockedAchievements(): UnlockedAchievement[] {
+    return this.unlockedAchievements;
+  }
+
+  setUnlockedAchievements(list: UnlockedAchievement[]): void {
+    this.unlockedAchievements = list;
+  }
+
+  // ── Cave depth ─────────────────────────────────────
+
+  /** Check and update cave depth based on mastery gates. */
+  checkCaveDepth(): void {
+    const ctx = this.buildAchievementContext();
+    for (const layer of CAVE_DEPTHS) {
+      if (layer.depth > this.caveDepth && layer.check(ctx)) {
+        this.caveDepth = layer.depth;
+        bus.emit("sound:play", { id: "agent-chime" });
+        this.pushAlert("info", `Depth ${layer.depth}: ${layer.name}`, `Unlocked ${layer.requirement}`);
+      }
+    }
+  }
+
+  getCaveDepth(): number { return this.caveDepth; }
+  getCaveDepthLayer(): CaveDepthLayer { return CAVE_DEPTHS[this.caveDepth - 1] || CAVE_DEPTHS[0]; }
+
+  // ── Workspace Map ──────────────────────────────────
+
+  /** Track a file touch for the workspace map. */
+  private trackFileNode(filePath: string, toolName: string): void {
+    const parts = filePath.split("/");
+    const name = parts[parts.length - 1] || filePath;
+    const cat = this.categoriseTool(toolName) as "read" | "write" | "bash" | "other";
+    const existing = this.fileNodes.get(filePath);
+    if (existing) {
+      existing.hitCount++;
+      existing.lastTool = toolName;
+      existing.lastTimestamp = Date.now();
+      existing.category = cat === "agent" as string ? "other" : cat;
+    } else {
+      if (this.fileNodes.size >= BatCaveWorld.MAX_FILE_NODES) {
+        // Evict least recently used.
+        let oldestKey = "";
+        let oldestTs = Infinity;
+        for (const [k, v] of this.fileNodes) {
+          if (v.lastTimestamp < oldestTs) { oldestTs = v.lastTimestamp; oldestKey = k; }
+        }
+        if (oldestKey) this.fileNodes.delete(oldestKey);
+      }
+      this.fileNodes.set(filePath, {
+        path: filePath, name, hitCount: 1,
+        lastTool: toolName, lastTimestamp: Date.now(),
+        category: cat === "agent" as string ? "other" : cat,
+      });
+    }
+  }
+
+  getFileNodes(): FileNode[] {
+    return Array.from(this.fileNodes.values()).sort((a, b) => b.hitCount - a.hitCount);
+  }
+
+  getFileNodesHottest(): FileNode[] {
+    return this.getFileNodes().slice(0, 8);
+  }
+
+  // ── Smart Alerts ───────────────────────────────────
+
+  private pushAlert(severity: AlertSeverity, title: string, detail: string): void {
+    this.smartAlerts.push({
+      id: `alert_${this.alertSeq++}`,
+      severity, title, detail,
+      timestamp: Date.now(), dismissed: false,
+    });
+    if (this.smartAlerts.length > BatCaveWorld.MAX_ALERTS) {
+      this.smartAlerts.shift();
+    }
+  }
+
+  /** Detect patterns after each tool event. */
+  private detectSmartAlerts(toolName: string, filePath: string | null): void {
+    // Pattern 1: Read loop — same file read 5+ times without a write.
+    if (filePath) {
+      if (toolName === "Read" || toolName === "Grep" || toolName === "Glob") {
+        const count = (this.fileReadRepeatTracker.get(filePath) ?? 0) + 1;
+        this.fileReadRepeatTracker.set(filePath, count);
+        if (count === 5) {
+          const name = filePath.split("/").pop() || filePath;
+          this.pushAlert("warning", "Read Loop Detected", `${name} read ${count}x without write`);
+        }
+      } else if (toolName === "Edit" || toolName === "Write") {
+        this.fileReadRepeatTracker.delete(filePath);
+      }
+    }
+
+    // Pattern 2: Context pressure — over 80% with high tool rate.
+    const pct = this.usageStats?.contextFillPct ?? 0;
+    const pace = this.getPace();
+    if (pct >= 80 && pace.current > 5) {
+      const existing = this.smartAlerts.find(a => a.id.startsWith("ctx-pressure") && !a.dismissed);
+      if (!existing) {
+        const minsLeft = ((100 - pct) / pace.current).toFixed(1);
+        this.pushAlert("critical", "Context Pressure", `At ${pct}% — ~${minsLeft}min at current pace`);
+      }
+    }
+
+    // Pattern 3: Cost spike — over 50% of budget in under 5 minutes.
+    if (this.costBudgetUsd > 0) {
+      const cost = this.getSessionCost();
+      const elapsed = Date.now() - (this.usageStats?.sessionStartedAt ?? Date.now());
+      if (cost.costUsd > this.costBudgetUsd * 0.5 && elapsed < 300000) {
+        const existing = this.smartAlerts.find(a => a.title === "Cost Spike" && !a.dismissed);
+        if (!existing) {
+          this.pushAlert("warning", "Cost Spike", `50% of budget used in <5min`);
+        }
+      }
+    }
+  }
+
+  getSmartAlerts(): SmartAlert[] {
+    return this.smartAlerts.filter(a => !a.dismissed);
+  }
+
+  dismissAlert(id: string): void {
+    const a = this.smartAlerts.find(x => x.id === id);
+    if (a) a.dismissed = true;
+  }
+
+  // ── Team leaderboard data ──────────────────────────
+
+  /** Get data suitable for a team leaderboard display. */
+  getLeaderboardEntry(): { repo: string; user: string; score: number; tools: number; cost: number; achievements: number; depth: number } {
+    const cost = this.getSessionCost();
+    return {
+      repo: this.repoTheme.label || "unknown",
+      user: "local", // placeholder — team feature would override
+      score: Math.round(this.totalToolsCumulative * 0.5 + this.unlockedAchievements.length * 100 + this.caveDepth * 200),
+      tools: this.totalToolsCumulative,
+      cost: cost.costUsd,
+      achievements: this.unlockedAchievements.length,
+      depth: this.caveDepth,
+    };
   }
 
   /** Map agent body type to idle animation style. */
@@ -1426,6 +1650,10 @@ export class BatCaveWorld {
       totalToolsCumulative: this.totalToolsCumulative,
       caveLevel: this.caveLevel,
       lastMilestoneNotified: this.lastMilestoneNotified,
+      unlockedAchievements: this.unlockedAchievements,
+      caveDepth: this.caveDepth,
+      sessionsUnderBudget: this.sessionsUnderBudget,
+      totalSessionsCumulative: this.totalSessionsCumulative,
     };
   }
 
@@ -1438,6 +1666,18 @@ export class BatCaveWorld {
     }
     if (typeof state.lastMilestoneNotified === "number") {
       this.lastMilestoneNotified = state.lastMilestoneNotified;
+    }
+    if (Array.isArray(state.unlockedAchievements)) {
+      this.unlockedAchievements = state.unlockedAchievements as UnlockedAchievement[];
+    }
+    if (typeof state.caveDepth === "number") {
+      this.caveDepth = state.caveDepth;
+    }
+    if (typeof state.sessionsUnderBudget === "number") {
+      this.sessionsUnderBudget = state.sessionsUnderBudget;
+    }
+    if (typeof state.totalSessionsCumulative === "number") {
+      this.totalSessionsCumulative = state.totalSessionsCumulative;
     }
   }
 
