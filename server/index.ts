@@ -93,6 +93,13 @@ function handleMessage(clientId: string, ws: WebSocket, msg: ClientMessage): voi
 
   switch (msg.type) {
     case "auth": {
+      // Validate shared token.
+      if (TEAM_TOKEN && msg.token !== TEAM_TOKEN) {
+        send(ws, { type: "error", message: "Invalid team token" });
+        ws.close();
+        log(`Rejected ${msg.name}: invalid token`);
+        return;
+      }
       const member: TeamMember = {
         id: clientId,
         name: msg.name,
@@ -324,5 +331,11 @@ function startServer(port: number = DEFAULT_PORT): void {
   log(`${agents.size} agents in pool, waiting for connections...`);
 }
 
+const TEAM_TOKEN = process.env.BATCAVE_TOKEN || "";
 const port = parseInt(process.env.PORT || String(DEFAULT_PORT), 10);
+
+if (!TEAM_TOKEN) {
+  console.warn("[WARN] No BATCAVE_TOKEN set — server accepts all connections. Set BATCAVE_TOKEN env for production.");
+}
+
 startServer(port);

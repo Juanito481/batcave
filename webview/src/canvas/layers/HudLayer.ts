@@ -113,9 +113,22 @@ function drawSpeechBubbles(rc: RenderContext): void {
     drawBubble(ctx, alf.x, alf.y - zoom * 20, text, zoom, fontSize);
   }
 
+  // Pool agent data (from team server).
+  const poolAgents = world.getPoolAgents();
+
   for (const agent of agents) {
     if (!agent.visible) continue;
-    // Show agent-specific quip if available, otherwise "working..." when active.
+
+    // Pool agent task bubble — shows task + assignee from command server.
+    const poolData = poolAgents.get(agent.id);
+    if (poolData && poolData.task && (poolData.status === "working" || poolData.status === "assigned")) {
+      const taskLabel = poolData.task.length > 30 ? poolData.task.slice(0, 27) + "..." : poolData.task;
+      const assignLabel = poolData.assignedTo ? ` [${poolData.assignedTo}]` : "";
+      drawBubble(ctx, agent.x, agent.y - zoom * 18, taskLabel + assignLabel, zoom, fontSize);
+      continue;
+    }
+
+    // Regular quip or working indicator.
     const agentQuip = world.getAgentQuip(agent.id);
     if (agentQuip) {
       drawBubble(ctx, agent.x, agent.y - zoom * 18, agentQuip, zoom, fontSize);
@@ -671,17 +684,49 @@ function drawExpandedPanel(rc: RenderContext): void {
       ctx.fillStyle = isActive ? "#2ECC71" : "#E74C3C";
       ctx.fillText(isActive ? "ACTIVE" : "EXITED", px + panelW / 2, contentY + lineH * 0.7);
 
-      // Launch button (top-right of panel).
+      // Action buttons (top-right of panel).
+      const btnH = lineH * 0.9;
+      const btnW = zoom * 14;
+      const btnY = contentY - lineH * 0.2;
+
+      // LAUNCH button.
+      const launchBtnX = px + panelW - pad - btnW;
       ctx.fillStyle = "#1E7FD8";
-      const launchBtnX = px + panelW - pad - zoom * 16;
-      const launchBtnY = contentY - lineH * 0.2;
-      const launchBtnW = zoom * 14;
-      const launchBtnH = lineH * 0.9;
-      ctx.fillRect(launchBtnX, launchBtnY, launchBtnW, launchBtnH);
+      ctx.fillRect(launchBtnX, btnY, btnW, btnH);
       ctx.fillStyle = "#FFFFFF";
       ctx.font = `bold ${smallFont}px ${font}`;
       ctx.textAlign = "center";
-      ctx.fillText("LAUNCH", launchBtnX + launchBtnW / 2, launchBtnY + launchBtnH * 0.7);
+      ctx.fillText("LAUNCH", launchBtnX + btnW / 2, btnY + btnH * 0.7);
+
+      // ASSIGN button (only when team-connected + pool agent idle).
+      if (world.isTeamConnected()) {
+        const poolData = world.getPoolAgents().get(selectedId!);
+        const poolStatus = poolData?.status || "idle";
+        const assignBtnX = launchBtnX - btnW - zoom * 2;
+        ctx.fillStyle = poolStatus === "idle" ? "#2ECC71" : "#555566";
+        ctx.fillRect(assignBtnX, btnY, btnW, btnH);
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillText(poolStatus === "working" ? "BUSY" : "ASSIGN", assignBtnX + btnW / 2, btnY + btnH * 0.7);
+
+        // Pool status info below buttons.
+        if (poolData) {
+          ctx.textAlign = "left";
+          ctx.font = `${smallFont}px ${font}`;
+          const poolInfoY = btnY + btnH + zoom * 2;
+          if (poolData.task) {
+            ctx.fillStyle = "#F39C12";
+            ctx.fillText(`Task: ${poolData.task}`, px + pad, poolInfoY);
+          }
+          if (poolData.assignedTo) {
+            ctx.fillStyle = "#2ECC71";
+            ctx.fillText(`Assigned to: ${poolData.assignedTo}`, px + pad, poolInfoY + lineH * 0.8);
+          }
+          if (poolData.queue > 0) {
+            ctx.fillStyle = "#888899";
+            ctx.fillText(`Queue: ${poolData.queue} pending`, px + panelW / 2, poolInfoY);
+          }
+        }
+      }
       ctx.textAlign = "left";
 
       // Stats grid.
@@ -1024,6 +1069,36 @@ function drawExpandedPanel(rc: RenderContext): void {
       ctx.fillStyle = "#444458";
       ctx.fillText("No team data yet", px + pad, contentY + lineH * 0.7);
       ctx.fillText("Stats accumulate across sessions", px + pad, contentY + lineH * 1.7);
+    }
+
+    // Live team members (from command server).
+    if (world.isTeamConnected()) {
+      const members = world.getTeamMembers();
+      if (members.size > 0) {
+        const memY = py + panelH - pad - lineH * (members.size + 1);
+        if (memY > contentY) {
+          ctx.fillStyle = "#1a1a2e";
+          ctx.fillRect(px + pad, memY - lineH * 0.3, panelW - pad * 2, Math.max(1, zoom));
+          ctx.fillStyle = "#555566";
+          ctx.font = `bold ${smallFont}px ${font}`;
+          ctx.fillText("LIVE MEMBERS", px + pad, memY + lineH * 0.3);
+          ctx.font = `${smallFont}px ${font}`;
+          let mi = 0;
+          const statusColors: Record<string, string> = {
+            online: "#2ECC71", thinking: "#1E7FD8", writing: "#F39C12", idle: "#555566", offline: "#333344",
+          };
+          for (const [, m] of members) {
+            const my = memY + (mi + 1) * lineH;
+            ctx.fillStyle = statusColors[m.status] || "#555566";
+            ctx.fillRect(px + pad, my + lineH * 0.3, zoom, zoom);
+            ctx.fillStyle = "#AAAACC";
+            ctx.fillText(`${m.name}`, px + pad + zoom * 3, my + lineH * 0.7);
+            ctx.fillStyle = "#555566";
+            ctx.fillText(`${m.status} — ${m.repo}`, px + pad + zoom * 20, my + lineH * 0.7);
+            mi++;
+          }
+        }
+      }
     }
   }
 }

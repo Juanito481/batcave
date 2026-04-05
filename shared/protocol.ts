@@ -63,7 +63,7 @@ export interface TeamMember {
 // ── Client → Server Messages ────────────────────────────
 
 export type ClientMessage =
-  | { type: "auth"; name: string; role: MemberRole; repo: string }
+  | { type: "auth"; name: string; role: MemberRole; repo: string; token: string }
   | { type: "status_update"; status: TeamMember["status"]; cost: number; tools: number }
   | { type: "assign_agent"; agentId: string; task: string; assignTo: string; priority: QueuedTask["priority"] }
   | { type: "unassign_agent"; agentId: string }

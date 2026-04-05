@@ -96,6 +96,11 @@
           "type": "string",
           "default": "",
           "description": "Your display name in the team cave. Defaults to OS username."
+        },
+        "batcave.teamToken": {
+          "type": "string",
+          "default": "",
+          "description": "Shared secret token for team server authentication."
         }
       }
     }

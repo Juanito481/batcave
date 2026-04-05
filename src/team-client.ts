@@ -18,6 +18,7 @@ export class TeamClient {
   private name: string;
   private role: MemberRole;
   private repo: string;
+  private token: string;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private onMessage: (msg: ServerMessage) => void;
   private connected = false;
@@ -27,12 +28,14 @@ export class TeamClient {
     name: string,
     role: MemberRole,
     repo: string,
+    token: string,
     onMessage: (msg: ServerMessage) => void,
   ) {
     this.url = url;
     this.name = name;
     this.role = role;
     this.repo = repo;
+    this.token = token;
     this.onMessage = onMessage;
   }
 
@@ -45,7 +48,7 @@ export class TeamClient {
       this.ws!.on("open", () => {
         this.connected = true;
         console.log("[BatCave Team] Connected to command server");
-        this.send({ type: "auth", name: this.name, role: this.role, repo: this.repo });
+        this.send({ type: "auth", name: this.name, role: this.role, repo: this.repo, token: this.token });
       });
 
       this.ws!.on("message", (raw) => {

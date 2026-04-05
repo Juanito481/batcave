@@ -78,8 +78,9 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
     const role = config.get<string>("role", "member") as "master" | "member";
     const name = config.get<string>("memberName", "") || require("os").userInfo().username || "anonymous";
     const repo = vscode.workspace.workspaceFolders?.[0]?.name || "unknown";
+    const token = config.get<string>("teamToken", "");
 
-    this.teamClient = new TeamClient(serverUrl, name, role, repo, (msg) => {
+    this.teamClient = new TeamClient(serverUrl, name, role, repo, token, (msg) => {
       // Forward all server messages to webview as "team-server" command.
       if (this.view && this.webviewReady) {
         this.view.webview.postMessage({ command: "team-server", payload: msg });
@@ -169,6 +170,29 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
   }
 
   private handleEvent(event: BatCaveEvent): void {
+    // Forward state changes to team server.
+    if (this.teamClient?.isConnected()) {
+      const t = event.type;
+      if (t === "session_thinking" || t === "session_writing" || t === "session_idle") {
+        const statusMap: Record<string, string> = {
+          session_thinking: "thinking", session_writing: "writing", session_idle: "idle",
+        };
+        this.teamClient.sendStatusUpdate(
+          statusMap[t] as "thinking" | "writing" | "idle",
+          0, 0, // cost/tools updated via usage_update
+        );
+      } else if (t === "usage_update") {
+        const u = event as { type: string; toolCallsThisSession?: number };
+        this.teamClient.sendStatusUpdate("online", 0, (u as Record<string, unknown>).toolCallsThisSession as number || 0);
+      } else if (t === "agent_enter") {
+        const a = event as { agentId?: string };
+        if (a.agentId) this.teamClient.reportAgentStarted(a.agentId);
+      } else if (t === "agent_exit") {
+        const a = event as { agentId?: string };
+        if (a.agentId) this.teamClient.reportAgentFinished(a.agentId);
+      }
+    }
+
     if (this.webviewReady && this.view) {
       this.postEvent(event);
     } else {
