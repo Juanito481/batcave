@@ -504,6 +504,8 @@ function drawExpandedPanel(rc: RenderContext): void {
     audit: "AUDIT TRAIL",
     achievements: "ACHIEVEMENTS",
     "workspace-map": "WORKSPACE MAP",
+    workflows: "WORKFLOWS",
+    team: "TEAM DASHBOARD",
   };
   ctx.fillText(titles[panel] || panel.toUpperCase(), px + pad, py + pad + fontSize);
 
@@ -909,6 +911,119 @@ function drawExpandedPanel(rc: RenderContext): void {
     } else {
       ctx.fillStyle = "#444458";
       ctx.fillText("No files touched yet", px + pad, contentY + lineH * 0.7);
+    }
+  } else if (panel === "workflows") {
+    const workflows = world.getWorkflows();
+    const schedules = world.getSchedules();
+    ctx.font = `${smallFont}px ${font}`;
+
+    if (workflows.length > 0) {
+      ctx.fillStyle = "#555566";
+      ctx.fillText("AVAILABLE PIPELINES", px + pad, contentY + lineH * 0.5);
+
+      for (let i = 0; i < workflows.length; i++) {
+        const wy = contentY + (i + 1) * lineH;
+        if (wy > py + panelH - pad * 4) break;
+        const w = workflows[i];
+
+        // Run button.
+        ctx.fillStyle = "#1E7FD8";
+        ctx.fillRect(px + pad, wy + lineH * 0.15, zoom * 5, lineH * 0.7);
+        ctx.fillStyle = "#FFFFFF";
+        ctx.font = `bold ${Math.max(4, zoom * 2)}px ${font}`;
+        ctx.fillText("RUN", px + pad + zoom * 0.8, wy + lineH * 0.65);
+
+        // Workflow info.
+        ctx.font = `bold ${smallFont}px ${font}`;
+        ctx.fillStyle = "#CCCCDD";
+        ctx.fillText(`${w.emoji} ${w.name}`, px + pad + zoom * 7, wy + lineH * 0.5);
+        ctx.font = `${smallFont}px ${font}`;
+        ctx.fillStyle = "#666678";
+        ctx.fillText(`${w.steps} steps — ${w.description}`, px + pad + zoom * 7, wy + lineH * 0.9);
+      }
+
+      // Schedules section.
+      if (schedules.length > 0) {
+        const schedY = contentY + (workflows.length + 2) * lineH;
+        if (schedY < py + panelH - pad) {
+          ctx.fillStyle = "#1a1a2e";
+          ctx.fillRect(px + pad, schedY - lineH * 0.3, panelW - pad * 2, Math.max(1, zoom));
+          ctx.fillStyle = "#555566";
+          ctx.font = `bold ${smallFont}px ${font}`;
+          ctx.fillText("SCHEDULES", px + pad, schedY + lineH * 0.3);
+          ctx.font = `${smallFont}px ${font}`;
+          for (let i = 0; i < schedules.length; i++) {
+            const sy = schedY + (i + 1) * lineH;
+            if (sy > py + panelH - pad) break;
+            const s = schedules[i];
+            ctx.fillStyle = s.enabled ? "#2ECC71" : "#555566";
+            ctx.fillRect(px + pad, sy + lineH * 0.3, zoom, zoom);
+            ctx.fillStyle = s.enabled ? "#AAAACC" : "#555566";
+            ctx.fillText(`${s.cron}  ${s.description}`, px + pad + zoom * 3, sy + lineH * 0.7);
+          }
+        }
+      }
+    } else {
+      ctx.fillStyle = "#444458";
+      ctx.fillText("No workflows defined", px + pad, contentY + lineH * 0.7);
+      ctx.fillText("Add .batcave/workflows.json", px + pad, contentY + lineH * 1.7);
+    }
+  } else if (panel === "team") {
+    const leaderboard = world.getTeamLeaderboard();
+    const teamStats = world.getTeamStats();
+    ctx.font = `${smallFont}px ${font}`;
+
+    if (leaderboard.length > 0) {
+      // Header.
+      ctx.fillStyle = "#555566";
+      ctx.fillText("USER", px + pad, contentY + lineH * 0.5);
+      ctx.textAlign = "right";
+      ctx.fillText("SCORE", px + panelW * 0.45, contentY + lineH * 0.5);
+      ctx.fillText("TOOLS", px + panelW * 0.6, contentY + lineH * 0.5);
+      ctx.fillText("COST", px + panelW * 0.78, contentY + lineH * 0.5);
+      ctx.fillText("SESSIONS", px + panelW - pad, contentY + lineH * 0.5);
+      ctx.textAlign = "left";
+
+      for (let i = 0; i < leaderboard.length; i++) {
+        const ly = contentY + (i + 1) * lineH;
+        if (ly > py + panelH - pad * 3) break;
+        const e = leaderboard[i];
+
+        // Rank medal.
+        ctx.fillStyle = i === 0 ? "#FFD700" : i === 1 ? "#C0C0C0" : i === 2 ? "#CD7F32" : "#777790";
+        ctx.font = `bold ${smallFont}px ${font}`;
+        ctx.fillText(`#${i + 1} ${e.user}`, px + pad, ly + lineH * 0.7);
+
+        ctx.font = `${smallFont}px ${font}`;
+        ctx.textAlign = "right";
+        ctx.fillStyle = "#888899";
+        ctx.fillText(`${e.totalScore}`, px + panelW * 0.45, ly + lineH * 0.7);
+        ctx.fillText(`${e.totalTools}`, px + panelW * 0.6, ly + lineH * 0.7);
+        ctx.fillStyle = e.totalCost > 10 ? "#F39C12" : "#888899";
+        ctx.fillText(`$${e.totalCost.toFixed(2)}`, px + panelW * 0.78, ly + lineH * 0.7);
+        ctx.fillStyle = "#888899";
+        ctx.fillText(`${e.sessions}`, px + panelW - pad, ly + lineH * 0.7);
+        ctx.textAlign = "left";
+      }
+
+      // Totals.
+      const totY = contentY + (leaderboard.length + 2) * lineH;
+      if (totY < py + panelH - pad) {
+        const totalCost = teamStats.reduce((s, e) => s + e.cost, 0);
+        const totalTools = teamStats.reduce((s, e) => s + e.tools, 0);
+        ctx.fillStyle = "#1a1a2e";
+        ctx.fillRect(px + pad, totY - lineH * 0.3, panelW - pad * 2, Math.max(1, zoom));
+        ctx.fillStyle = theme.accent;
+        ctx.font = `bold ${smallFont}px ${font}`;
+        ctx.fillText(`TEAM TOTAL`, px + pad, totY + lineH * 0.3);
+        ctx.textAlign = "right";
+        ctx.fillText(`${totalTools} tools  $${totalCost.toFixed(2)}`, px + panelW - pad, totY + lineH * 0.3);
+        ctx.textAlign = "left";
+      }
+    } else {
+      ctx.fillStyle = "#444458";
+      ctx.fillText("No team data yet", px + pad, contentY + lineH * 0.7);
+      ctx.fillText("Stats accumulate across sessions", px + pad, contentY + lineH * 1.7);
     }
   }
 }

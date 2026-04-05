@@ -1,0 +1,70 @@
+{
+  "workflows": {
+    "security-audit": {
+      "name": "Security Audit",
+      "description": "Full security review pipeline",
+      "emoji": "🛡️",
+      "steps": [
+        { "agentId": "white-rook", "task": "Scan the codebase for security vulnerabilities. Focus on auth, input validation, and secrets exposure. Report findings." },
+        { "agentId": "black-rook", "task": "Based on the security scan results, attempt to exploit the top 3 findings. Prove they are real vulnerabilities." },
+        { "agentId": "bishop", "task": "Review the vulnerability report and exploitation results. Prioritize fixes by severity and effort." },
+        { "agentId": "pawn", "task": "Generate a security audit report summarizing all findings, exploitation results, and recommended fixes with priority." }
+      ]
+    },
+    "ship-feature": {
+      "name": "Ship Feature",
+      "description": "End-to-end feature delivery pipeline",
+      "emoji": "🚀",
+      "steps": [
+        { "agentId": "knight", "task": "Analyze the feature requirements and design the architecture. Define component boundaries and APIs." },
+        { "agentId": "cardinal", "task": "Write comprehensive tests for the designed architecture. Cover happy paths and edge cases." },
+        { "agentId": "chancellor", "task": "Verify the CI/CD pipeline is configured for the new components. Update deployment configs if needed." },
+        { "agentId": "ship", "task": "Create a clean commit with descriptive message and push to the feature branch." }
+      ]
+    },
+    "code-health": {
+      "name": "Code Health Check",
+      "description": "Tech debt and quality assessment",
+      "emoji": "🏥",
+      "steps": [
+        { "agentId": "black-bishop", "task": "Identify tech debt: deprecated patterns, dead code, unnecessary complexity. List everything that should be removed." },
+        { "agentId": "bishop", "task": "Review the tech debt findings. For each item, assess impact and suggest a concrete refactoring approach." },
+        { "agentId": "cardinal", "task": "Check test coverage for the areas identified as tech debt. Write missing tests before refactoring." },
+        { "agentId": "pawn", "task": "Generate a Code Health Report with findings, priorities, estimated effort, and recommended sprint allocation." }
+      ]
+    },
+    "chaos-test": {
+      "name": "Chaos Testing",
+      "description": "Edge case and resilience testing",
+      "emoji": "💥",
+      "steps": [
+        { "agentId": "black-knight", "task": "Find edge cases, race conditions, and failure modes. Test with null, undefined, NaN, empty strings, huge inputs." },
+        { "agentId": "cardinal", "task": "Write regression tests for every edge case found by the chaos engineer." },
+        { "agentId": "bishop", "task": "Review the chaos findings and tests. Ensure all critical paths are hardened." }
+      ]
+    },
+    "daily-standup": {
+      "name": "Daily Standup",
+      "description": "Automated morning status report",
+      "emoji": "☀️",
+      "steps": [
+        { "agentId": "scout", "task": "Check the current state of the repo: recent commits, open PRs, failing CI, pending reviews." },
+        { "agentId": "pawn", "task": "Generate a daily standup report: what was done yesterday, what's planned today, any blockers." }
+      ]
+    }
+  },
+  "schedules": {
+    "morning-standup": {
+      "workflow": "daily-standup",
+      "cron": "0 8 * * 1-5",
+      "description": "Run daily standup every weekday at 8am",
+      "enabled": true
+    },
+    "weekly-health": {
+      "workflow": "code-health",
+      "cron": "0 9 * * 1",
+      "description": "Code health check every Monday at 9am",
+      "enabled": false
+    }
+  }
+}

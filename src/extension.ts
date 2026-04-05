@@ -17,7 +17,43 @@ import { BatCaveEvent, AGENTS, ExtToWebviewMessage, WebviewToExtMessage, Session
 
 const VIEW_ID = "batcave.mainView";
 const SESSION_HISTORY_KEY = "batcave.sessionHistory";
+const TEAM_STATS_KEY = "batcave.teamStats";
 const MAX_STORED_SESSIONS = 50;
+
+/** Workflow step definition. */
+interface WorkflowStep {
+  agentId: string;
+  task: string;
+}
+
+/** Workflow definition from .batcave/workflows.json. */
+interface WorkflowDef {
+  name: string;
+  description: string;
+  emoji: string;
+  steps: WorkflowStep[];
+}
+
+/** Schedule definition. */
+interface ScheduleDef {
+  workflow: string;
+  cron: string;
+  description: string;
+  enabled: boolean;
+}
+
+/** Team stats entry — one per session push. */
+interface TeamStatsEntry {
+  user: string;
+  repo: string;
+  sessionId: string;
+  timestamp: number;
+  tools: number;
+  cost: number;
+  achievements: number;
+  depth: number;
+  score: number;
+}
 
 class BatCaveViewProvider implements vscode.WebviewViewProvider {
   private view?: vscode.WebviewView;
@@ -68,6 +104,14 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
         this.exportSessionData();
       } else if (msg.command === "launchAgent") {
         this.launchAgent(msg.agentId as string);
+      } else if (msg.command === "runWorkflow") {
+        this.runWorkflow(msg.workflowId as string);
+      } else if (msg.command === "pushTeamStats") {
+        this.pushTeamStats(msg.payload as TeamStatsEntry);
+      } else if (msg.command === "requestWorkflows") {
+        this.sendWorkflows();
+      } else if (msg.command === "requestTeamStats") {
+        this.sendTeamStats();
       }
     });
 
@@ -210,6 +254,114 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
       // No custom config or invalid — fall through to defaults.
     }
     return null;
+  }
+
+  // ── Workflow Runner ──────────────────────────────────
+
+  private async runWorkflow(workflowId: string): Promise<void> {
+    const workflows = this.loadWorkflows();
+    const workflow = workflows[workflowId];
+    if (!workflow) {
+      vscode.window.showWarningMessage(`Bat Cave: Unknown workflow "${workflowId}"`);
+      return;
+    }
+
+    const confirm = await vscode.window.showInformationMessage(
+      `${workflow.emoji} Run "${workflow.name}"? (${workflow.steps.length} steps)`,
+      "Run", "Cancel",
+    );
+    if (confirm !== "Run") return;
+
+    vscode.window.showInformationMessage(`${workflow.emoji} Starting: ${workflow.name}`);
+
+    // Execute steps sequentially — each opens a terminal.
+    for (let i = 0; i < workflow.steps.length; i++) {
+      const step = workflow.steps[i];
+      const meta = AGENTS[step.agentId];
+      const emoji = meta?.emoji || "🤖";
+      const name = meta?.name || step.agentId;
+      const prompt = this.buildAgentPrompt(step.agentId, meta || { name: step.agentId, emoji: "🤖", role: "agent" });
+
+      const terminal = vscode.window.createTerminal({
+        name: `${emoji} ${name} [${i + 1}/${workflow.steps.length}]`,
+        iconPath: new vscode.ThemeIcon("hubot"),
+      });
+      terminal.show();
+
+      const fullPrompt = `${prompt} Your specific task: ${step.task}`;
+      terminal.sendText(`claude --system-prompt "${fullPrompt.replace(/"/g, '\\"')}"`, true);
+
+      // Wait a moment between steps so they don't collide.
+      if (i < workflow.steps.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
+
+    vscode.window.showInformationMessage(
+      `${workflow.emoji} ${workflow.name}: all ${workflow.steps.length} agents launched.`,
+    );
+  }
+
+  private loadWorkflows(): Record<string, WorkflowDef> {
+    const folders = vscode.workspace.workspaceFolders;
+    if (!folders || folders.length === 0) return {};
+    const configPath = vscode.Uri.joinPath(folders[0].uri, ".batcave", "workflows.json");
+    try {
+      const fs = require("fs");
+      const content = fs.readFileSync(configPath.fsPath, "utf-8");
+      const config = JSON.parse(content);
+      return config.workflows || {};
+    } catch {
+      return {};
+    }
+  }
+
+  private loadSchedules(): Record<string, ScheduleDef> {
+    const folders = vscode.workspace.workspaceFolders;
+    if (!folders || folders.length === 0) return {};
+    const configPath = vscode.Uri.joinPath(folders[0].uri, ".batcave", "workflows.json");
+    try {
+      const fs = require("fs");
+      const content = fs.readFileSync(configPath.fsPath, "utf-8");
+      const config = JSON.parse(content);
+      return config.schedules || {};
+    } catch {
+      return {};
+    }
+  }
+
+  private sendWorkflows(): void {
+    if (!this.view || !this.webviewReady) return;
+    const workflows = this.loadWorkflows();
+    const schedules = this.loadSchedules();
+    this.view.webview.postMessage({
+      command: "workflows",
+      payload: { workflows, schedules },
+    });
+  }
+
+  // ── Team Stats ─────────────────────────────────────
+
+  private pushTeamStats(entry: TeamStatsEntry): void {
+    const history = this.globalState.get<TeamStatsEntry[]>(TEAM_STATS_KEY, []);
+    // Dedup by sessionId.
+    const idx = history.findIndex(e => e.sessionId === entry.sessionId);
+    if (idx >= 0) {
+      history[idx] = entry;
+    } else {
+      history.unshift(entry);
+    }
+    if (history.length > 200) history.length = 200;
+    this.globalState.update(TEAM_STATS_KEY, history);
+  }
+
+  private sendTeamStats(): void {
+    if (!this.view || !this.webviewReady) return;
+    const stats = this.globalState.get<TeamStatsEntry[]>(TEAM_STATS_KEY, []);
+    this.view.webview.postMessage({
+      command: "team-stats",
+      payload: { entries: stats },
+    });
   }
 
   // ── Cost budget ─────────────────────────────────────

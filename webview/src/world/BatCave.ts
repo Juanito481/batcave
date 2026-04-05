@@ -201,7 +201,7 @@ export class BatCaveWorld {
   private otherSessions: { label: string; lastActive: number; isCurrent: boolean }[] = [];
 
   // Interactive dashboard — expanded panel.
-  private expandedPanel: "files" | "stats" | "agents" | "agent-detail" | "history" | "audit" | "achievements" | "workspace-map" | null = null;
+  private expandedPanel: "files" | "stats" | "agents" | "agent-detail" | "history" | "audit" | "achievements" | "workspace-map" | "workflows" | "team" | null = null;
   private selectedAgentId: string | null = null;
 
   // Session history (from extension globalState).
@@ -228,6 +228,13 @@ export class BatCaveWorld {
   // ── Workspace Map ────────────────────────────────────
   private fileNodes = new Map<string, FileNode>();
   private static readonly MAX_FILE_NODES = 40;
+
+  // ── Workflows ─────────────────────────────────────
+  private workflows: Record<string, { name: string; emoji: string; description: string; steps: { agentId: string; task: string }[] }> = {};
+  private schedules: Record<string, { workflow: string; cron: string; description: string; enabled: boolean }> = {};
+
+  // ── Team Stats ───────────────────────────────────────
+  private teamStats: { user: string; repo: string; tools: number; cost: number; achievements: number; depth: number; score: number; timestamp: number }[] = [];
 
   // ── Smart Alerts ─────────────────────────────────────
   private smartAlerts: SmartAlert[] = [];
@@ -796,12 +803,12 @@ export class BatCaveWorld {
   }
 
   /** Currently expanded panel (null = none). */
-  getExpandedPanel(): "files" | "stats" | "agents" | "agent-detail" | "history" | "audit" | "achievements" | "workspace-map" | null {
+  getExpandedPanel(): "files" | "stats" | "agents" | "agent-detail" | "history" | "audit" | "achievements" | "workspace-map" | "workflows" | "team" | null {
     return this.expandedPanel;
   }
 
   /** Toggle or set expanded panel. */
-  setExpandedPanel(panel: "files" | "stats" | "agents" | "agent-detail" | "history" | "audit" | "achievements" | "workspace-map" | null): void {
+  setExpandedPanel(panel: "files" | "stats" | "agents" | "agent-detail" | "history" | "audit" | "achievements" | "workspace-map" | "workflows" | "team" | null): void {
     this.expandedPanel = this.expandedPanel === panel ? null : panel;
     if (panel !== "agent-detail") this.selectedAgentId = null;
   }
@@ -817,9 +824,15 @@ export class BatCaveWorld {
     const bcH = Math.floor(zt * 1.5);
     const screenW = Math.floor((bcW - zoom * 4) / 3);
 
-    // Left screen (files).
+    // Left screen (files → workflows → team cycle).
     if (cx >= bcX + zoom && cx <= bcX + zoom + screenW && cy >= bcY && cy <= bcY + bcH) {
-      this.setExpandedPanel("files");
+      if (this.expandedPanel === "files") {
+        this.setExpandedPanel("workflows");
+      } else if (this.expandedPanel === "workflows") {
+        this.setExpandedPanel("team");
+      } else {
+        this.setExpandedPanel("files");
+      }
       return;
     }
     // Center screen (stats → history → audit cycle).
@@ -998,6 +1011,53 @@ export class BatCaveWorld {
       agentSummaries,
       model: stats.activeModel,
     };
+  }
+
+  // ── Workflow & Team API ─────────────────────────────
+
+  setWorkflows(data: { workflows: Record<string, unknown>; schedules: Record<string, unknown> }): void {
+    this.workflows = data.workflows as typeof this.workflows;
+    this.schedules = data.schedules as typeof this.schedules;
+  }
+
+  getWorkflows(): { id: string; name: string; emoji: string; description: string; steps: number }[] {
+    return Object.entries(this.workflows).map(([id, w]) => ({
+      id, name: w.name, emoji: w.emoji, description: w.description, steps: w.steps.length,
+    }));
+  }
+
+  getSchedules(): { id: string; workflow: string; cron: string; description: string; enabled: boolean }[] {
+    return Object.entries(this.schedules).map(([id, s]) => ({ id, ...s }));
+  }
+
+  setTeamStats(entries: typeof this.teamStats): void {
+    this.teamStats = entries;
+  }
+
+  getTeamStats(): typeof this.teamStats {
+    return this.teamStats;
+  }
+
+  getTeamLeaderboard(): { user: string; totalScore: number; totalTools: number; totalCost: number; sessions: number }[] {
+    const byUser = new Map<string, { score: number; tools: number; cost: number; sessions: number }>();
+    for (const e of this.teamStats) {
+      const existing = byUser.get(e.user) || { score: 0, tools: 0, cost: 0, sessions: 0 };
+      existing.score += e.score;
+      existing.tools += e.tools;
+      existing.cost += e.cost;
+      existing.sessions++;
+      byUser.set(e.user, existing);
+    }
+    return Array.from(byUser.entries())
+      .map(([user, s]) => ({ user, totalScore: s.score, totalTools: s.tools, totalCost: s.cost, sessions: s.sessions }))
+      .sort((a, b) => b.totalScore - a.totalScore);
+  }
+
+  /** Callback for requesting workflow run. */
+  private _onRunWorkflow: ((workflowId: string) => void) | null = null;
+  setRunWorkflowCallback(cb: (workflowId: string) => void): void { this._onRunWorkflow = cb; }
+  requestRunWorkflow(workflowId: string): void {
+    if (this._onRunWorkflow) this._onRunWorkflow(workflowId);
   }
 
   /** Request agent launch from extension host. Callback set by App.tsx. */
