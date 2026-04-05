@@ -3,13 +3,39 @@
  * Receives events from the extension host, drives Character entities.
  */
 
-import { Character } from "../entities/Character";
+import { Character, IdleStyle } from "../entities/Character";
 import { Ambient } from "../entities/Ambient";
 import { generateAllSprites, SpriteSheet } from "../canvas/SpriteGenerator";
 import { Pathfinder, Rect } from "./Pathfinder";
 import { AgentMeta, UsageStats } from "../../../shared/types";
 import { bus } from "../systems/EventBus";
-import { AGENT_PERSONALITIES, AGENT_INTERACTIONS, CAVE_MILESTONES, AgentZone } from "../data/agent-personalities";
+import { AGENT_PERSONALITIES, AGENT_INTERACTIONS, CAVE_MILESTONES, AgentZone, BodyType } from "../data/agent-personalities";
+
+/** Per-agent session statistics for enterprise observability. */
+export interface AgentSessionStats {
+  agentId: string;
+  agentName: string;
+  emoji: string;
+  enterTime: number;       // timestamp of first enter
+  exitTime: number | null;  // null = still active
+  totalActiveMs: number;    // cumulative active duration
+  toolCount: number;        // tools used while this agent was active
+  toolBreakdown: { read: number; write: number; bash: number; web: number; other: number };
+  filesTouched: string[];   // unique file paths
+  invocations: number;      // how many times spawned this session
+}
+
+/** Audit trail entry — immutable record of an AI action. */
+export interface AuditEntry {
+  seq: number;              // monotonic sequence number
+  timestamp: number;
+  category: "tool" | "agent" | "state" | "git" | "system";
+  action: string;           // e.g. "tool_start", "agent_enter", "git_commit"
+  detail: string;           // human-readable detail
+  filePath?: string;        // file involved (if any)
+  agentId?: string;         // agent involved (if any)
+  toolName?: string;        // tool name (if tool event)
+}
 
 /** Repo-specific color themes for the cave environment. */
 export interface RepoTheme {
@@ -96,6 +122,15 @@ export class BatCaveWorld {
   private agentHistory: { id: string; name: string; emoji: string; action: "enter" | "exit"; timestamp: number }[] = [];
   private static readonly MAX_AGENT_HISTORY = 10;
 
+  // Per-agent stats — enterprise observability.
+  private agentStats = new Map<string, AgentSessionStats>();
+
+  // Cost estimation — token-based pricing.
+  private static readonly COST_PER_INPUT_TOKEN = 15 / 1_000_000;  // $15/M input tokens (Opus)
+  private static readonly COST_PER_OUTPUT_TOKEN = 75 / 1_000_000; // $75/M output tokens (Opus)
+  private static readonly EST_INPUT_RATIO = 0.7;  // ~70% of tokens are input (context, tools)
+  private static readonly EST_OUTPUT_RATIO = 0.3;  // ~30% are output (responses)
+
   // Git activity — for wall monitor.
   private gitLog: { type: "commit" | "push"; message: string; timestamp: number }[] = [];
   private static readonly MAX_GIT_LOG = 6;
@@ -103,7 +138,13 @@ export class BatCaveWorld {
   // Todo list — for whiteboard.
   private todoList: { content: string; status: "pending" | "in_progress" | "completed" }[] = [];
 
-  // Event log (for timeline).
+  // Audit trail — structured immutable log of all AI actions.
+  private auditTrail: AuditEntry[] = [];
+  private static readonly MAX_AUDIT_ENTRIES = 200;
+
+  private auditSeq = 0;
+
+  // Legacy event log (for timeline compatibility).
   private eventLog: { type: string; label: string; timestamp: number }[] = [];
 
   // Session analytics — heatmap, tool breakdown, pace.
@@ -154,7 +195,20 @@ export class BatCaveWorld {
   private otherSessions: { label: string; lastActive: number; isCurrent: boolean }[] = [];
 
   // Interactive dashboard — expanded panel.
-  private expandedPanel: "files" | "stats" | "agents" | null = null;
+  private expandedPanel: "files" | "stats" | "agents" | "agent-detail" | "history" | "audit" | null = null;
+  private selectedAgentId: string | null = null;
+
+  // Session history (from extension globalState).
+  private sessionHistory: import("../../../shared/types").SessionSummary[] = [];
+
+  // Cost budget.
+  private costBudgetUsd = 0;
+
+  // Session ID (unique per init).
+  private sessionId = `ses_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+  // Peak context tracking.
+  private contextPeakPct = 0;
 
   // Cave evolution — milestone tracking.
   private caveLevel = 1;
@@ -325,6 +379,7 @@ export class BatCaveWorld {
         this.alfredState = "thinking";
         this.alfred.setAction();
         this.resetIdleTimer();
+        this.audit("state", "session_thinking", "Claude is thinking");
         bus.emit("session:state", { state: "thinking" });
         bus.emit("particle:spawn", { preset: "think-pulse", x: this.alfred.x, y: this.alfred.y - 20 });
         break;
@@ -333,6 +388,7 @@ export class BatCaveWorld {
         this.alfredState = "writing";
         this.alfred.setAction();
         this.resetIdleTimer();
+        this.audit("state", "session_writing", "Claude is writing");
         bus.emit("session:state", { state: "writing" });
         bus.emit("particle:spawn", { preset: "write-glow", x: this.alfred.x, y: this.alfred.y - 10 });
         break;
@@ -340,6 +396,7 @@ export class BatCaveWorld {
       case "session_idle":
         this.alfredState = "idle";
         this.alfred.setIdle();
+        this.audit("state", "session_idle", "Claude is idle");
         bus.emit("session:state", { state: "idle" });
         break;
 
@@ -370,11 +427,14 @@ export class BatCaveWorld {
           slotX,
           this.worldHeight + 30 // Start off-screen below.
         );
+        char.setIdleStyle(this.getIdleStyleForAgent(agentId));
         char.enter(slotX, slotY);
         this.agents.set(agentId, char);
         this.logEvent("agent_enter", meta?.name || agentId);
+        this.audit("agent", "agent_enter", `${meta?.emoji || "?"} ${meta?.name || agentId} entered`, { agentId });
         this._agentPulseStart = Date.now();
         this.trackAgentHistory(agentId, meta?.name || agentId, meta?.emoji || "?", "enter");
+        this.trackAgentEnter(agentId, meta?.name || agentId, meta?.emoji || "?");
         bus.emit("agent:enter", { agentId, x: slotX, y: slotY });
         bus.emit("particle:spawn", { preset: "agent-enter", x: slotX, y: slotY });
         bus.emit("sound:play", { id: "agent-chime" });
@@ -390,7 +450,9 @@ export class BatCaveWorld {
         const char = this.agents.get(agentId);
         if (char) {
           this.logEvent("agent_exit", char.name);
+          this.audit("agent", "agent_exit", `${char.emoji} ${char.name} exited`, { agentId });
           this.trackAgentHistory(agentId, char.name, char.emoji, "exit");
+          this.trackAgentExit(agentId);
           bus.emit("agent:exit", { agentId, x: char.x, y: char.y });
           bus.emit("particle:spawn", { preset: "agent-exit", x: char.x, y: char.y });
           bus.emit("sound:play", { id: "agent-exit" });
@@ -425,6 +487,13 @@ export class BatCaveWorld {
         this.currentTool = (event.toolName as string) || null;
         this.currentToolTimer = 3000; // Show icon for 3s.
         this.logEvent("tool", this.currentTool || "?");
+        {
+          const fp = (event as Record<string, unknown>).filePath as string | undefined;
+          this.audit("tool", "tool_start", `${this.currentTool}${fp ? ` → ${fp.split("/").pop()}` : ""}`, {
+            toolName: this.currentTool || undefined,
+            filePath: fp || undefined,
+          });
+        }
 
         // Track file touched for Batcomputer screen.
         const filePath = (event as Record<string, unknown>).filePath as string | undefined;
@@ -450,6 +519,7 @@ export class BatCaveWorld {
         bus.emit("particle:spawn", { preset: "tool-spark", x: this.alfred.x, y: this.alfred.y - 16 });
         // Analytics: heatmap + breakdown + pace + evolution.
         this.recordToolForAnalytics(this.currentTool || "?");
+        this.attributeToolToAgents(this.currentTool || "?", filePath || null);
         this.totalToolsCumulative++;
         this.checkCaveEvolution();
         break;
@@ -469,18 +539,25 @@ export class BatCaveWorld {
           sessionStartedAt: event.sessionStartedAt as number,
           contextFillPct: event.contextFillPct as number,
         };
+        if (this.usageStats.contextFillPct > this.contextPeakPct) {
+          this.contextPeakPct = this.usageStats.contextFillPct;
+        }
         this.checkBatSignal();
         this.ambient.setContextPressure(this.usageStats.contextFillPct);
         break;
 
-      case "git_commit":
-        this.gitLog.push({ type: "commit", message: (event as Record<string, unknown>).message as string, timestamp: Date.now() });
+      case "git_commit": {
+        const msg = (event as Record<string, unknown>).message as string;
+        this.gitLog.push({ type: "commit", message: msg, timestamp: Date.now() });
         if (this.gitLog.length > BatCaveWorld.MAX_GIT_LOG) this.gitLog.shift();
+        this.audit("git", "git_commit", `commit: ${msg.slice(0, 60)}`);
         break;
+      }
 
       case "git_push":
         this.gitLog.push({ type: "push", message: "pushed to remote", timestamp: Date.now() });
         if (this.gitLog.length > BatCaveWorld.MAX_GIT_LOG) this.gitLog.shift();
+        this.audit("git", "git_push", "pushed to remote");
         break;
 
       case "todo_update": {
@@ -680,13 +757,14 @@ export class BatCaveWorld {
   }
 
   /** Currently expanded panel (null = none). */
-  getExpandedPanel(): "files" | "stats" | "agents" | null {
+  getExpandedPanel(): "files" | "stats" | "agents" | "agent-detail" | "history" | "audit" | null {
     return this.expandedPanel;
   }
 
   /** Toggle or set expanded panel. */
-  setExpandedPanel(panel: "files" | "stats" | "agents" | null): void {
+  setExpandedPanel(panel: "files" | "stats" | "agents" | "agent-detail" | "history" | "audit" | null): void {
     this.expandedPanel = this.expandedPanel === panel ? null : panel;
+    if (panel !== "agent-detail") this.selectedAgentId = null;
   }
 
   /** Handle click at canvas coordinates — hit test Batcomputer screens. */
@@ -705,9 +783,15 @@ export class BatCaveWorld {
       this.setExpandedPanel("files");
       return;
     }
-    // Center screen (stats).
+    // Center screen (stats → history → audit cycle).
     if (cx >= bcX + zoom + screenW + zoom && cx <= bcX + zoom + screenW * 2 + zoom && cy >= bcY && cy <= bcY + bcH) {
-      this.setExpandedPanel("stats");
+      if (this.expandedPanel === "stats") {
+        this.setExpandedPanel("history");
+      } else if (this.expandedPanel === "history") {
+        this.setExpandedPanel("audit");
+      } else {
+        this.setExpandedPanel("stats");
+      }
       return;
     }
     // Right screen (agents).
@@ -715,9 +799,23 @@ export class BatCaveWorld {
       this.setExpandedPanel("agents");
       return;
     }
+    // Click on an agent character → agent detail panel.
+    const hitSize = 16 * zoom; // sprite width scaled
+    for (const [agentId, agent] of this.agents) {
+      if (!agent.visible) continue;
+      const ax = agent.x - hitSize / 2;
+      const ay = agent.y - hitSize;
+      if (cx >= ax && cx <= ax + hitSize && cy >= ay && cy <= ay + hitSize) {
+        this.selectedAgentId = agentId;
+        this.expandedPanel = "agent-detail";
+        return;
+      }
+    }
+
     // Click elsewhere closes panel.
     if (this.expandedPanel) {
       this.expandedPanel = null;
+      this.selectedAgentId = null;
     }
   }
 
@@ -743,6 +841,190 @@ export class BatCaveWorld {
     const diff = currentRate - avg;
     const trend = diff > 1.5 ? "up" : diff < -1.5 ? "down" : "stable";
     return { avg: Math.round(avg * 10) / 10, current: Math.round(currentRate * 10) / 10, trend };
+  }
+
+  // ── Enterprise observability API ───────────────────────
+
+  /** Get stats for a specific agent. */
+  getAgentStats(agentId: string): AgentSessionStats | null {
+    return this.agentStats.get(agentId) || null;
+  }
+
+  /** Get stats for all agents that have appeared this session. */
+  getAllAgentStats(): AgentSessionStats[] {
+    return Array.from(this.agentStats.values())
+      .sort((a, b) => b.toolCount - a.toolCount);
+  }
+
+  /** Currently selected agent for detail panel. */
+  getSelectedAgentId(): string | null {
+    return this.selectedAgentId;
+  }
+
+  /** Estimated session cost based on token usage. */
+  getSessionCost(): { totalTokens: number; inputTokens: number; outputTokens: number; costUsd: number } {
+    const stats = this.usageStats;
+    const msgs = stats?.messagesThisSession ?? 0;
+    const tools = stats?.toolCallsThisSession ?? 0;
+    const totalTokens = msgs * 2000 + tools * 1500;
+    const inputTokens = Math.round(totalTokens * BatCaveWorld.EST_INPUT_RATIO);
+    const outputTokens = Math.round(totalTokens * BatCaveWorld.EST_OUTPUT_RATIO);
+    const costUsd = inputTokens * BatCaveWorld.COST_PER_INPUT_TOKEN
+                  + outputTokens * BatCaveWorld.COST_PER_OUTPUT_TOKEN;
+    return {
+      totalTokens,
+      inputTokens,
+      outputTokens,
+      costUsd: Math.round(costUsd * 100) / 100,
+    };
+  }
+
+  /** Set session history from extension host. */
+  setSessionHistory(sessions: import("../../../shared/types").SessionSummary[]): void {
+    this.sessionHistory = sessions;
+  }
+
+  /** Set cost budget from extension settings. */
+  setCostBudget(budgetUsd: number): void {
+    this.costBudgetUsd = budgetUsd;
+  }
+
+  /** Get cost budget. */
+  getCostBudget(): number {
+    return this.costBudgetUsd;
+  }
+
+  /** Is the current session over budget? */
+  isOverBudget(): boolean {
+    if (this.costBudgetUsd <= 0) return false;
+    return this.getSessionCost().costUsd >= this.costBudgetUsd;
+  }
+
+  /** Get session history for display. */
+  getSessionHistory(): import("../../../shared/types").SessionSummary[] {
+    return this.sessionHistory;
+  }
+
+  /** Generate a snapshot of the current session for persistence. */
+  getSessionSummary(): import("../../../shared/types").SessionSummary | null {
+    const stats = this.usageStats;
+    if (!stats) return null;
+    const cost = this.getSessionCost();
+    const agentSummaries = this.getAllAgentStats().map(a => ({
+      agentId: a.agentId,
+      agentName: a.agentName,
+      emoji: a.emoji,
+      invocations: a.invocations,
+      toolCount: a.toolCount,
+      filesTouched: a.filesTouched.length,
+      totalActiveMs: a.exitTime !== null ? a.totalActiveMs : a.totalActiveMs + Date.now() - a.enterTime,
+    }));
+    return {
+      id: this.sessionId,
+      repo: this.repoTheme.label || "unknown",
+      startedAt: stats.sessionStartedAt,
+      endedAt: Date.now(),
+      durationMs: Date.now() - stats.sessionStartedAt,
+      messages: stats.messagesThisSession,
+      toolCalls: stats.toolCallsThisSession,
+      agentsSpawned: stats.agentsSpawnedThisSession,
+      contextPeakPct: this.contextPeakPct,
+      estimatedTokens: cost.totalTokens,
+      estimatedCostUsd: cost.costUsd,
+      toolBreakdown: { ...this.toolBreakdown },
+      agentSummaries,
+      model: stats.activeModel,
+    };
+  }
+
+  /** Get efficiency metrics per agent — tools/min, files/tool ratio, ranked. */
+  getAgentEfficiency(): { agentId: string; name: string; emoji: string; toolsPerMin: number; filesPerTool: number; score: number; rank: number }[] {
+    const stats = this.getAllAgentStats();
+    const ranked = stats
+      .filter(s => s.totalActiveMs > 5000 || s.exitTime === null) // at least 5s active
+      .map(s => {
+        const activeMs = s.exitTime !== null ? s.totalActiveMs : s.totalActiveMs + Date.now() - s.enterTime;
+        const activeMins = Math.max(0.1, activeMs / 60000);
+        const toolsPerMin = Math.round((s.toolCount / activeMins) * 10) / 10;
+        const filesPerTool = s.toolCount > 0 ? Math.round((s.filesTouched.length / s.toolCount) * 100) / 100 : 0;
+        // Composite score: weighted blend of throughput and breadth.
+        const score = Math.round((toolsPerMin * 0.7 + filesPerTool * 30 * 0.3) * 10) / 10;
+        return { agentId: s.agentId, name: s.agentName, emoji: s.emoji, toolsPerMin, filesPerTool, score, rank: 0 };
+      })
+      .sort((a, b) => b.score - a.score);
+    ranked.forEach((r, i) => { r.rank = i + 1; });
+    return ranked;
+  }
+
+  /** Map agent body type to idle animation style. */
+  private getIdleStyleForAgent(agentId: string): IdleStyle {
+    const personality = AGENT_PERSONALITIES[agentId];
+    if (!personality) return "default";
+    const map: Partial<Record<BodyType, IdleStyle>> = {
+      caped: "sway",
+      robed: "sway",
+      armored: "stomp",
+      heavy: "stomp",
+      glitch: "twitch",
+      hooded: "float",
+      naval: "rigid",
+      standard: "rigid",
+      compact: "default",
+      coated: "default",
+      labcoat: "default",
+      geared: "default",
+    };
+    return map[personality.bodyType] || "default";
+  }
+
+  /** Track agent enter for per-agent stats. */
+  private trackAgentEnter(agentId: string, name: string, emoji: string): void {
+    const existing = this.agentStats.get(agentId);
+    if (existing) {
+      existing.enterTime = Date.now();
+      existing.exitTime = null;
+      existing.invocations++;
+    } else {
+      this.agentStats.set(agentId, {
+        agentId,
+        agentName: name,
+        emoji,
+        enterTime: Date.now(),
+        exitTime: null,
+        totalActiveMs: 0,
+        toolCount: 0,
+        toolBreakdown: { read: 0, write: 0, bash: 0, web: 0, other: 0 },
+        filesTouched: [],
+        invocations: 1,
+      });
+    }
+  }
+
+  /** Track agent exit — accumulate active duration. */
+  private trackAgentExit(agentId: string): void {
+    const s = this.agentStats.get(agentId);
+    if (s && s.exitTime === null) {
+      s.totalActiveMs += Date.now() - s.enterTime;
+      s.exitTime = Date.now();
+    }
+  }
+
+  /** Attribute a tool call to all currently active agents. */
+  private attributeToolToAgents(toolName: string, filePath: string | null): void {
+    const cat = this.categoriseTool(toolName) as "read" | "write" | "bash" | "web" | "other";
+    // Skip "agent" category (meta, not attributable).
+    const effectiveCat = cat === "agent" as string ? "other" : cat;
+    for (const [agentId] of this.agents) {
+      const s = this.agentStats.get(agentId);
+      if (!s || s.exitTime !== null) continue; // only active agents
+      s.toolCount++;
+      if (effectiveCat in s.toolBreakdown) {
+        s.toolBreakdown[effectiveCat as keyof typeof s.toolBreakdown]++;
+      }
+      if (filePath && !s.filesTouched.includes(filePath)) {
+        s.filesTouched.push(filePath);
+      }
+    }
   }
 
   // ── Per-agent idle behaviors ───────────────────────────
@@ -1090,10 +1372,34 @@ export class BatCaveWorld {
 
   private logEvent(type: string, label: string): void {
     this.eventLog.push({ type, label, timestamp: Date.now() });
-    // Keep max 64 entries.
     if (this.eventLog.length > 64) {
       this.eventLog.shift();
     }
+  }
+
+  /** Record an immutable audit trail entry. */
+  private audit(
+    category: AuditEntry["category"],
+    action: string,
+    detail: string,
+    extra?: { filePath?: string; agentId?: string; toolName?: string },
+  ): void {
+    this.auditTrail.push({
+      seq: this.auditSeq++,
+      timestamp: Date.now(),
+      category,
+      action,
+      detail,
+      ...extra,
+    });
+    if (this.auditTrail.length > BatCaveWorld.MAX_AUDIT_ENTRIES) {
+      this.auditTrail.shift();
+    }
+  }
+
+  /** Get the full audit trail. */
+  getAuditTrail(): readonly AuditEntry[] {
+    return this.auditTrail;
   }
 
   private recordToolForAnalytics(toolName: string): void {

@@ -51,6 +51,10 @@
       {
         "command": "batcave.toggleSound",
         "title": "Bat Cave: Toggle Sound"
+      },
+      {
+        "command": "batcave.exportSessions",
+        "title": "Bat Cave: Export Session History"
       }
     ],
     "configuration": {
@@ -67,6 +71,12 @@
           "minimum": 0,
           "maximum": 100,
           "description": "Sound volume (0-100)"
+        },
+        "batcave.costBudget": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "Session cost budget in USD (0 = no limit). Shows alert when exceeded."
         }
       }
     }

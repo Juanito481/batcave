@@ -16,6 +16,7 @@ import { AGENT_PERSONALITIES, BodyType } from "../data/agent-personalities";
 
 export interface SpriteSheet {
   canvas: OffscreenCanvas;
+  shadowCanvas: OffscreenCanvas;
   frameWidth: number;
   frameHeight: number;
   animations: Record<string, { row: number; frames: number; speed: number }>;
@@ -105,7 +106,7 @@ const PALETTES: Record<string, CharacterPalette> = {
   },
   "black-bishop": {
     skin: "#D0B090", hair: "#3A3A3A", shirt: "#404050",
-    pants: "#303040", accent: "#9B59B6", eyes: "#1a1a2e",
+    pants: "#303040", accent: "#9B59B6", eyes: "#9B59B6",
   },
   "black-knight": {
     skin: "#D0B090", hair: "#1A1A1A", shirt: "#333344",
@@ -165,7 +166,7 @@ const BODY_STANDARD = [
   "...STTTATTTTS...",
   "...STTTTTTTTS...",
   "...STTTTTTTTS...",
-  "....TTTTTTTT....",
+  "....TTAATTTT....",
   ".....TTTTTT.....",
   ".....PPPPPP.....",
   ".....PPPPPP.....",
@@ -180,13 +181,13 @@ const BODY_CAPED = [
   "....HSSEESSH....",
   "....HSSSSSSH....",
   ".....SSSSSS.....",
-  "......SSSS......",
+  "......SASS......",
   "...AAATTTTAAA...",
   "..AATTTTTTTTAA..",
   "..ASTTTTTTTTSA..",
-  "..ATTTTTTTTTA..",
-  "..ATTTTTTTTTA..",
-  "...ATTTTTTTTA...",
+  "..ATTTTTTTTTA...",
+  "..ATTTTTTTTTA...",
+  "...ATTAATTTTA...",
   "...AATTTTTTAA...",
   "...AAPPPPPPAA...",
   "...AAPPPPPPAA...",
@@ -201,12 +202,12 @@ const BODY_ROBED = [
   "....HSSEESSH....",
   "....HSSSSSSH....",
   ".....SSSSSS.....",
-  "......SSSS......",
+  "......SASS......",
   ".....AATTAA.....",
   "....TTTTTTTT....",
   "...STTTATTTTS...",
   "...STTTTTTTTS...",
-  "....TTTTTTTT....",
+  "....TTAATTTT....",
   "....TTTTTTTT....",
   "...TTTTTTTTTT...",
   "..TTTTTTTTTTTT..",
@@ -225,10 +226,10 @@ const BODY_ARMORED = [
   "......SSSS......",
   "....AATTTTAA....",
   "...TTTTTTTTTT...",
-  "..STTTTATTTTS...",
+  "..STTAAATTTTS...",
   "..STTTTTTTTTSA..",
   "..STTTTTTTTTSA..",
-  "...TTTTTTTTTT...",
+  "...TTAATTAATT...",
   "...TTTTTTTTTT...",
   "....PPPPPPPP....",
   "....PPPPPPPP....",
@@ -247,10 +248,10 @@ const BODY_COATED = [
   ".....AATTAA.....",
   "....TTTTTTTT....",
   "...STTTATTTTS...",
-  "...STTTTTTTTS...",
+  "...STTATTTATS...",
   "...STTTTTTTTS...",
   "....TTTTTTTT....",
-  "....TTTTTTTT....",
+  "....TAATTTTT....",
   "....TTTTTTTT....",
   "....TT.PP.TT....",
 ];
@@ -265,7 +266,7 @@ const BODY_HOODED = [
   "....HSSSSSSH....",
   ".....SSSSSS.....",
   "......SSSS......",
-  ".....TTTTTT.....",
+  ".....ATTTTTA....",
   "....TTTTTTTT....",
   "...HTTTATTTTH...",
   "...HTTTTTTTTH...",
@@ -288,10 +289,10 @@ const BODY_HEAVY = [
   "......SSSS......",
   "...AAATTTTAAA...",
   "..TTTTTTTTTTTT..",
-  ".STTTTTATTTTTS..",
+  ".SATTTTATTTTAS..",
   ".STTTTTTTTTTTS..",
   "..STTTTTTTTTTS..",
-  "..TTTTTTTTTTTT..",
+  "..TTTTAATTTTTT..",
   "...TTTTTTTTTT...",
   "....PPPPPPPP....",
   "....PPPPPPPP....",
@@ -307,12 +308,12 @@ const BODY_GLITCH = [
   "....HSSSSSSH....",
   ".....SSSSSS.....",
   "......SSSS......",
-  ".....TATTAA.....",
+  "....ATATTAA.....",
   "...TTTTTTTTT....",
-  "..STTTATTTTS....",
+  "..SATTATTTTS....",
   "...STTTTTTTTS...",
-  "..STTTTTTTTS....",
-  "...TTTTTTTTT....",
+  "..STTTTTATTS....",
+  "...TTATTTTTTT...",
   "....TTTTTTT.....",
   "....PPPPPPP.....",
   ".....PPPPPP.....",
@@ -331,7 +332,7 @@ const BODY_LABCOAT = [
   ".....AATTAA.....",
   "....TTTTTTTT....",
   "...STTTATTTTS...",
-  "...STTTTTTTTS...",
+  "...STTATTTATS...",
   "...STTTTTTTTS...",
   "....TTTTTTTT....",
   "....TTAATTTT....",
@@ -354,7 +355,7 @@ const BODY_GEARED = [
   "...SATTATTTTS...",
   "...STTTATTATS...",
   "...STTTTTTTTS...",
-  "....TTAATTTT....",
+  "....TAATAATT....",
   ".....TTTTTT.....",
   ".....PPPPPP.....",
   ".....PPPPPP.....",
@@ -370,7 +371,7 @@ const BODY_COMPACT = [
   "....HSSEESSH....",
   "....HSSSSSSH....",
   ".....SSSSSS.....",
-  "......SSSS......",
+  "......AASS......",
   ".....AATTAA.....",
   "....TTTTTTTT....",
   "...STTTTTTTTS...",
@@ -394,9 +395,9 @@ const BODY_NAVAL = [
   "......SSSS......",
   "....AATTTTAA....",
   "...TTTTTTTTTT...",
-  "..STTTTATTTTTS..",
+  "..STTAATTTTTTS..",
   "..STTTTATTTTS...",
-  "..STTTTATTTTTS..",
+  "..STTTTATTTTS...",
   "...TTTTTTTTTT...",
   "....TTTTTTTT....",
   "....PPPPPPPP....",
@@ -815,8 +816,17 @@ export function generateSpriteSheet(characterId: string): SpriteSheet {
     }
   }
 
+  // Generate shadow sheet: same layout, all opaque pixels → single dark color.
+  const shadowCanvas = new OffscreenCanvas(canvas.width, canvas.height);
+  const shadowCtx = shadowCanvas.getContext("2d")!;
+  shadowCtx.drawImage(canvas, 0, 0);
+  shadowCtx.globalCompositeOperation = "source-in";
+  shadowCtx.fillStyle = "#06040c";
+  shadowCtx.fillRect(0, 0, shadowCanvas.width, shadowCanvas.height);
+
   return {
     canvas,
+    shadowCanvas,
     frameWidth: FW,
     frameHeight: FH,
     animations: {

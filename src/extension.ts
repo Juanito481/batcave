@@ -13,17 +13,21 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import { ActivityMonitor } from "./activity-monitor";
-import { BatCaveEvent, AGENTS, ExtToWebviewMessage, WebviewToExtMessage } from "./types";
+import { BatCaveEvent, AGENTS, ExtToWebviewMessage, WebviewToExtMessage, SessionSummary } from "./types";
 
 const VIEW_ID = "batcave.mainView";
+const SESSION_HISTORY_KEY = "batcave.sessionHistory";
+const MAX_STORED_SESSIONS = 50;
 
 class BatCaveViewProvider implements vscode.WebviewViewProvider {
   private view?: vscode.WebviewView;
   private webviewReady = false;
   private monitor: ActivityMonitor;
   private eventQueue: BatCaveEvent[] = [];
+  private globalState: vscode.Memento;
 
-  constructor(private readonly extensionUri: vscode.Uri) {
+  constructor(private readonly extensionUri: vscode.Uri, globalState: vscode.Memento) {
+    this.globalState = globalState;
     this.monitor = new ActivityMonitor((event) => this.handleEvent(event));
   }
 
@@ -50,12 +54,18 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
         this.webviewReady = true;
         // Send config + any queued events.
         this.sendConfig();
+        this.sendSessionHistory();
+        this.sendCostBudget();
         for (const event of this.eventQueue) {
           this.postEvent(event);
         }
         this.eventQueue = [];
       } else if (msg.command === "toggleSound") {
         this.toggleSound();
+      } else if (msg.command === "saveSession") {
+        this.saveSession(msg.payload as SessionSummary);
+      } else if (msg.command === "exportSession") {
+        this.exportSessionData();
       }
     });
 
@@ -114,6 +124,70 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
     });
   }
 
+  // ── Session persistence ──────────────────────────────
+
+  private saveSession(summary: SessionSummary): void {
+    const history = this.getStoredHistory();
+    // Avoid duplicates by session ID.
+    const idx = history.findIndex(s => s.id === summary.id);
+    if (idx >= 0) {
+      history[idx] = summary; // Update existing.
+    } else {
+      history.unshift(summary); // Prepend new.
+    }
+    // Cap stored sessions.
+    if (history.length > MAX_STORED_SESSIONS) {
+      history.length = MAX_STORED_SESSIONS;
+    }
+    this.globalState.update(SESSION_HISTORY_KEY, history);
+  }
+
+  private getStoredHistory(): SessionSummary[] {
+    return this.globalState.get<SessionSummary[]>(SESSION_HISTORY_KEY, []);
+  }
+
+  private sendSessionHistory(): void {
+    if (!this.view || !this.webviewReady) return;
+    this.view.webview.postMessage({
+      command: "session-history",
+      payload: { sessions: this.getStoredHistory() },
+    });
+  }
+
+  /** Called from the export command — runs export directly since we own the data. */
+  triggerExport(): void {
+    this.exportSessionData();
+  }
+
+  // ── Cost budget ─────────────────────────────────────
+
+  sendCostBudget(): void {
+    if (!this.view || !this.webviewReady) return;
+    const config = vscode.workspace.getConfiguration("batcave");
+    this.view.webview.postMessage({
+      command: "cost-budget",
+      payload: { budgetUsd: config.get<number>("costBudget", 0) },
+    });
+  }
+
+  // ── Export ──────────────────────────────────────────
+
+  private async exportSessionData(): Promise<void> {
+    const history = this.getStoredHistory();
+    if (history.length === 0) {
+      vscode.window.showInformationMessage("Bat Cave: No session data to export.");
+      return;
+    }
+    const uri = await vscode.window.showSaveDialog({
+      defaultUri: vscode.Uri.file(`batcave-sessions-${Date.now()}.json`),
+      filters: { JSON: ["json"] },
+    });
+    if (!uri) return;
+    const data = JSON.stringify(history, null, 2);
+    await vscode.workspace.fs.writeFile(uri, Buffer.from(data, "utf-8"));
+    vscode.window.showInformationMessage(`Bat Cave: Exported ${history.length} sessions.`);
+  }
+
   private sendConfig(): void {
     const workspaceName =
       vscode.workspace.workspaceFolders?.[0]?.name || "unknown";
@@ -169,7 +243,7 @@ function getNonce(): string {
 }
 
 export function activate(context: vscode.ExtensionContext): void {
-  const provider = new BatCaveViewProvider(context.extensionUri);
+  const provider = new BatCaveViewProvider(context.extensionUri, context.globalState);
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(VIEW_ID, provider)
@@ -193,11 +267,19 @@ export function activate(context: vscode.ExtensionContext): void {
     })
   );
 
+  context.subscriptions.push(
+    vscode.commands.registerCommand("batcave.exportSessions", () => {
+      // Trigger export via webview message flow (webview has the current session data).
+      provider.triggerExport();
+    })
+  );
+
   // Forward config changes to webview.
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration("batcave")) {
         provider.sendSoundSettings();
+        provider.sendCostBudget();
       }
     })
   );
