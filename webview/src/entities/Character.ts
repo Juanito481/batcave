@@ -298,11 +298,21 @@ export class Character {
       ctx.drawImage(this.sprite.canvas, sx, sy, sw, sh, dx, dy, dw, dh);
     }
 
-    // Name label.
-    ctx.fillStyle = "#8888AA";
-    ctx.font = `${Math.max(8, zoom * 3.5)}px "DM Mono", monospace`;
+    // Name label with background pill for readability.
+    const labelFont = Math.max(8, zoom * 3.5);
+    ctx.font = `${labelFont}px "DM Mono", monospace`;
     ctx.textAlign = "center";
-    ctx.fillText(this.name, this.x, this.y + zoom * 4);
+    const labelW = ctx.measureText(this.name).width;
+    const labelPad = zoom * 1.5;
+    const labelX = this.x - labelW / 2 - labelPad;
+    const labelY = this.y + zoom * 2;
+    ctx.save();
+    ctx.fillStyle = "#06060c";
+    ctx.globalAlpha = 0.7 * this.opacity;
+    ctx.fillRect(labelX, labelY, labelW + labelPad * 2, labelFont + labelPad);
+    ctx.restore();
+    ctx.fillStyle = "#9999BB";
+    ctx.fillText(this.name, this.x, labelY + labelFont);
 
     ctx.restore();
   }
