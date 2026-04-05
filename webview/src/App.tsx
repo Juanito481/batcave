@@ -157,6 +157,11 @@ export function App() {
       }
     }, 10000);
 
+    // Wire agent launcher.
+    world.setLaunchAgentCallback((agentId: string) => {
+      vscode?.postMessage({ command: "launchAgent", agentId });
+    });
+
     // Tell the extension we're ready.
     vscode?.postMessage({ command: "ready" });
 

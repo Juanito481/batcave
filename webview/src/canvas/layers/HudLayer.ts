@@ -669,6 +669,19 @@ function drawExpandedPanel(rc: RenderContext): void {
       ctx.fillStyle = isActive ? "#2ECC71" : "#E74C3C";
       ctx.fillText(isActive ? "ACTIVE" : "EXITED", px + panelW / 2, contentY + lineH * 0.7);
 
+      // Launch button (top-right of panel).
+      ctx.fillStyle = "#1E7FD8";
+      const launchBtnX = px + panelW - pad - zoom * 16;
+      const launchBtnY = contentY - lineH * 0.2;
+      const launchBtnW = zoom * 14;
+      const launchBtnH = lineH * 0.9;
+      ctx.fillRect(launchBtnX, launchBtnY, launchBtnW, launchBtnH);
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = `bold ${smallFont}px ${font}`;
+      ctx.textAlign = "center";
+      ctx.fillText("LAUNCH", launchBtnX + launchBtnW / 2, launchBtnY + launchBtnH * 0.7);
+      ctx.textAlign = "left";
+
       // Stats grid.
       ctx.font = `${fontSize}px ${font}`;
       const grid = [

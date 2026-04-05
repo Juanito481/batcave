@@ -844,6 +844,24 @@ export class BatCaveWorld {
       }
       return;
     }
+    // Click on LAUNCH button in agent-detail panel.
+    if (this.expandedPanel === "agent-detail" && this.selectedAgentId) {
+      const panelW = Math.min(this.worldWidth * 0.7, 440);
+      const panelH = Math.min(this.worldHeight * 0.7, 360);
+      const panelX = Math.floor((this.worldWidth - panelW) / 2);
+      const panelY = Math.floor((this.worldHeight - panelH) / 2);
+      const pad = zoom * 4;
+      const fontSize = Math.max(7, zoom * 3);
+      const launchBtnX = panelX + panelW - pad - zoom * 16;
+      const launchBtnY = panelY + pad + fontSize + Math.floor(pad * 0.6) + pad;
+      const launchBtnW = zoom * 14;
+      const launchBtnH = Math.max(fontSize + zoom * 2, 14) * 0.9;
+      if (cx >= launchBtnX && cx <= launchBtnX + launchBtnW && cy >= launchBtnY && cy <= launchBtnY + launchBtnH) {
+        this.requestLaunchAgent(this.selectedAgentId);
+        return;
+      }
+    }
+
     // Click on an agent character → agent detail panel.
     const hitSize = 16 * zoom; // sprite width scaled
     for (const [agentId, agent] of this.agents) {
@@ -980,6 +998,13 @@ export class BatCaveWorld {
       agentSummaries,
       model: stats.activeModel,
     };
+  }
+
+  /** Request agent launch from extension host. Callback set by App.tsx. */
+  private _onLaunchAgent: ((agentId: string) => void) | null = null;
+  setLaunchAgentCallback(cb: (agentId: string) => void): void { this._onLaunchAgent = cb; }
+  requestLaunchAgent(agentId: string): void {
+    if (this._onLaunchAgent) this._onLaunchAgent(agentId);
   }
 
   /** Enter replay mode — world stops processing live events. */

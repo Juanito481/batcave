@@ -66,6 +66,8 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
         this.saveSession(msg.payload as SessionSummary);
       } else if (msg.command === "exportSession") {
         this.exportSessionData();
+      } else if (msg.command === "launchAgent") {
+        this.launchAgent(msg.agentId as string);
       }
     });
 
@@ -157,6 +159,57 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
   /** Called from the export command — runs export directly since we own the data. */
   triggerExport(): void {
     this.exportSessionData();
+  }
+
+  // ── Agent Launcher ──────────────────────────────────
+
+  private launchAgent(agentId: string): void {
+    const meta = AGENTS[agentId];
+    if (!meta) {
+      vscode.window.showWarningMessage(`Bat Cave: Unknown agent "${agentId}"`);
+      return;
+    }
+
+    // Build a system prompt that gives Claude the agent's persona.
+    const prompt = this.buildAgentPrompt(agentId, meta);
+
+    // Open a new terminal with claude invoked with the agent prompt.
+    const terminal = vscode.window.createTerminal({
+      name: `${meta.emoji} ${meta.name}`,
+      iconPath: new vscode.ThemeIcon("hubot"),
+    });
+    terminal.show();
+    // Use claude with --print for inline mode, or just start an interactive session with context.
+    terminal.sendText(`claude --system-prompt "${prompt.replace(/"/g, '\\"')}"`, true);
+
+    vscode.window.showInformationMessage(`Bat Cave: Launched ${meta.emoji} ${meta.name} (${meta.role})`);
+  }
+
+  private buildAgentPrompt(agentId: string, meta: { name: string; emoji: string; role: string }): string {
+    // Load custom agent config if available.
+    const customPrompt = this.getCustomAgentPrompt(agentId);
+    if (customPrompt) return customPrompt;
+
+    // Default persona prompt.
+    return `You are ${meta.name} (${meta.emoji}), a specialized AI agent. Your role: ${meta.role}. Stay focused on your specialty. Be concise and expert.`;
+  }
+
+  private getCustomAgentPrompt(agentId: string): string | null {
+    // Check for .batcave/agents.json in workspace root.
+    const folders = vscode.workspace.workspaceFolders;
+    if (!folders || folders.length === 0) return null;
+
+    const configPath = vscode.Uri.joinPath(folders[0].uri, ".batcave", "agents.json");
+    try {
+      const fs = require("fs");
+      const content = fs.readFileSync(configPath.fsPath, "utf-8");
+      const config = JSON.parse(content);
+      const agentConfig = config.agents?.[agentId];
+      if (agentConfig?.systemPrompt) return agentConfig.systemPrompt;
+    } catch {
+      // No custom config or invalid — fall through to defaults.
+    }
+    return null;
   }
 
   // ── Cost budget ─────────────────────────────────────
