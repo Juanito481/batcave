@@ -1,5 +1,6 @@
 import { darken, lighten } from "../../helpers/color";
 import { RenderContext, P, seed, outlineRect } from "./render-context";
+import { ACHIEVEMENTS } from "../../data/gamification";
 
 // ── Batcomputer ────────────────────────────────────────
 
@@ -910,6 +911,12 @@ export function drawAllFurniture(rc: RenderContext): void {
 
   // Cave evolution decorations.
   drawEvolutionDecorations(ctx, zoom, zt, wallH, width, height, now, world);
+
+  // Achievement trophy case.
+  drawTrophyCase(ctx, zoom, zt, wallH, width, now, world);
+
+  // Workspace file heat nodes on floor.
+  drawFileHeatNodes(ctx, zoom, wallH, width, height, world);
 }
 
 // ── Cave Evolution Decorations ────────────────────────
@@ -1007,5 +1014,145 @@ function drawEvolutionDecorations(
     ctx.font = `${smallFont}px ${font}`;
     ctx.textAlign = "left";
     ctx.fillText(`LV${level} ${world.getCaveLevelName()}`, zoom * 3, height - zoom * 3);
+  }
+}
+
+// ── Achievement Trophy Case ─────────────────────────────
+
+const TIER_COLORS: Record<string, string> = {
+  bronze: "#CD7F32", silver: "#C0C0C0", gold: "#FFD700", legendary: "#E74C3C",
+};
+
+const ICON_PIXELS: Record<string, number[][]> = {
+  crystal: [[1,0],[0,1],[2,1],[1,2],[0,2],[2,2],[1,3]],
+  chess:   [[0,0],[2,0],[0,1],[1,1],[2,1],[1,2],[0,3],[1,3],[2,3]],
+  owl:     [[0,0],[2,0],[0,1],[1,1],[2,1],[0,2],[2,2],[1,3]],
+  hawk:    [[1,0],[0,1],[1,1],[2,1],[0,2],[2,2],[0,3],[2,3]],
+  bolt:    [[1,0],[2,0],[0,1],[1,1],[1,2],[2,2],[0,3],[1,3]],
+  scroll:  [[0,0],[1,0],[2,0],[0,1],[0,2],[1,2],[2,2],[2,3]],
+  gem:     [[1,0],[0,1],[2,1],[0,2],[2,2],[1,3]],
+  crown:   [[0,0],[2,0],[0,1],[1,1],[2,1],[0,2],[1,2],[2,2]],
+  shield:  [[0,0],[1,0],[2,0],[0,1],[2,1],[0,2],[2,2],[1,3]],
+  flame:   [[1,0],[0,1],[1,1],[2,1],[0,2],[1,2],[2,2],[1,3]],
+};
+
+function drawTrophyCase(
+  ctx: CanvasRenderingContext2D,
+  zoom: number, zt: number, wallH: number,
+  width: number, now: number,
+  world: RenderContext["world"],
+): void {
+  const unlocked = world.getUnlockedAchievements();
+  if (unlocked.length === 0) return;
+
+  const caseX = width - zt * 3;
+  const caseY = Math.floor(wallH * 0.25);
+  const slotSize = zoom * 5;
+  const cols = 3;
+  const rows = Math.ceil(ACHIEVEMENTS.length / cols);
+  const caseW = cols * slotSize + zoom * 2;
+  const caseH = rows * slotSize + zoom * 4;
+
+  // Glass case background.
+  ctx.save();
+  ctx.fillStyle = "#0a0a18";
+  ctx.globalAlpha = 0.85;
+  ctx.fillRect(caseX, caseY, caseW, caseH);
+  ctx.restore();
+
+  // Case border.
+  const brd = Math.max(1, Math.floor(zoom / 2));
+  ctx.fillStyle = "#2a2a3e";
+  ctx.fillRect(caseX, caseY, caseW, brd);
+  ctx.fillRect(caseX, caseY + caseH - brd, caseW, brd);
+  ctx.fillRect(caseX, caseY, brd, caseH);
+  ctx.fillRect(caseX + caseW - brd, caseY, brd, caseH);
+
+  // "TROPHIES" label.
+  ctx.fillStyle = "#444458";
+  ctx.font = `${Math.max(4, zoom * 1.8)}px "DM Mono", monospace`;
+  ctx.textAlign = "center";
+  ctx.fillText("TROPHIES", caseX + caseW / 2, caseY + zoom * 2);
+
+  for (let i = 0; i < ACHIEVEMENTS.length; i++) {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const sx = caseX + zoom + col * slotSize;
+    const sy = caseY + zoom * 3 + row * slotSize;
+    const a = ACHIEVEMENTS[i];
+    const isUnlocked = unlocked.some(u => u.id === a.id);
+
+    if (isUnlocked) {
+      const color = TIER_COLORS[a.tier] || "#888899";
+      const px = Math.max(1, Math.floor(zoom * 0.8));
+      const pixels = ICON_PIXELS[a.icon] || ICON_PIXELS.crystal;
+
+      // Glow.
+      ctx.save();
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.15 + Math.sin(now / 800 + i) * 0.05;
+      ctx.fillRect(sx, sy, slotSize - zoom, slotSize - zoom);
+      ctx.restore();
+
+      // Icon pixels.
+      ctx.fillStyle = color;
+      for (const [dx, dy] of pixels) {
+        ctx.fillRect(sx + zoom + dx * px, sy + zoom + dy * px, px, px);
+      }
+    } else {
+      ctx.fillStyle = "#111118";
+      ctx.fillRect(sx + brd, sy + brd, slotSize - zoom - brd * 2, slotSize - zoom - brd * 2);
+    }
+  }
+}
+
+// ── Workspace File Heat Nodes ───────────────────────────
+
+function drawFileHeatNodes(
+  ctx: CanvasRenderingContext2D,
+  zoom: number, wallH: number,
+  width: number, height: number,
+  world: RenderContext["world"],
+): void {
+  const nodes = world.getFileNodesHottest();
+  if (nodes.length === 0) return;
+
+  const maxHits = Math.max(1, ...nodes.map(n => n.hitCount));
+  const floorY = wallH + Math.floor((height - wallH) * 0.65);
+  const spacing = Math.floor((width * 0.7) / Math.max(1, nodes.length));
+  const startX = Math.floor(width * 0.15);
+  const catColors: Record<string, string> = {
+    read: "#1E7FD8", write: "#F39C12", bash: "#2ECC71", other: "#555566",
+  };
+
+  for (let i = 0; i < nodes.length; i++) {
+    const n = nodes[i];
+    const intensity = n.hitCount / maxHits;
+    const nx = startX + i * spacing;
+    const ny = floorY + Math.floor(Math.sin(i * 2.3) * zoom * 3);
+    const color = catColors[n.category] || "#555566";
+    const dotR = Math.max(2, Math.floor(zoom * (0.8 + intensity * 1.2)));
+
+    // Glow halo.
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.globalAlpha = intensity * 0.12;
+    ctx.fillRect(nx - dotR * 2, ny - dotR * 2, dotR * 4, dotR * 4);
+    ctx.globalAlpha = intensity * 0.25;
+    ctx.fillRect(nx - dotR, ny - dotR, dotR * 2, dotR * 2);
+    ctx.restore();
+
+    // Core dot.
+    ctx.fillStyle = color;
+    ctx.fillRect(nx - Math.floor(dotR / 2), ny - Math.floor(dotR / 2), dotR, dotR);
+
+    // File name label (top 4).
+    if (i < 4) {
+      ctx.fillStyle = "#555566";
+      ctx.font = `${Math.max(4, zoom * 1.8)}px "DM Mono", monospace`;
+      ctx.textAlign = "center";
+      const label = n.name.length > 12 ? n.name.slice(0, 10) + ".." : n.name;
+      ctx.fillText(label, nx, ny + dotR + zoom * 2);
+    }
   }
 }
