@@ -1044,10 +1044,10 @@ function drawEvolutionDecorations(
     ctx.fillRect(tx + zoom * 2, ty - zoom, zoom * 4, zoom);
   }
 
-  // Level 3+: Achievement plaques on wall.
+  // Level 3+: Achievement plaques on wall (left side, below trophy shelf).
   if (level >= 3) {
-    const px = width - zt * 6;
-    const py = Math.floor(wallH * 0.5);
+    const px = zt * 2;
+    const py = Math.floor(wallH * 0.6);
     // Plaque 1.
     ctx.fillStyle = "#2a2a3e";
     ctx.fillRect(px, py, zoom * 6, zoom * 4);
@@ -1117,22 +1117,29 @@ function drawEvolutionDecorations(
 
 // TIER_COLORS and ICON_PIXELS imported from gamification.ts
 
+/** Trophy case layout constants — shared with BatCave.handleClick(). */
+export function getTrophyCaseLayout(zoom: number, zt: number, wallH: number) {
+  const slotSize = zoom * 4;
+  const cols = 3;
+  const rows = Math.ceil(ACHIEVEMENTS.length / cols);
+  const pad = zoom;
+  const caseW = cols * slotSize + pad * 2;
+  const caseH = rows * slotSize + zoom * 4;
+  const caseX = Math.floor(zt * 1.5);
+  const caseY = Math.floor(wallH * 0.18);
+  return { slotSize, cols, rows, pad, caseW, caseH, caseX, caseY };
+}
+
 function drawTrophyCase(
   ctx: CanvasRenderingContext2D,
   zoom: number, zt: number, wallH: number,
-  width: number, now: number,
+  _width: number, now: number,
   world: RenderContext["world"],
 ): void {
   const unlocked = world.getUnlockedAchievements();
   if (unlocked.length === 0) return;
 
-  const caseX = zt * 2;
-  const caseY = Math.floor(wallH * 0.25);
-  const slotSize = zoom * 5;
-  const cols = 3;
-  const rows = Math.ceil(ACHIEVEMENTS.length / cols);
-  const caseW = cols * slotSize + zoom * 2;
-  const caseH = rows * slotSize + zoom * 4;
+  const { slotSize, cols, caseW, caseH, caseX, caseY } = getTrophyCaseLayout(zoom, zt, wallH);
 
   // Glass case background.
   ctx.save();
@@ -1150,10 +1157,10 @@ function drawTrophyCase(
   ctx.fillRect(caseX + caseW - brd, caseY, brd, caseH);
 
   // "TROPHIES" label.
-  ctx.fillStyle = "#444458";
-  ctx.font = `${Math.max(4, zoom * 1.8)}px "DM Mono", monospace`;
+  ctx.fillStyle = "#555568";
+  ctx.font = `${Math.max(5, zoom * 2)}px "DM Mono", monospace`;
   ctx.textAlign = "center";
-  ctx.fillText("TROPHIES", caseX + caseW / 2, caseY + zoom * 2);
+  ctx.fillText("TROPHIES", caseX + caseW / 2, caseY + zoom * 2.2);
 
   for (let i = 0; i < ACHIEVEMENTS.length; i++) {
     const col = i % cols;
@@ -1165,7 +1172,7 @@ function drawTrophyCase(
 
     if (isUnlocked) {
       const color = TIER_COLORS[a.tier] || "#888899";
-      const px = Math.max(1, Math.floor(zoom * 0.8));
+      const px = Math.max(1, zoom);
       const pixels = ICON_PIXELS[a.icon] || ICON_PIXELS.crystal;
 
       // Glow.
@@ -1175,10 +1182,13 @@ function drawTrophyCase(
       ctx.fillRect(sx, sy, slotSize - zoom, slotSize - zoom);
       ctx.restore();
 
-      // Icon pixels.
+      // Icon pixels — centered in slot.
+      const iconSize = px * 4;
+      const offsetX = Math.floor((slotSize - zoom - iconSize) / 2);
+      const offsetY = Math.floor((slotSize - zoom - iconSize) / 2);
       ctx.fillStyle = color;
       for (const [dx, dy] of pixels) {
-        ctx.fillRect(sx + zoom + dx * px, sy + zoom + dy * px, px, px);
+        ctx.fillRect(sx + offsetX + dx * px, sy + offsetY + dy * px, px, px);
       }
     } else {
       ctx.fillStyle = "#111118";

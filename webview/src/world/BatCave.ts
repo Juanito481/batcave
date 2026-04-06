@@ -16,6 +16,7 @@ import {
   SmartAlert, AlertSeverity,
   FileNode,
 } from "../data/gamification";
+import { getTrophyCaseLayout } from "../canvas/layers/FurnitureLayer";
 
 /** Per-agent session statistics for enterprise observability. */
 export interface AgentSessionStats {
@@ -904,21 +905,16 @@ export class BatCaveWorld {
     }
 
     // Click on trophy case slot → achievement detail.
-    const trophyCaseX = zt * 2;
-    const trophyCaseY = Math.floor(this.wallH * 0.25);
-    const trophySlotSize = zoom * 5;
-    const trophyCols = 3;
-    const trophyRows = Math.ceil(ACHIEVEMENTS.length / trophyCols);
-    const trophyCaseW = trophyCols * trophySlotSize + zoom * 2;
-    const trophyCaseH = trophyRows * trophySlotSize + zoom * 4;
-    if (cx >= trophyCaseX && cx <= trophyCaseX + trophyCaseW &&
-        cy >= trophyCaseY && cy <= trophyCaseY + trophyCaseH) {
+    // Uses shared layout function to stay in sync with FurnitureLayer rendering.
+    const tc = getTrophyCaseLayout(zoom, zt, this.wallH);
+    if (cx >= tc.caseX && cx <= tc.caseX + tc.caseW &&
+        cy >= tc.caseY && cy <= tc.caseY + tc.caseH) {
       for (let i = 0; i < ACHIEVEMENTS.length; i++) {
-        const col = i % trophyCols;
-        const row = Math.floor(i / trophyCols);
-        const sx = trophyCaseX + zoom + col * trophySlotSize;
-        const sy = trophyCaseY + zoom * 3 + row * trophySlotSize;
-        if (cx >= sx && cx <= sx + trophySlotSize && cy >= sy && cy <= sy + trophySlotSize) {
+        const col = i % tc.cols;
+        const row = Math.floor(i / tc.cols);
+        const sx = tc.caseX + zoom + col * tc.slotSize;
+        const sy = tc.caseY + zoom * 3 + row * tc.slotSize;
+        if (cx >= sx && cx <= sx + tc.slotSize && cy >= sy && cy <= sy + tc.slotSize) {
           this.setSelectedAchievementId(ACHIEVEMENTS[i].id);
           return;
         }

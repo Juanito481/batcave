@@ -73,8 +73,8 @@ const PALETTES: Record<string, CharacterPalette> = {
     pants: "#101820", accent: "#FFFFFF", eyes: "#1a1a2e",
   },
   giovanni: {
-    skin: "#D8B090", hair: "#0c0c18", shirt: "#1a1a2a",
-    pants: "#101820", accent: "#FFD700", eyes: "#FFFFFF",
+    skin: "#D8B090", hair: "#1a1a2a", shirt: "#5a6070",
+    pants: "#3a3a4a", accent: "#FFD700", eyes: "#FFFFFF",
   },
   king: {
     skin: "#F0D0A0", hair: "#FFD700", shirt: "#4A0E6B",
@@ -173,25 +173,28 @@ const BODY_STANDARD = [
   ".....Pp..pP.....",
 ];
 
-// Batman — dark cape (T-colored), utility belt (A-colored), cowl silhouette.
+// Batman — tall cowl ears, mask w/ white eyes, grey suit, dark cape, gold belt.
+// Symmetric 16px-wide. H=cowl(dark), T=cape(dark), S=skin(chin),
+// 3=suit highlight, t=suit shadow for grey torso.
+// P=pants(dark grey legs), A=belt(gold), E=eyes(white).
 const BODY_BATMAN = [
-  "......HHHH......",
-  ".....HhHhHH.....",
-  "....HHhHHHHH....",
-  "....HhSSSSHH....",
-  "....HSSEESSH....",
-  "....HSSsSSH.....",
-  ".....SSSSSS.....",
-  "......SASS......",
-  "..tTTTTTTTTTTt..",
-  "..TTTTT3TTTTTt..",
-  "..tTTTTTTTTTTT..",
-  "..TTTTtTtTTTTT..",
-  "..tTTTTTTTTTTt..",
-  "...tTTAATTTt....",
-  "...TTTTTTTTTT...",
-  "...TTPPPPPPTT...",
-  "...TTPp..pPTT...",
+  "....H......H....",  // cowl ear tips (tall, narrow, symmetric)
+  "...HH......HH...",  // ear shafts
+  "...HHHHHHHHHH...",  // ears merge into skull
+  "..HHHHHHHHHHHH..",  // full cowl width
+  "..HHhEEHHEEhHH..",  // brow + white angular eyes
+  "..HHHHHHHHHHHH..",  // nose bridge
+  "....HHSSSSHH....",  // lower face (tiny skin window)
+  ".....SSSSSS.....",  // chin
+  "......SSSS......",  // neck
+  "..tTT3TT3TTTt...",  // shoulders — cape wraps grey suit
+  "..TTTTTTTTTTTT..",  // upper chest — wide cape
+  "..tTT3TT3TTTt...",  // mid chest — suit visible under cape
+  "..TTTTtTtTTTTT..",  // lower chest
+  "..tTTTTTTTTTTt..",  // waist cape
+  "...TAAAAAAT.....",  // gold utility belt
+  "...TTPPPPPPTT...",  // upper legs under cape
+  "...TTPp..pPTT...",  // lower legs + boots
 ];
 
 // Caped — King: wide cape draping from shoulders, regal silhouette.
@@ -464,23 +467,23 @@ const BACK_STANDARD = [
 ];
 
 const BACK_BATMAN = [
-  "......HHHH......",
-  ".....HhHHHH.....",
-  "....HhHHH1HH....",
-  "....HhHHHHHH....",
-  "....HHHHHHHH....",
-  "....HHHHHHHH....",
-  ".....HHHHHH.....",
-  "......SSSS......",
-  "..tTTTTTTTTTTt..",
-  "..TTTTTtTTTTTT..",
-  "..tTTTTTTTTTTt..",
-  "..TTTTTtTTTTTT..",
-  "..tTTTTTTTTTTt..",
-  "...TTTTtTTTTT...",
-  "...TTTTTTTTTT...",
-  "...TTPPPPPPTT...",
-  "...TTPp..pPTT...",
+  "....H......H....",  // cowl ear tips (symmetric)
+  "...HH......HH...",  // ear shafts
+  "...HHHHHHHHHH...",  // ears merge into skull
+  "..HHHHHHHHHHHH..",  // full cowl
+  "..HHHHHHHHHHHH..",  // back of cowl
+  "..HHHHHHHHHHHH..",  // back of cowl
+  "....HHHHHHHH....",  // cowl narrows
+  ".....HHHHHH.....",  // lower cowl
+  "......SSSS......",  // neck
+  "..tTTTTTTTTTTt..",  // shoulders
+  "..TTTTTTTTTTTT..",  // upper back — cape
+  "..tTTTTtTTTTTt..",  // mid back
+  "..TTTTTTTTTTTT..",  // lower back
+  "..tTTTTTTTTTTt..",  // waist
+  "...TAAAAAAT.....",  // belt
+  "...TTPPPPPPTT...",  // upper legs
+  "...TTPp..pPTT...",  // lower legs
 ];
 
 const BACK_CAPED = [
@@ -640,11 +643,7 @@ function getBackLegs(bodyType: BodyType): string[][] {
 // ── Accessories (head/hat overlays) ─────────────────────
 
 const ACCESSORY_TEMPLATES: Record<string, string[]> = {
-  giovanni: [
-    "...A..HHHH..A...",
-    "...AA.HHHH.AA...",
-    "....HHHHHHHH....",
-  ],
+  giovanni: [],
   king: [
     "......A.AA......",
     ".....AAAAAA.....",
