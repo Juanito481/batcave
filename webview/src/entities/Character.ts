@@ -306,12 +306,9 @@ export class Character {
     const labelPad = zoom * 1.5;
     const labelX = this.x - labelW / 2 - labelPad;
     const labelY = this.y + zoom * 2;
-    ctx.save();
-    ctx.fillStyle = "#06060c";
-    ctx.globalAlpha = 0.7 * this.opacity;
+    ctx.fillStyle = "#0c1018";
     ctx.fillRect(labelX, labelY, labelW + labelPad * 2, labelFont + labelPad);
-    ctx.restore();
-    ctx.fillStyle = "#9999BB";
+    ctx.fillStyle = "#B0B0CC";
     ctx.fillText(this.name, this.x, labelY + labelFont);
 
     ctx.restore();

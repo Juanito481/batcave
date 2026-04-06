@@ -824,37 +824,19 @@ export class BatCaveWorld {
     const bcH = Math.floor(zt * 1.5);
     const screenW = Math.floor((bcW - zoom * 4) / 3);
 
-    // Left screen (files → workflows → team cycle).
+    // Left screen → files (toggle).
     if (cx >= bcX + zoom && cx <= bcX + zoom + screenW && cy >= bcY && cy <= bcY + bcH) {
-      if (this.expandedPanel === "files") {
-        this.setExpandedPanel("workflows");
-      } else if (this.expandedPanel === "workflows") {
-        this.setExpandedPanel("team");
-      } else {
-        this.setExpandedPanel("files");
-      }
+      this.setExpandedPanel("files");
       return;
     }
-    // Center screen (stats → history → audit cycle).
+    // Center screen → stats (toggle).
     if (cx >= bcX + zoom + screenW + zoom && cx <= bcX + zoom + screenW * 2 + zoom && cy >= bcY && cy <= bcY + bcH) {
-      if (this.expandedPanel === "stats") {
-        this.setExpandedPanel("history");
-      } else if (this.expandedPanel === "history") {
-        this.setExpandedPanel("audit");
-      } else {
-        this.setExpandedPanel("stats");
-      }
+      this.setExpandedPanel("stats");
       return;
     }
-    // Right screen (agents → achievements → workspace-map cycle).
+    // Right screen → agents (toggle).
     if (cx >= bcX + zoom + (screenW + zoom) * 2 && cx <= bcX + bcW - zoom && cy >= bcY && cy <= bcY + bcH) {
-      if (this.expandedPanel === "agents") {
-        this.setExpandedPanel("achievements");
-      } else if (this.expandedPanel === "achievements") {
-        this.setExpandedPanel("workspace-map");
-      } else {
-        this.setExpandedPanel("agents");
-      }
+      this.setExpandedPanel("agents");
       return;
     }
     // Click on LAUNCH button in agent-detail panel.

@@ -32,12 +32,12 @@ function drawBatcomputer(
     ? [P.ACCENT, P.ACCENT, "#1a3a5a"]
     : state === "writing"
     ? ["#1a3a1a", "#2ECC71", "#1a3a1a"]
-    : ["#1a1a2a", "#1a1a2a", "#1a1a2a"];
+    : ["#1e2438", "#222840", "#1e2438"];
 
   const tremor = state === "writing" ? Math.floor(Math.sin(now / 80) * zoom * 0.5) : 0;
   const font = `"DM Mono", monospace`;
-  const smallFont = Math.max(5, zoom * 2.5);
-  const labelFont = Math.max(6, zoom * 3);
+  const smallFont = Math.max(8, zoom * 2.5);
+  const labelFont = Math.max(10, zoom * 3);
 
   for (let i = 0; i < 3; i++) {
     const sx = x + gap + i * (sw + gap);
@@ -69,7 +69,7 @@ function drawBatcomputer(
   ctx.textAlign = "left";
 
   // Screen header.
-  ctx.fillStyle = "#555570";
+  ctx.fillStyle = "#8888AA";
   ctx.fillText("FILES", leftX + zoom * 2, screenY + zoom * 3);
 
   if (files.length > 0) {
@@ -102,8 +102,8 @@ function drawBatcomputer(
   // State label (big).
   ctx.font = `bold ${labelFont}px ${font}`;
   ctx.textAlign = "center";
-  ctx.fillStyle = state === "thinking" ? P.ACCENT
-    : state === "writing" ? "#2ECC71" : "#555566";
+  ctx.fillStyle = state === "thinking" ? "#3399EE"
+    : state === "writing" ? "#33DD88" : "#778899";
   ctx.fillText(activeData.state, centerX + sw / 2 + tremor, screenY + Math.floor(sh * 0.35));
 
   // Current tool name.
@@ -125,30 +125,30 @@ function drawBatcomputer(
     ctx.fillText(`${agentCount} agent${agentCount > 1 ? "s" : ""}`, centerX + sw / 2, screenY + Math.floor(sh * 0.78));
   }
 
-  // ── Right screen: session stats ──
+  // ── Right screen: agents ──
   const rightX = x + gap + (sw + gap) * 2;
-  const stats = world.getSessionStats();
-  const theme = world.getRepoTheme();
+  const activeAgentNames = world.getActiveAgentNames();
 
   ctx.font = `${smallFont}px ${font}`;
   ctx.textAlign = "left";
 
   // Header.
-  ctx.fillStyle = "#555570";
-  ctx.fillText("STATS", rightX + zoom * 2, screenY + zoom * 3);
+  ctx.fillStyle = "#8888AA";
+  ctx.fillText("AGENTS", rightX + zoom * 2, screenY + zoom * 3);
 
-  // Context %.
-  const ctxColor = stats.contextPct < 50 ? "#2ECC71" : stats.contextPct < 80 ? "#F39C12" : "#E74C3C";
-  ctx.fillStyle = ctxColor;
-  ctx.fillText(`CTX ${stats.contextPct}%`, rightX + zoom * 2, screenY + zoom * 7);
-
-  // Tool count.
-  ctx.fillStyle = theme.accent;
-  ctx.fillText(`${stats.toolCount} tools`, rightX + zoom * 2, screenY + zoom * 11);
-
-  // Duration.
-  ctx.fillStyle = "#888899";
-  ctx.fillText(stats.duration, rightX + zoom * 2, screenY + zoom * 15);
+  if (activeAgentNames.length > 0) {
+    const lineH = Math.max(zoom * 3, smallFont + zoom);
+    for (let a = 0; a < activeAgentNames.length && a < 4; a++) {
+      const ay = screenY + zoom * 5 + a * lineH;
+      ctx.fillStyle = "#2ECC71";
+      ctx.fillRect(rightX + zoom * 2, ay, zoom, zoom);
+      ctx.fillStyle = "#AAAACC";
+      ctx.fillText(activeAgentNames[a], rightX + zoom * 4, ay + zoom);
+    }
+  } else {
+    ctx.fillStyle = "#333348";
+    ctx.fillText("idle", rightX + zoom * 2, screenY + zoom * 7);
+  }
 
   // Desk legs.
   ctx.fillStyle = "#141424";

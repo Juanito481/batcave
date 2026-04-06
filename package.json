@@ -109,7 +109,7 @@
     "server": "npx tsx server/index.ts",
     "vscode:prepublish": "npm run build",
     "build": "npm run build:ext && npm run build:webview",
-    "build:ext": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --external:ws --format=cjs --platform=node --minify",
+    "build:ext": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify",
     "build:webview": "cd webview && npx vite build",
     "watch:ext": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --watch",
     "watch:webview": "cd webview && npx vite build --watch",

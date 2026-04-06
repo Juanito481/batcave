@@ -23,20 +23,20 @@ export interface RenderContext {
 // ── Shared palette (opaque, no transparency) ─────────────
 
 export const P = {
-  BG: "#0a0a12",
-  FLOOR_A: "#13131e",
-  FLOOR_B: "#161624",
-  FLOOR_DARK: "#0e0e18",
-  FLOOR_SPECK: "#1c1c2a",
-  WALL_TOP: "#0c0c18",
-  WALL_MID: "#161628",
-  WALL_BOT: "#1a1a30",
-  WALL_DARK: "#08081a",
-  WALL_LIGHT: "#1e1e34",
-  WALL_EDGE: "#1e1e30",
+  BG: "#101820",
+  FLOOR_A: "#151c24",
+  FLOOR_B: "#161d25",
+  FLOOR_DARK: "#0e1418",
+  FLOOR_SPECK: "#1e2830",
+  WALL_TOP: "#0c1018",
+  WALL_MID: "#162028",
+  WALL_BOT: "#1a2430",
+  WALL_DARK: "#081018",
+  WALL_LIGHT: "#222e3a",
+  WALL_EDGE: "#1e2830",
   ACCENT: "#1E7FD8",
-  OUTLINE: "#060410",
-  HIGHLIGHT: "#222238",
+  OUTLINE: "#060a10",
+  HIGHLIGHT: "#2a3240",
   LED_COLORS: ["#2ECC71", "#1E7FD8", "#E74C3C", "#F39C12", "#2ECC71"],
 } as const;
 

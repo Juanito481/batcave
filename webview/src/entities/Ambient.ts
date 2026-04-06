@@ -271,7 +271,7 @@ export class Ambient {
 
   private drawBats(ctx: CanvasRenderingContext2D, zoom: number): void {
     const s = Math.max(1, Math.floor(zoom * 0.5));
-    ctx.fillStyle = "#2a2a40"; // brighter than bg for clear silhouette
+    ctx.fillStyle = "#3a3a58"; // brighter than bg for clear silhouette
 
     for (const bat of this.bats) {
       const bx = Math.round(bat.x);
@@ -397,7 +397,7 @@ export class Ambient {
     const px = Math.max(1, Math.floor(zoom * 0.25));
 
     // Opaque dust mote colors (no rgba). Different brightness levels.
-    const MOTE_COLORS = ["#1a1a24", "#1e1e2a", "#222230", "#262636"];
+    const MOTE_COLORS = ["#2a2a3a", "#2e2e40", "#323248", "#363650"];
 
     for (let i = 0; i < this.motes.length; i++) {
       const m = this.motes[i];
@@ -639,9 +639,9 @@ export class Ambient {
     const px = Math.max(1, Math.floor(zoom * 0.3));
 
     // Opaque glow steps (warm yellow-green, no rgba).
-    const GLOW_DIM = "#181e10";
-    const GLOW_MID = "#2a3a14";
-    const GLOW_BRIGHT = "#4a6a20";
+    const GLOW_DIM = "#283818";
+    const GLOW_MID = "#3a5a20";
+    const GLOW_BRIGHT = "#5a8a30";
 
     for (const ff of this.fireflies) {
       const fx = Math.round(ff.x);
@@ -757,10 +757,10 @@ export class Ambient {
     // Opaque glow using concentric rectangles (no rgba gradients).
     const pulse = Math.sin(this.glow.phase * 0.8);
     const glowLayers = [
-      { size: zoom * 6, color: pulse > 0 ? "#101830" : "#0e1428" },
-      { size: zoom * 12, color: pulse > 0 ? "#0d1224" : "#0c1020" },
-      { size: zoom * 20, color: pulse > 0 ? "#0b0f1e" : "#0a0e1a" },
-      { size: zoom * 30, color: "#0a0c16" },
+      { size: zoom * 6, color: pulse > 0 ? "#182840" : "#142438" },
+      { size: zoom * 12, color: pulse > 0 ? "#142030" : "#121c28" },
+      { size: zoom * 20, color: pulse > 0 ? "#101a28" : "#0e1822" },
+      { size: zoom * 30, color: "#0c1420" },
     ];
 
     // Draw from largest to smallest so inner layers overlay.

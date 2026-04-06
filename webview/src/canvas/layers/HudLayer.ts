@@ -98,7 +98,7 @@ function drawSpeechBubbles(rc: RenderContext): void {
   const agents = world.getAgentCharacters();
 
   const font = `"DM Mono", monospace`;
-  const fontSize = Math.max(6, zoom * 3);
+  const fontSize = Math.max(9, zoom * 3);
   ctx.font = `${fontSize}px ${font}`;
   ctx.textAlign = "center";
 
@@ -182,8 +182,8 @@ function drawOverlayHud(rc: RenderContext): void {
   const brd = Math.max(1, Math.floor(zoom / 2));
   const pad = zoom * 3;
 
-  // ── 1. Context bar (top, full width) ──
-  const ctxBarH = zoom * 2;
+  // ── 1. Context bar (top, full width, thicker) ──
+  const ctxBarH = zoom * 4;
   const pct = stats ? stats.contextFillPct / 100 : 0;
   const barColor = pct < 0.5 ? "#2ECC71" : pct < 0.8 ? "#F39C12" : "#E74C3C";
 
@@ -196,13 +196,22 @@ function drawOverlayHud(rc: RenderContext): void {
   for (const mark of [0.25, 0.5, 0.75]) {
     ctx.fillRect(Math.floor(width * mark), 0, brd, ctxBarH);
   }
+  // Context % label embedded in bar.
+  const pctVal0 = stats?.contextFillPct ?? 0;
+  if (pctVal0 > 0) {
+    ctx.font = `bold ${Math.max(8, zoom * 2.5)}px ${font}`;
+    ctx.fillStyle = "#FFFFFF";
+    ctx.textAlign = "right";
+    ctx.fillText(`${pctVal0}%`, width - zoom * 2, ctxBarH - zoom);
+    ctx.textAlign = "left";
+  }
 
-  // ── 2. Top-left chip: state + context % ──
+  // ── 2. Top-left chip: state + cost ──
   const state = world.getAlfredState();
   const stateColor: Record<string, string> = {
-    idle: "#555566", thinking: theme.accent, writing: "#2ECC71",
+    idle: "#778899", thinking: "#3399EE", writing: "#33DD88",
   };
-  const smallFont = Math.max(6, zoom * 3);
+  const smallFont = Math.max(9, zoom * 3);
 
   const chipY = ctxBarH + pad;
   const chipX = pad;
@@ -210,17 +219,14 @@ function drawOverlayHud(rc: RenderContext): void {
   // Chip background pill.
   const stateLabel = state.toUpperCase();
   ctx.font = `bold ${smallFont}px ${font}`;
-  const pctVal = stats?.contextFillPct ?? 0;
-  const pctText = pctVal > 0 ? `  ${pctVal}%` : "";
-  const chipTextW = ctx.measureText(stateLabel + pctText).width;
+  const cost = world.getSessionCost();
+  const costText = cost.costUsd > 0 ? `  $${cost.costUsd.toFixed(2)}` : "";
+  const chipTextW = ctx.measureText(stateLabel + costText).width;
   const dotSize = zoom * 2;
   const chipPillW = dotSize + zoom * 3 + chipTextW + zoom * 2;
   const chipPillH = dotSize + zoom * 2;
-  ctx.save();
-  ctx.fillStyle = "#06060c";
-  ctx.globalAlpha = 0.75;
+  ctx.fillStyle = "#080c12";
   ctx.fillRect(chipX - zoom, chipY - zoom, chipPillW, chipPillH);
-  ctx.restore();
 
   // State dot.
   ctx.fillStyle = stateColor[state] || "#555566";
@@ -238,18 +244,18 @@ function drawOverlayHud(rc: RenderContext): void {
   }
 
   // State label.
-  ctx.fillStyle = "#888899";
+  ctx.fillStyle = "#CCCCDD";
   ctx.font = `bold ${smallFont}px ${font}`;
   ctx.textAlign = "left";
   ctx.fillText(state.toUpperCase(), chipX + dotSize + zoom * 2, chipY + dotSize - brd);
 
-  // Context percentage next to state.
-  if (pctVal > 0) {
+  // Cost next to state (always visible when > 0).
+  if (cost.costUsd > 0) {
     const stateTextW = ctx.measureText(state.toUpperCase()).width;
-    ctx.fillStyle = barColor;
+    ctx.fillStyle = cost.costUsd > 1 ? "#F39C12" : "#888899";
     ctx.font = `${smallFont}px ${font}`;
     ctx.fillText(
-      `${pctVal}%`,
+      `$${cost.costUsd.toFixed(2)}`,
       chipX + dotSize + zoom * 2 + stateTextW + zoom * 3,
       chipY + dotSize - brd,
     );
@@ -321,7 +327,7 @@ function drawOverlayHud(rc: RenderContext): void {
 
       // Agent name.
       ctx.fillStyle = "#777790";
-      ctx.font = `${Math.max(5, zoom * 2.5)}px ${font}`;
+      ctx.font = `${Math.max(8, zoom * 2.5)}px ${font}`;
       ctx.textAlign = "left";
       const label = meta ? meta[1].emoji : name.slice(0, 3);
       ctx.fillText(label, agentX + agentDot + zoom, agentY + zoom + agentDot);
@@ -333,7 +339,7 @@ function drawOverlayHud(rc: RenderContext): void {
   const pace = world.getPace();
   if (pace.current > 0) {
     const paceY = chipY + dotSize + zoom * 3;
-    ctx.font = `${Math.max(5, zoom * 2.5)}px ${font}`;
+    ctx.font = `${Math.max(8, zoom * 2.5)}px ${font}`;
     ctx.textAlign = "right";
 
     const trendColor = pace.trend === "up" ? "#2ECC71" : pace.trend === "down" ? "#E74C3C" : "#555566";
@@ -346,81 +352,7 @@ function drawOverlayHud(rc: RenderContext): void {
     ctx.fillText(trendChar, rightX, paceY + zoom * 2);
   }
 
-  // ── 6. Director — lavender constellation (bottom-right) ──
-  {
-    const director = rc.director;
-    const dirState = director.getState();
-    const pending = director.getPendingApprovals();
-    const active = director.getActiveDecisions();
-    const LAVENDER = "#B8A0FF";
-    const dirY = height - zoom * 6;
-    const dirX = width - pad;
-    ctx.font = `${Math.max(5, zoom * 2.5)}px ${font}`;
-    ctx.textAlign = "right";
-
-    // Constellation glyph — 5-point diamond pattern.
-    const gx = dirX - zoom * 2;
-    const gy = dirY - zoom;
-    const gs = Math.max(1, Math.floor(zoom * 0.6));
-    const pulse = dirState === "watching"
-      ? 0.4 + Math.sin(now / 1200) * 0.3
-      : dirState === "deciding" ? 0.7 + Math.sin(now / 300) * 0.3
-      : dirState === "deploying" ? 1 : 0.25;
-
-    ctx.save();
-    ctx.globalAlpha = pulse;
-    ctx.fillStyle = LAVENDER;
-    // Center point.
-    ctx.fillRect(gx, gy, gs * 2, gs * 2);
-    // Four corners.
-    ctx.fillRect(gx - gs * 2, gy - gs * 2, gs, gs);
-    ctx.fillRect(gx + gs * 3, gy - gs * 2, gs, gs);
-    ctx.fillRect(gx - gs * 2, gy + gs * 3, gs, gs);
-    ctx.fillRect(gx + gs * 3, gy + gs * 3, gs, gs);
-    // Connecting lines (pulse).
-    if (dirState === "deploying" || dirState === "deciding") {
-      ctx.fillRect(gx - gs, gy, gs, gs);
-      ctx.fillRect(gx + gs * 2, gy, gs, gs);
-      ctx.fillRect(gx, gy - gs, gs, gs);
-      ctx.fillRect(gx, gy + gs * 2, gs, gs);
-    }
-    ctx.restore();
-
-    // Label.
-    ctx.fillStyle = director.isEnabled() ? LAVENDER : "#333344";
-    ctx.save();
-    ctx.globalAlpha = pulse;
-    ctx.fillText("DIRECTOR", dirX - zoom * 5, dirY + zoom * 2);
-    ctx.restore();
-
-    // Pending approvals badge.
-    if (pending.length > 0) {
-      const badgeX = dirX - zoom * 5 - ctx.measureText("DIRECTOR").width - zoom * 3;
-      ctx.fillStyle = "#E74C3C";
-      ctx.fillRect(badgeX, dirY, zoom * 4, zoom * 3);
-      ctx.fillStyle = "#FFFFFF";
-      ctx.font = `bold ${Math.max(4, zoom * 2)}px ${font}`;
-      ctx.textAlign = "center";
-      ctx.fillText(`${pending.length}`, badgeX + zoom * 2, dirY + zoom * 2);
-    }
-
-    // Active decisions — lavender ticker above Director.
-    if (active.length > 0) {
-      const latest = active[active.length - 1];
-      const age = now - latest.timestamp;
-      if (age < 8000) { // show for 8s
-        const alpha = age < 6000 ? 0.9 : 0.9 * (1 - (age - 6000) / 2000);
-        ctx.save();
-        ctx.globalAlpha = alpha;
-        ctx.fillStyle = LAVENDER;
-        ctx.font = `${Math.max(5, zoom * 2.5)}px ${font}`;
-        ctx.textAlign = "right";
-        const agents = latest.agentIds.join("+");
-        ctx.fillText(`► ${latest.triggerDetail}: deploy ${agents}`, dirX, dirY - zoom * 3);
-        ctx.restore();
-      }
-    }
-  }
+  // (Director removed — low signal, high confusion)
 
   // ── 7. Activity heatmap — 40 slots along bottom of context bar ──
   const heatSlots = world.getHeatmapSlots();
@@ -451,7 +383,7 @@ function drawOverlayHud(rc: RenderContext): void {
       ctx.save();
       ctx.globalAlpha = alertAlpha;
       // Alert pill background.
-      ctx.font = `bold ${Math.max(5, zoom * 2.5)}px ${font}`;
+      ctx.font = `bold ${Math.max(8, zoom * 2.5)}px ${font}`;
       const alertText = `${latestAlert.severity === "critical" ? "!" : "i"} ${latestAlert.title}: ${latestAlert.detail}`;
       const alertTextW = ctx.measureText(alertText).width;
       ctx.fillStyle = "#06060c";
@@ -464,22 +396,7 @@ function drawOverlayHud(rc: RenderContext): void {
     }
   }
 
-  // ── 8. Cave depth + achievement count (bottom-left) ──
-  {
-    const depthLayer = world.getCaveDepthLayer();
-    const achievements = world.getUnlockedAchievements();
-    const depthY = height - zoom * 5;
-    ctx.font = `${Math.max(5, zoom * 2.5)}px ${font}`;
-    ctx.textAlign = "left";
-    // Depth indicator.
-    ctx.fillStyle = depthLayer.palette.accent;
-    ctx.fillText(`DEPTH ${depthLayer.depth}: ${depthLayer.name}`, pad, depthY);
-    // Achievement count.
-    if (achievements.length > 0) {
-      ctx.fillStyle = "#FFD700";
-      ctx.fillText(`  ${achievements.length}/${ACHIEVEMENTS.length}`, pad + ctx.measureText(`DEPTH ${depthLayer.depth}: ${depthLayer.name}`).width, depthY);
-    }
-  }
+  // (Cave depth + achievements removed — decorative, low value)
 
   // ── 9. Cost alert — flashing warning when over budget ──
   if (world.isOverBudget()) {
@@ -513,7 +430,7 @@ function drawSessionIndicators(rc: RenderContext): void {
   if (sessions.length <= 1) return; // Only show when multiple sessions exist.
 
   const font = `"DM Mono", monospace`;
-  const fontSize = Math.max(5, zoom * 2.5);
+  const fontSize = Math.max(8, zoom * 2.5);
   const pad = zoom * 3;
   const y = zoom * 2 + pad + zoom * 2 + pad + zoom * 4; // Below agents row.
 
@@ -555,12 +472,12 @@ function drawExpandedPanel(rc: RenderContext): void {
 
   const font = `"DM Mono", monospace`;
   const fontSize = Math.max(7, zoom * 3);
-  const smallFont = Math.max(6, zoom * 2.5);
+  const smallFont = Math.max(8, zoom * 2.5);
   const pad = zoom * 4;
 
   // Semi-transparent backdrop — larger, more room for content.
   ctx.save();
-  ctx.fillStyle = "#0a0a12";
+  ctx.fillStyle = "#101820";
   ctx.globalAlpha = 0.92;
   const panelW = Math.min(width * 0.7, 440);
   const panelH = Math.min(height * 0.7, 360);
@@ -1051,7 +968,7 @@ function drawExpandedPanel(rc: RenderContext): void {
         ctx.fillStyle = "#1E7FD8";
         ctx.fillRect(px + pad, wy + lineH * 0.15, zoom * 5, lineH * 0.7);
         ctx.fillStyle = "#FFFFFF";
-        ctx.font = `bold ${Math.max(4, zoom * 2)}px ${font}`;
+        ctx.font = `bold ${Math.max(7, zoom * 2)}px ${font}`;
         ctx.fillText("RUN", px + pad + zoom * 0.8, wy + lineH * 0.65);
 
         // Workflow info.
@@ -1188,8 +1105,8 @@ function drawReplayTimeline(rc: RenderContext): void {
 
   const snap = replay.getSnapshot();
   const font = `"DM Mono", monospace`;
-  const fontSize = Math.max(6, zoom * 3);
-  const smallFont = Math.max(5, zoom * 2.5);
+  const fontSize = Math.max(9, zoom * 3);
+  const smallFont = Math.max(8, zoom * 2.5);
   const barH = Math.max(12, zoom * 5);
   const pad = zoom * 2;
   const y = height - barH - pad;

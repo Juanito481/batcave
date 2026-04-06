@@ -1,4 +1,3 @@
-import { darken } from "../../helpers/color";
 import { RenderContext, P, seed, outlineRect } from "./render-context";
 
 // ── Floor tile with texture ────────────────────────────
@@ -78,9 +77,9 @@ function drawStalactites(
     const s1 = seed(x);
     const s2 = seed(x * 3 + 7);
 
-    if (x % 3 === 0) {
+    if (x % 5 === 0 && s1 > 0.2) {
       const h = Math.floor(zoom * (5 + s1 * 8));
-      const w = zoom * 2;
+      const w = zoom * (2 + Math.floor(s2 * 2));
       const sx = x * zt + zt / 2 - w / 2;
 
       // Body.
@@ -95,12 +94,6 @@ function drawStalactites(
       // Shadow on right edge.
       ctx.fillStyle = P.WALL_DARK;
       ctx.fillRect(sx + w - Math.max(1, Math.floor(zoom / 2)), wallH, Math.max(1, Math.floor(zoom / 2)), h);
-    }
-
-    if (x % 3 !== 0 && s2 > 0.4) {
-      const h = Math.floor(zoom * (2 + s2 * 4));
-      ctx.fillStyle = P.WALL_EDGE;
-      ctx.fillRect(x * zt + zt / 2, wallH, zoom, h);
     }
   }
 }
@@ -174,14 +167,13 @@ function drawWallDetails(
 
   // LED strip along wall bottom — state-reactive + repo-themed.
   const ledY = wallH - zoom;
-  const theme = world.getRepoTheme();
   const state = world.getAlfredState();
-  const stateColor = state === "thinking" ? "#1a3a6a"
-    : state === "writing" ? "#1a4a2a"
-    : theme.accentDark;
-  const stateDim = state === "thinking" ? "#0e1e3a"
+  const stateColor = state === "thinking" ? "#1e4478"
+    : state === "writing" ? "#1e5432"
+    : "#1a3a5a";
+  const stateDim = state === "thinking" ? "#0e2440"
     : state === "writing" ? "#0e2a16"
-    : darken(theme.accentDark, 0.3);
+    : "#0e1e30";
 
   // Speed up pulse when active.
   const ledSpeed = state === "idle" ? 1200 : 600;
@@ -214,7 +206,7 @@ function drawWallDetails(
   const monW = zt * 2;
   const monH = Math.floor(zt * 1.2);
   const font = `"DM Mono", monospace`;
-  const smallFont = Math.max(5, zoom * 2.5);
+  const smallFont = Math.max(8, zoom * 2.5);
 
   // Bezel.
   ctx.fillStyle = "#0a0a14";

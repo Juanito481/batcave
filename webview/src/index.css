@@ -1,3 +1,3 @@
 /* Bat Cave — webview reset */
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-html, body, #batcave-root { width: 100%; height: 100%; overflow: hidden; background: #0a0a12; }
+html, body, #batcave-root { width: 100%; height: 100%; overflow: hidden; background: #101820; }
