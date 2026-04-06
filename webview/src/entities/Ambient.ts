@@ -15,7 +15,7 @@ interface Bat {
   baseY: number;
   speedX: number;
   phase: number;
-  wingFrame: 0 | 1;
+  wingFrame: 0 | 1 | 2;
   wingTimer: number;
   swooping: boolean;
   swoopY: number;
@@ -243,11 +243,11 @@ export class Ambient {
         }
       }
 
-      // Wing animation (2 frames, ~180ms per frame).
+      // Wing animation (3 frames: spread → mid → up, ~140ms per frame).
       bat.wingTimer += dt;
-      if (bat.wingTimer >= 180) {
-        bat.wingTimer -= 180;
-        bat.wingFrame = bat.wingFrame === 0 ? 1 : 0;
+      if (bat.wingTimer >= 140) {
+        bat.wingTimer -= 140;
+        bat.wingFrame = ((bat.wingFrame + 1) % 3) as 0 | 1 | 2;
       }
 
       // Respawn when off-screen.
@@ -261,30 +261,48 @@ export class Ambient {
 
   private drawBats(ctx: CanvasRenderingContext2D, zoom: number): void {
     const s = Math.max(1, Math.floor(zoom * 0.5));
-    ctx.fillStyle = "#3a3a58"; // brighter than bg for clear silhouette
+    const BODY = "#3a3a58";
+    const WING = "#2e2e48";
+    const EAR = "#4a4a68";
 
     for (const bat of this.bats) {
       const bx = Math.round(bat.x);
       const by = Math.round(bat.y);
 
-      // Body (2x1 center).
-      ctx.fillRect(bx, by, s * 2, s);
+      // Body (3x2 center — more readable shape).
+      ctx.fillStyle = BODY;
+      ctx.fillRect(bx, by, s * 3, s * 2);
+      // Head bump.
+      ctx.fillRect(bx + s, by - s, s, s);
+      // Ears.
+      ctx.fillStyle = EAR;
+      ctx.fillRect(bx, by - s, s, s);
+      ctx.fillRect(bx + s * 2, by - s, s, s);
 
-      // Wings: frame 0 = spread wide, frame 1 = up high (more dramatic).
+      // Wings: 3 frames — spread → mid → up.
+      ctx.fillStyle = WING;
       if (bat.wingFrame === 0) {
-        // Spread wings — wide and slightly down.
+        // Spread wide — horizontal with droop at tips.
         ctx.fillRect(bx - s * 3, by, s * 3, s);
-        ctx.fillRect(bx + s * 2, by, s * 3, s);
-        // Wingtips droop.
-        ctx.fillRect(bx - s * 3, by + s, s, s);
-        ctx.fillRect(bx + s * 4, by + s, s, s);
+        ctx.fillRect(bx + s * 3, by, s * 3, s);
+        ctx.fillRect(bx - s * 4, by + s, s, s);
+        ctx.fillRect(bx + s * 5, by + s, s, s);
+        // Inner wing detail.
+        ctx.fillStyle = BODY;
+        ctx.fillRect(bx - s, by + s, s, s);
+        ctx.fillRect(bx + s * 3, by + s, s, s);
+      } else if (bat.wingFrame === 1) {
+        // Mid — angled 45 degrees.
+        ctx.fillRect(bx - s * 2, by - s, s * 2, s);
+        ctx.fillRect(bx + s * 3, by - s, s * 2, s);
+        ctx.fillRect(bx - s * 3, by - s * 2, s, s);
+        ctx.fillRect(bx + s * 4, by - s * 2, s, s);
       } else {
-        // Wings up — higher and narrower.
-        ctx.fillRect(bx - s * 2, by - s * 2, s * 2, s);
-        ctx.fillRect(bx + s * 2, by - s * 2, s * 2, s);
-        // Wing mids.
-        ctx.fillRect(bx - s * 2, by - s, s, s);
-        ctx.fillRect(bx + s * 3, by - s, s, s);
+        // Up — wings raised high, narrow.
+        ctx.fillRect(bx - s, by - s * 2, s, s * 2);
+        ctx.fillRect(bx + s * 3, by - s * 2, s, s * 2);
+        ctx.fillRect(bx - s * 2, by - s * 3, s, s);
+        ctx.fillRect(bx + s * 3, by - s * 3, s, s);
       }
     }
   }
@@ -557,26 +575,31 @@ export class Ambient {
       const ry = Math.round(rat.y);
       const dir = rat.speedX > 0 ? 1 : -1;
 
-      // Body (4x2).
-      ctx.fillStyle = "#201820";
+      // Body (4x2) — brighter than floor for visibility.
+      ctx.fillStyle = "#3a3040";
       ctx.fillRect(rx, ry, s * 4, s * 2);
+      // Belly highlight.
+      ctx.fillStyle = "#4a3e4a";
+      ctx.fillRect(rx + s, ry + s, s * 2, s);
 
       // Head.
-      ctx.fillStyle = "#2a2028";
+      ctx.fillStyle = "#3e3444";
       const hx = dir > 0 ? rx + s * 4 : rx - s;
       ctx.fillRect(hx, ry, s, s * 2);
 
       // Ears.
-      ctx.fillStyle = "#3a2830";
+      ctx.fillStyle = "#5a4858";
       ctx.fillRect(hx, ry - s, s, s);
 
       // Tail — proportional thickness.
-      ctx.fillStyle = "#241a24";
+      ctx.fillStyle = "#342a38";
       const tx = dir > 0 ? rx - s * 2 : rx + s * 4 + s;
       ctx.fillRect(tx, ry + s, s * 2, Math.max(1, Math.floor(zoom / 2)));
+      // Tail curve.
+      ctx.fillRect(dir > 0 ? tx - s : tx + s * 2, ry, s, Math.max(1, Math.floor(zoom / 2)));
 
       // Legs (alternating).
-      ctx.fillStyle = "#201820";
+      ctx.fillStyle = "#322838";
       if (rat.frame === 0) {
         ctx.fillRect(rx + s, ry + s * 2, s, s);
         ctx.fillRect(rx + s * 3, ry + s * 2, s, s);
@@ -586,7 +609,7 @@ export class Ambient {
       }
 
       // Eye.
-      ctx.fillStyle = "#4a3a30";
+      ctx.fillStyle = "#6a5a50";
       ctx.fillRect(hx, ry + Math.floor(s / 2), 1, 1);
     }
   }

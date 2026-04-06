@@ -178,6 +178,15 @@ function drawServerRack(
   // Front panel (slightly darker).
   ctx.fillStyle = "#0e0e1a";
   ctx.fillRect(x + zoom, y + zoom, w - zoom * 2, h - zoom * 2);
+  // Metal texture — dithered specks on front panel.
+  ctx.fillStyle = "#14142a";
+  for (let ty = 0; ty < h - zoom * 2; ty += zoom * 2) {
+    for (let tx = 0; tx < w - zoom * 2; tx += zoom * 3) {
+      if (seed(ty * 7 + tx * 3) > 0.6) {
+        ctx.fillRect(x + zoom + tx, y + zoom + ty, zoom, zoom);
+      }
+    }
+  }
   // Top highlight.
   ctx.fillStyle = P.HIGHLIGHT;
   ctx.fillRect(x, y, w, zoom);
@@ -426,6 +435,15 @@ function drawFloorObjects(
   // Body.
   ctx.fillStyle = "#1e1a14";
   ctx.fillRect(crateX, crateY, crateW, crateH);
+  // Wood grain texture.
+  ctx.fillStyle = "#221e16";
+  for (let ty = zoom; ty < crateH - zoom; ty += zoom * 2) {
+    for (let tx = zoom; tx < crateW - zoom; tx += zoom * 2) {
+      if (seed(tx * 5 + ty * 9 + 37) > 0.55) {
+        ctx.fillRect(crateX + tx, crateY + ty, zoom, zoom);
+      }
+    }
+  }
   // Top highlight.
   ctx.fillStyle = "#2a2418";
   ctx.fillRect(crateX, crateY, crateW, zoom);
@@ -436,6 +454,9 @@ function drawFloorObjects(
   ctx.fillStyle = "#24200a";
   ctx.fillRect(crateX + zoom, crateY + Math.floor(crateH / 2) - Math.max(1, Math.floor(zoom / 2)), crateW - zoom * 2, zoom);
   ctx.fillRect(crateX + Math.floor(crateW / 2) - Math.max(1, Math.floor(zoom / 2)), crateY + zoom, zoom, crateH - zoom * 2);
+  // Nails at cross intersection.
+  ctx.fillStyle = "#3a3a4a";
+  ctx.fillRect(crateX + Math.floor(crateW / 2), crateY + Math.floor(crateH / 2), zoom, zoom);
   // Outline.
   outlineRect(ctx, crateX, crateY, crateW, crateH, zoom);
   contactShadow(ctx, crateX, crateY + crateH, crateW, zoom);
@@ -546,6 +567,21 @@ function drawBarrel(
   // Body.
   ctx.fillStyle = "#1a1612";
   ctx.fillRect(bx, by, bw, bh);
+  // Wood grain texture — vertical dithered lines.
+  ctx.fillStyle = "#1e1a14";
+  for (let tx = zoom; tx < bw - zoom; tx += zoom * 2) {
+    const grainSeed = seed(tx * 13);
+    if (grainSeed > 0.3) {
+      for (let ty = zoom * 2; ty < bh - zoom * 2; ty += zoom * 2) {
+        if (seed(tx * 7 + ty * 11) > 0.5) {
+          ctx.fillRect(bx + tx, by + ty, zoom, zoom);
+        }
+      }
+    }
+  }
+  // Knot detail.
+  ctx.fillStyle = "#161210";
+  ctx.fillRect(bx + Math.floor(bw * 0.4), by + Math.floor(bh * 0.5), zoom, zoom);
   // Top rim (lighter).
   ctx.fillStyle = "#24201a";
   ctx.fillRect(bx, by, bw, zoom * 2);
@@ -556,6 +592,10 @@ function drawBarrel(
   ctx.fillStyle = "#222230";
   ctx.fillRect(bx, by + zoom * 3, bw, zoom);
   ctx.fillRect(bx, by + bh - zoom * 4, bw, zoom);
+  // Metal band rivets.
+  ctx.fillStyle = "#2a2a3a";
+  ctx.fillRect(bx + zoom * 2, by + zoom * 3, zoom, zoom);
+  ctx.fillRect(bx + bw - zoom * 3, by + zoom * 3, zoom, zoom);
   // Left highlight.
   ctx.fillStyle = "#201c16";
   ctx.fillRect(bx, by, zoom, bh);
@@ -674,6 +714,13 @@ function drawLocker(
   // Body.
   ctx.fillStyle = "#101020";
   ctx.fillRect(lx, ly, lw, lh);
+  // Metal brushed texture — horizontal streaks.
+  ctx.fillStyle = "#14142a";
+  for (let ty = zoom * 2; ty < lh - zoom * 2; ty += zoom * 3) {
+    if (seed(ty * 11) > 0.4) {
+      ctx.fillRect(lx + zoom, ly + ty, lw - zoom * 2, Math.max(1, Math.floor(zoom / 2)));
+    }
+  }
   // Top highlight.
   ctx.fillStyle = "#1a1a2e";
   ctx.fillRect(lx, ly, lw, zoom);
