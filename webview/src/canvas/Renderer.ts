@@ -124,16 +124,13 @@ export class Renderer {
     rc.ctx.fillStyle = P.BG;
     rc.ctx.fillRect(0, 0, rc.width, rc.height);
 
-    // Layer 1: Cave environment (floor, walls, stalactites, stalagmites).
+    // Layer 0: Cave environment (floor, walls, stalactites, stalagmites).
     drawCaveEnvironment(rc);
 
-    // Ambient (between cave and furniture).
+    // Layer 0.5: Ambient (bats, drips, dust, spiders, fireflies).
     this.world.getAmbient().draw(rc.ctx, zoom);
 
-    // Layer 2: Furniture and floor objects.
-    drawAllFurniture(rc);
-
-    // Layer 3: Characters (Y-sorted).
+    // Collect all characters for shadow + sprite passes.
     const agents = this.world.getAgentCharacters();
     const companions = this.world.getVisibleCompanions();
     const francesco = this.world.getFrancesco();
@@ -142,14 +139,24 @@ export class Renderer {
       ...companions, ...agents,
       ...(francesco ? [francesco] : []),
     ].sort((a, b) => a.y - b.y);
+
+    // Layer 1: Shadows (all characters, before furniture).
+    for (const char of allChars) {
+      char.drawShadow(rc.ctx, zoom);
+    }
+
+    // Layer 2: Furniture and floor objects.
+    drawAllFurniture(rc);
+
+    // Layer 3: Characters (Y-sorted sprites, no shadow).
     for (const char of allChars) {
       char.draw(rc.ctx, zoom);
     }
 
-    // Layer 3.5: Particles (between characters and HUD).
+    // Layer 3.5: Particles.
     this.particles.draw(rc.ctx, zoom);
 
-    // Layer 4: HUD, tool icons, speech bubbles, timeline.
+    // Layer 4: HUD overlay.
     drawOverlay(rc);
   }
 }

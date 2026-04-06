@@ -1,7 +1,7 @@
 import { darken } from "../../helpers/color";
 import { RenderContext, outlineRect } from "./render-context";
 import { AGENTS } from "../../../../shared/types";
-import { ACHIEVEMENTS } from "../../data/gamification";
+import { ACHIEVEMENTS, TIER_COLORS, ICON_PIXELS } from "../../data/gamification";
 
 // ── Tool icon (floating pixel art above Alfred) ────────
 
@@ -219,9 +219,9 @@ function drawOverlayHud(rc: RenderContext): void {
   // Chip background pill.
   const stateLabel = state.toUpperCase();
   ctx.font = `bold ${smallFont}px ${font}`;
-  const cost = world.getSessionCost();
-  const costText = cost.costUsd > 0 ? `  $${cost.costUsd.toFixed(2)}` : "";
-  const chipTextW = ctx.measureText(stateLabel + costText).width;
+  const pace = world.getPace();
+  const paceText = pace.current > 0 ? `  ${pace.current}/min` : "";
+  const chipTextW = ctx.measureText(stateLabel + paceText).width;
   const dotSize = zoom * 2;
   const chipPillW = dotSize + zoom * 3 + chipTextW + zoom * 2;
   const chipPillH = dotSize + zoom * 2;
@@ -249,13 +249,15 @@ function drawOverlayHud(rc: RenderContext): void {
   ctx.textAlign = "left";
   ctx.fillText(state.toUpperCase(), chipX + dotSize + zoom * 2, chipY + dotSize - brd);
 
-  // Cost next to state (always visible when > 0).
-  if (cost.costUsd > 0) {
+  // Pace next to state (tools/min).
+  if (pace.current > 0) {
     const stateTextW = ctx.measureText(state.toUpperCase()).width;
-    ctx.fillStyle = cost.costUsd > 1 ? "#F39C12" : "#888899";
+    const trendColor = pace.trend === "up" ? "#2ECC71" : pace.trend === "down" ? "#E74C3C" : "#888899";
+    ctx.fillStyle = trendColor;
     ctx.font = `${smallFont}px ${font}`;
+    const trendArrow = pace.trend === "up" ? "\u25B2" : pace.trend === "down" ? "\u25BC" : "";
     ctx.fillText(
-      `$${cost.costUsd.toFixed(2)}`,
+      `${pace.current}/min ${trendArrow}`,
       chipX + dotSize + zoom * 2 + stateTextW + zoom * 3,
       chipY + dotSize - brd,
     );
@@ -335,24 +337,7 @@ function drawOverlayHud(rc: RenderContext): void {
     }
   }
 
-  // ── 5. Top-right secondary: tools/min pace ──
-  const pace = world.getPace();
-  if (pace.current > 0) {
-    const paceY = chipY + dotSize + zoom * 3;
-    ctx.font = `${Math.max(8, zoom * 2.5)}px ${font}`;
-    ctx.textAlign = "right";
-
-    const trendColor = pace.trend === "up" ? "#2ECC71" : pace.trend === "down" ? "#E74C3C" : "#555566";
-    const trendChar = pace.trend === "up" ? "\u25B2" : pace.trend === "down" ? "\u25BC" : "\u2500";
-
-    ctx.fillStyle = "#555566";
-    ctx.fillText(`${pace.current}/m`, rightX - zoom * 3, paceY + zoom * 2);
-
-    ctx.fillStyle = trendColor;
-    ctx.fillText(trendChar, rightX, paceY + zoom * 2);
-  }
-
-  // (Director removed — low signal, high confusion)
+  // (Pace now shown in state chip — section 5 removed)
 
   // ── 7. Activity heatmap — 40 slots along bottom of context bar ──
   const heatSlots = world.getHeatmapSlots();
@@ -398,23 +383,6 @@ function drawOverlayHud(rc: RenderContext): void {
 
   // (Cave depth + achievements removed — decorative, low value)
 
-  // ── 9. Cost alert — flashing warning when over budget ──
-  if (world.isOverBudget()) {
-    const alertY = chipY + dotSize + zoom * 8;
-    const alertAlpha = Math.sin(now / 400) * 0.4 + 0.6; // fade 0.2–1.0, never fully off
-    const cost = world.getSessionCost();
-    const budget = world.getCostBudget();
-    ctx.save();
-    ctx.globalAlpha = alertAlpha;
-    ctx.fillStyle = "#E74C3C";
-    ctx.font = `bold ${smallFont}px ${font}`;
-    ctx.textAlign = "center";
-    ctx.fillText(
-      `BUDGET EXCEEDED  $${cost.costUsd.toFixed(2)} / $${budget.toFixed(2)}`,
-      width / 2, alertY,
-    );
-    ctx.restore();
-  }
 
   ctx.textAlign = "left";
 }
@@ -506,6 +474,7 @@ function drawExpandedPanel(rc: RenderContext): void {
     stats: "SESSION STATS",
     agents: "AGENTS",
     "agent-detail": "AGENT DETAIL",
+    "achievement-detail": "ACHIEVEMENT",
     history: "SESSION HISTORY",
     audit: "AUDIT TRAIL",
     achievements: "ACHIEVEMENTS",
@@ -557,13 +526,10 @@ function drawExpandedPanel(rc: RenderContext): void {
     const stats = world.getSessionStats();
     const pace = world.getPace();
     const breakdown = world.getToolBreakdown();
-    const cost = world.getSessionCost();
     ctx.font = `${fontSize}px ${font}`;
 
     const lines = [
       { label: "Context", value: `${stats.contextPct}%`, color: stats.contextPct < 50 ? "#2ECC71" : stats.contextPct < 80 ? "#F39C12" : "#E74C3C" },
-      { label: "Est. cost", value: `$${cost.costUsd.toFixed(2)}`, color: cost.costUsd > 1 ? "#F39C12" : "#888899" },
-      { label: "Est. tokens", value: cost.totalTokens > 1000 ? `${(cost.totalTokens / 1000).toFixed(1)}k` : `${cost.totalTokens}`, color: "#888899" },
       { label: "Tools", value: `${stats.toolCount}`, color: "#888899" },
       { label: "Duration", value: stats.duration, color: "#888899" },
       { label: "Pace", value: `${pace.current}/min`, color: pace.trend === "up" ? "#2ECC71" : pace.trend === "down" ? "#E74C3C" : "#888899" },
@@ -860,9 +826,6 @@ function drawExpandedPanel(rc: RenderContext): void {
     }
   } else if (panel === "achievements") {
     const unlocked = world.getUnlockedAchievements();
-    const tierColors: Record<string, string> = {
-      bronze: "#CD7F32", silver: "#C0C0C0", gold: "#FFD700", legendary: "#E74C3C",
-    };
     ctx.font = `${smallFont}px ${font}`;
 
     for (let i = 0; i < ACHIEVEMENTS.length; i++) {
@@ -872,7 +835,7 @@ function drawExpandedPanel(rc: RenderContext): void {
       const isUnlocked = unlocked.some(u => u.id === a.id);
 
       // Tier dot.
-      ctx.fillStyle = isUnlocked ? tierColors[a.tier] || "#888899" : "#222233";
+      ctx.fillStyle = isUnlocked ? TIER_COLORS[a.tier] || "#888899" : "#222233";
       ctx.fillRect(px + pad, ay + lineH * 0.3, zoom * 1.5, zoom * 1.5);
 
       // Name + description.
@@ -892,6 +855,107 @@ function drawExpandedPanel(rc: RenderContext): void {
       ctx.fillStyle = "#FFD700";
       ctx.font = `bold ${smallFont}px ${font}`;
       ctx.fillText(`${unlocked.length} / ${ACHIEVEMENTS.length} unlocked`, px + pad, summY + lineH * 0.3);
+    }
+  } else if (panel === "achievement-detail") {
+    const achId = world.getSelectedAchievementId();
+    const a = achId ? ACHIEVEMENTS.find(x => x.id === achId) : null;
+    if (a) {
+      const unlocked = world.getUnlockedAchievements();
+      const isUnlocked = unlocked.some(u => u.id === a.id);
+      const unlockedEntry = unlocked.find(u => u.id === a.id);
+      const tierColor = TIER_COLORS[a.tier] || "#888899";
+
+      // Tier glow background.
+      ctx.save();
+      ctx.fillStyle = tierColor;
+      ctx.globalAlpha = 0.08;
+      ctx.fillRect(px + pad, contentY, panelW - pad * 2, contentH - pad);
+      ctx.restore();
+
+      let curY = contentY;
+
+      // Large icon.
+      const iconPx = Math.max(2, zoom * 3);
+      const pixels = ICON_PIXELS[a.icon] || ICON_PIXELS.crystal;
+      const iconW = 4 * iconPx;
+      const iconX = px + pad;
+      ctx.fillStyle = isUnlocked ? tierColor : "#444458";
+      for (const [dx, dy] of pixels) {
+        ctx.fillRect(iconX + dx * iconPx, curY + dy * iconPx, iconPx, iconPx);
+      }
+
+      // Name + tier badge (to the right of icon).
+      const textX = iconX + iconW + pad;
+      ctx.font = `bold ${fontSize}px ${font}`;
+      ctx.fillStyle = isUnlocked ? "#EEEEFF" : "#888899";
+      ctx.fillText(a.name, textX, curY + fontSize);
+
+      // Tier pill.
+      const tierLabel = a.tier.toUpperCase();
+      ctx.font = `${smallFont}px ${font}`;
+      const tierLabelW = ctx.measureText(tierLabel).width;
+      const pillX = textX + ctx.measureText(a.name).width + pad;
+      ctx.font = `bold ${fontSize}px ${font}`; // re-measure with bold
+      const nameW = ctx.measureText(a.name).width;
+      ctx.font = `${smallFont}px ${font}`;
+      const pillXFinal = textX + nameW + zoom * 3;
+      ctx.fillStyle = tierColor;
+      ctx.fillRect(pillXFinal, curY + fontSize - smallFont, tierLabelW + zoom * 2, smallFont + zoom);
+      ctx.fillStyle = "#101820";
+      ctx.fillText(tierLabel, pillXFinal + zoom, curY + fontSize);
+
+      curY += iconPx * 4 + pad;
+
+      // Description.
+      ctx.font = `${smallFont}px ${font}`;
+      ctx.fillStyle = "#888899";
+      ctx.fillText(a.description, px + pad, curY + smallFont);
+      curY += smallFont + pad;
+
+      // Separator.
+      ctx.fillStyle = "#1a1a2e";
+      ctx.fillRect(px + pad, curY, panelW - pad * 2, Math.max(1, Math.floor(zoom / 2)));
+      curY += pad;
+
+      if (isUnlocked && unlockedEntry) {
+        // Unlock date.
+        const date = new Date(unlockedEntry.unlockedAt);
+        const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+        ctx.fillStyle = tierColor;
+        ctx.font = `bold ${smallFont}px ${font}`;
+        ctx.fillText("UNLOCKED", px + pad, curY + smallFont);
+        ctx.fillStyle = "#CCCCDD";
+        ctx.font = `${smallFont}px ${font}`;
+        ctx.fillText(dateStr, px + pad + zoom * 20, curY + smallFont);
+      } else {
+        // Progress bar.
+        const progress = world.getAchievementProgress(a.id);
+        const barX = px + pad;
+        const barW = panelW - pad * 2;
+        const barH = Math.max(zoom * 2, 6);
+
+        // Bar background.
+        ctx.fillStyle = "#1a1a2e";
+        ctx.fillRect(barX, curY, barW, barH);
+        // Bar fill.
+        ctx.fillStyle = tierColor;
+        ctx.fillRect(barX, curY, Math.floor(barW * progress), barH);
+        // Percentage.
+        ctx.fillStyle = "#CCCCDD";
+        ctx.font = `${smallFont}px ${font}`;
+        ctx.textAlign = "right";
+        ctx.fillText(`${Math.floor(progress * 100)}%`, px + panelW - pad, curY + barH + smallFont + zoom);
+        ctx.textAlign = "left";
+
+        curY += barH + smallFont + zoom * 2;
+
+        // Hint.
+        if (a.hint) {
+          ctx.fillStyle = "#666677";
+          ctx.font = `${smallFont}px ${font}`;
+          ctx.fillText(a.hint, px + pad, curY + smallFont);
+        }
+      }
     }
   } else if (panel === "workspace-map") {
     const nodes = world.getFileNodes();
@@ -1189,6 +1253,83 @@ function drawReplayTimeline(rc: RenderContext): void {
 
 // ── Public entry point ─────────────────────────────────
 
+// ── Achievement unlock popup ─────────────────────────────
+
+const TIER_POPUP_COLORS: Record<string, string> = {
+  bronze: "#CD7F32", silver: "#C0C0C0", gold: "#FFD700", legendary: "#E74C3C",
+};
+
+function drawAchievementPopup(rc: RenderContext): void {
+  const { ctx, width, height, now, world, zoom } = rc;
+  const popup = world.getAchievementPopup();
+  if (!popup) return;
+
+  const font = `"DM Mono", monospace`;
+  const tierColor = TIER_POPUP_COLORS[popup.tier] || "#888899";
+
+  // Fade in/out.
+  const fadeIn = Math.min(1, (4000 - popup.timer) / 400);
+  const fadeOut = Math.min(1, popup.timer / 600);
+  const alpha = Math.min(fadeIn, fadeOut);
+
+  // Slide up from bottom.
+  const slideOffset = Math.round((1 - fadeIn) * zoom * 10);
+
+  const popupW = Math.min(width * 0.6, zoom * 60);
+  const popupH = zoom * 14;
+  const popupX = Math.round((width - popupW) / 2);
+  const popupY = Math.round(height * 0.7 - popupH / 2) + slideOffset;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // Background.
+  ctx.fillStyle = "#0a0c14";
+  ctx.fillRect(popupX, popupY, popupW, popupH);
+
+  // Tier-colored border.
+  const brd = Math.max(1, Math.floor(zoom / 2));
+  ctx.fillStyle = tierColor;
+  ctx.fillRect(popupX, popupY, popupW, brd);
+  ctx.fillRect(popupX, popupY + popupH - brd, popupW, brd);
+  ctx.fillRect(popupX, popupY, brd, popupH);
+  ctx.fillRect(popupX + popupW - brd, popupY, brd, popupH);
+
+  // Pulsing glow.
+  const pulse = Math.sin(now / 300) * 0.3 + 0.7;
+  ctx.globalAlpha = alpha * pulse * 0.08;
+  ctx.fillStyle = tierColor;
+  ctx.fillRect(popupX - zoom * 2, popupY - zoom * 2, popupW + zoom * 4, popupH + zoom * 4);
+  ctx.globalAlpha = alpha;
+
+  // "ACHIEVEMENT UNLOCKED" header.
+  const headerFont = Math.max(8, zoom * 2.5);
+  ctx.fillStyle = tierColor;
+  ctx.font = `bold ${headerFont}px ${font}`;
+  ctx.textAlign = "center";
+  ctx.fillText("ACHIEVEMENT UNLOCKED", popupX + popupW / 2, popupY + zoom * 3.5);
+
+  // Achievement name.
+  const nameFont = Math.max(10, zoom * 3.5);
+  ctx.fillStyle = "#FFFFFF";
+  ctx.font = `bold ${nameFont}px ${font}`;
+  ctx.fillText(popup.name, popupX + popupW / 2, popupY + zoom * 7.5);
+
+  // Description.
+  const descFont = Math.max(7, zoom * 2.2);
+  ctx.fillStyle = "#888899";
+  ctx.font = `${descFont}px ${font}`;
+  ctx.fillText(popup.description, popupX + popupW / 2, popupY + zoom * 11);
+
+  // Tier badge.
+  ctx.fillStyle = tierColor;
+  ctx.font = `bold ${headerFont}px ${font}`;
+  ctx.textAlign = "right";
+  ctx.fillText(popup.tier.toUpperCase(), popupX + popupW - zoom * 2, popupY + zoom * 3.5);
+
+  ctx.restore();
+}
+
 export function drawOverlay(rc: RenderContext): void {
   drawToolIcon(rc);
   drawSpeechBubbles(rc);
@@ -1196,4 +1337,5 @@ export function drawOverlay(rc: RenderContext): void {
   drawSessionIndicators(rc);
   drawExpandedPanel(rc);
   drawReplayTimeline(rc);
+  drawAchievementPopup(rc);
 }

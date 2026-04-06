@@ -1,6 +1,6 @@
 import { darken, lighten } from "../../helpers/color";
 import { RenderContext, P, seed, outlineRect, contactShadow, castShadow } from "./render-context";
-import { ACHIEVEMENTS } from "../../data/gamification";
+import { ACHIEVEMENTS, TIER_COLORS, ICON_PIXELS } from "../../data/gamification";
 
 // ── Batcomputer ────────────────────────────────────────
 
@@ -824,6 +824,46 @@ function drawWhiteboard(
   }
 }
 
+// ── Scala / Exit (2x2 tile spiral staircase) ──────────
+
+function drawScala(
+  ctx: CanvasRenderingContext2D,
+  zt: number, zoom: number, height: number,
+): void {
+  const sx = zt;
+  const sy = height - zt * 3;
+  const w = zt * 2;
+  const h = zt * 2;
+
+  // Dark hole.
+  ctx.fillStyle = "#040408";
+  ctx.fillRect(sx, sy, w, h);
+
+  // Metallic steps (3 visible, spiraling).
+  const stepH = Math.floor(h / 4);
+  ctx.fillStyle = "#2a2a3e";
+  ctx.fillRect(sx, sy + stepH, w, zoom * 2);
+  ctx.fillStyle = "#222233";
+  ctx.fillRect(sx + zoom * 2, sy + stepH * 2, w - zoom * 4, zoom * 2);
+  ctx.fillStyle = "#1a1a2e";
+  ctx.fillRect(sx + zoom * 4, sy + stepH * 3, w - zoom * 8, zoom * 2);
+
+  // Center void.
+  const voidSize = Math.floor(zt * 0.6);
+  ctx.fillStyle = "#020204";
+  ctx.fillRect(sx + Math.floor((w - voidSize) / 2), sy + Math.floor((h - voidSize) / 2), voidSize, voidSize);
+
+  // Railing outline.
+  outlineRect(ctx, sx, sy, w, h, zoom);
+
+  // Label.
+  ctx.fillStyle = "#444458";
+  ctx.font = `${Math.max(4, zoom * 1.8)}px "DM Mono", monospace`;
+  ctx.textAlign = "center";
+  ctx.fillText("EXIT", sx + w / 2, sy - zoom);
+  ctx.textAlign = "left";
+}
+
 // ── Floor cable runs (more life on the floor) ─────────
 
 function drawFloorCableRuns(
@@ -913,71 +953,30 @@ function drawFloorScatter(
   ctx.fillRect(coilX, coilY + zoom * 2, zoom * 3, zoom);
 }
 
-// ── Batcomputer light pool (floor glow, state-reactive) ──
-
-function drawBatcomputerLightPool(
-  ctx: CanvasRenderingContext2D,
-  bcX: number, bcY: number, zt: number, zoom: number, bcTilesW: number,
-  now: number, state?: "idle" | "thinking" | "writing",
-): void {
-  if (state === "idle") return; // No glow when idle — cave stays dark.
-
-  const bcW = zt * bcTilesW;
-  const bcBottom = bcY + Math.floor(zt * 1.5) + zoom * 3;
-
-  // Pool color based on state.
-  const poolColor = state === "thinking" ? "#0a1428" : "#0a1e0e";
-  const poolBright = state === "thinking" ? "#0e1a30" : "#0e2814";
-
-  // Breathing pulse.
-  const pulse = Math.sin(now / 1200) * 0.5 + 0.5;
-  const color = pulse > 0.5 ? poolBright : poolColor;
-
-  // Main pool — wide, shallow rectangle below the desk.
-  const poolW = bcW + zoom * 8;
-  const poolH = zoom * 6;
-  const poolX = bcX - zoom * 4;
-  const poolY = bcBottom + zoom * 2;
-
-  ctx.fillStyle = color;
-  ctx.fillRect(poolX, poolY, poolW, poolH);
-
-  // Softer outer edge (wider, dimmer).
-  ctx.fillStyle = poolColor;
-  ctx.fillRect(poolX - zoom * 2, poolY + poolH, poolW + zoom * 4, zoom * 3);
-  ctx.fillRect(poolX + zoom * 2, poolY - zoom * 2, poolW - zoom * 4, zoom * 2);
-}
-
 // ── Orchestrator ───────────────────────────────────────
 
 export function drawAllFurniture(rc: RenderContext): void {
   const { ctx, width, height, now, world, zoom, zt, cols, wallRows, wallH } = rc;
 
-  // Batcomputer positioning (same as render() lines 113-116).
+  // Batcomputer positioning — tile-aligned.
   const bcTilesW = Math.min(5, cols - 2);
   const bcW = zt * bcTilesW;
   const bcX = Math.floor((width - bcW) / 2);
-  const bcY = wallH + zoom * 2;
-
-  // Light pool on floor below Batcomputer — state-reactive ambient glow.
-  drawBatcomputerLightPool(ctx, bcX, bcY, zt, zoom, bcTilesW, now, world.getAlfredState());
+  const bcY = wallH + zt;
 
   drawCables(ctx, bcX, bcY, zt, zoom, bcTilesW);
-  drawServerRack(ctx, bcX - zt * 3, Math.floor(bcY - zt * 1.5), zt, zoom, now);
-  drawWorkbench(ctx, Math.floor(bcX - zt * 6.5), bcY, zt, zoom, now);
-  drawDisplayPanel(ctx, bcX + bcW + zt, bcY - Math.floor(zt * 0.5), zt, zoom, now, world);
+  drawServerRack(ctx, bcX - zt * 3, bcY - zt, zt, zoom, now);
+  drawWorkbench(ctx, bcX - zt * 6, bcY, zt, zoom, now);
+  drawDisplayPanel(ctx, bcX + bcW + zt, bcY - zt, zt, zoom, now, world);
   drawBatcomputer(ctx, bcX, bcY, zt, zoom, bcTilesW, now, world);
+
+  // Scala / Exit — bottom-left, 2x2 tile.
+  drawScala(ctx, zt, zoom, height);
 
   // Floor objects (crates, chair, debris).
   drawFloorObjects(ctx, bcX, bcY, zt, zoom, bcTilesW, width, height);
 
-  // Extra furniture.
-  drawWeaponRack(ctx, zt, zoom, wallH);
-  drawBarrel(ctx, bcX, bcW, zt, zoom, height);
-  drawMapTable(ctx, zt, zoom, wallH);
-  drawToolBoard(ctx, zt, zoom, wallH);
-  drawLocker(ctx, zt, zoom, wallH, width);
-  drawWhiteboard(ctx, zt, zoom, wallH, world);
+  // Floor cable runs.
   drawFloorCableRuns(ctx, zt, zoom, width, height);
   drawFloorScatter(ctx, zt, zoom, width, height);
 
@@ -987,8 +986,6 @@ export function drawAllFurniture(rc: RenderContext): void {
   // Achievement trophy case.
   drawTrophyCase(ctx, zoom, zt, wallH, width, now, world);
 
-  // Workspace file heat nodes on floor.
-  drawFileHeatNodes(ctx, zoom, wallH, width, height, world);
 }
 
 // ── Cave Evolution Decorations ────────────────────────
@@ -1091,22 +1088,7 @@ function drawEvolutionDecorations(
 
 // ── Achievement Trophy Case ─────────────────────────────
 
-const TIER_COLORS: Record<string, string> = {
-  bronze: "#CD7F32", silver: "#C0C0C0", gold: "#FFD700", legendary: "#E74C3C",
-};
-
-const ICON_PIXELS: Record<string, number[][]> = {
-  crystal: [[1,0],[0,1],[2,1],[1,2],[0,2],[2,2],[1,3]],
-  chess:   [[0,0],[2,0],[0,1],[1,1],[2,1],[1,2],[0,3],[1,3],[2,3]],
-  owl:     [[0,0],[2,0],[0,1],[1,1],[2,1],[0,2],[2,2],[1,3]],
-  hawk:    [[1,0],[0,1],[1,1],[2,1],[0,2],[2,2],[0,3],[2,3]],
-  bolt:    [[1,0],[2,0],[0,1],[1,1],[1,2],[2,2],[0,3],[1,3]],
-  scroll:  [[0,0],[1,0],[2,0],[0,1],[0,2],[1,2],[2,2],[2,3]],
-  gem:     [[1,0],[0,1],[2,1],[0,2],[2,2],[1,3]],
-  crown:   [[0,0],[2,0],[0,1],[1,1],[2,1],[0,2],[1,2],[2,2]],
-  shield:  [[0,0],[1,0],[2,0],[0,1],[2,1],[0,2],[2,2],[1,3]],
-  flame:   [[1,0],[0,1],[1,1],[2,1],[0,2],[1,2],[2,2],[1,3]],
-};
+// TIER_COLORS and ICON_PIXELS imported from gamification.ts
 
 function drawTrophyCase(
   ctx: CanvasRenderingContext2D,
@@ -1178,53 +1160,3 @@ function drawTrophyCase(
   }
 }
 
-// ── Workspace File Heat Nodes ───────────────────────────
-
-function drawFileHeatNodes(
-  ctx: CanvasRenderingContext2D,
-  zoom: number, wallH: number,
-  width: number, height: number,
-  world: RenderContext["world"],
-): void {
-  const nodes = world.getFileNodesHottest();
-  if (nodes.length === 0) return;
-
-  const maxHits = Math.max(1, ...nodes.map(n => n.hitCount));
-  const floorY = wallH + Math.floor((height - wallH) * 0.65);
-  const spacing = Math.floor((width * 0.7) / Math.max(1, nodes.length));
-  const startX = Math.floor(width * 0.15);
-  const catColors: Record<string, string> = {
-    read: "#1E7FD8", write: "#F39C12", bash: "#2ECC71", other: "#555566",
-  };
-
-  for (let i = 0; i < nodes.length; i++) {
-    const n = nodes[i];
-    const intensity = n.hitCount / maxHits;
-    const nx = startX + i * spacing;
-    const ny = floorY + Math.floor(Math.sin(i * 2.3) * zoom * 3);
-    const color = catColors[n.category] || "#555566";
-    const dotR = Math.max(2, Math.floor(zoom * (0.8 + intensity * 1.2)));
-
-    // Glow halo.
-    ctx.save();
-    ctx.fillStyle = color;
-    ctx.globalAlpha = intensity * 0.12;
-    ctx.fillRect(nx - dotR * 2, ny - dotR * 2, dotR * 4, dotR * 4);
-    ctx.globalAlpha = intensity * 0.25;
-    ctx.fillRect(nx - dotR, ny - dotR, dotR * 2, dotR * 2);
-    ctx.restore();
-
-    // Core dot.
-    ctx.fillStyle = color;
-    ctx.fillRect(nx - Math.floor(dotR / 2), ny - Math.floor(dotR / 2), dotR, dotR);
-
-    // File name label (top 4).
-    if (i < 4) {
-      ctx.fillStyle = "#555566";
-      ctx.font = `${Math.max(4, zoom * 1.8)}px "DM Mono", monospace`;
-      ctx.textAlign = "center";
-      const label = n.name.length > 12 ? n.name.slice(0, 10) + ".." : n.name;
-      ctx.fillText(label, nx, ny + dotR + zoom * 2);
-    }
-  }
-}

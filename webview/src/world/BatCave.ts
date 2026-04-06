@@ -111,6 +111,8 @@ export class BatCaveWorld {
   private usageStats: UsageStats | null = null;
   private idleTimer: number | null = null;
   private exitTimers = new Map<string, number>();
+  /** Agents that just entered — walk to zone when enter animation finishes. */
+  private pendingWalkToZone = new Map<string, { x: number; y: number }>();
   private config: { agents?: Record<string, AgentMeta>; activeRepo?: string } = {};
 
   // Repo theme.
@@ -201,8 +203,9 @@ export class BatCaveWorld {
   private otherSessions: { label: string; lastActive: number; isCurrent: boolean }[] = [];
 
   // Interactive dashboard — expanded panel.
-  private expandedPanel: "files" | "stats" | "agents" | "agent-detail" | "history" | "audit" | "achievements" | "workspace-map" | "workflows" | "team" | null = null;
+  private expandedPanel: "files" | "stats" | "agents" | "agent-detail" | "achievement-detail" | "history" | "audit" | "achievements" | "workspace-map" | "workflows" | "team" | null = null;
   private selectedAgentId: string | null = null;
+  private selectedAchievementId: string | null = null;
 
   // Session history (from extension globalState).
   private sessionHistory: import("../../../shared/types").SessionSummary[] = [];
@@ -458,16 +461,21 @@ export class BatCaveWorld {
         const slot = this.nextAgentSlot++;
         const { x: slotX, y: slotY } = this.getAgentSlotPosition(slot, agentId);
 
+        // Agents enter from the cave entrance (right side) and walk to their zone.
+        const entranceX = this.worldWidth * 0.95;
+        const entranceY = slotY;
         const char = new Character(
           agentId,
           meta?.name || agentId,
           meta?.emoji || "?",
           sprite,
-          slotX,
-          this.worldHeight + 30 // Start off-screen below.
+          entranceX,
+          entranceY,
         );
         char.setIdleStyle(this.getIdleStyleForAgent(agentId));
-        char.enter(slotX, slotY);
+        char.enter(entranceX, entranceY);
+        // Queue walk to actual zone position after enter animation.
+        this.pendingWalkToZone.set(agentId, { x: slotX, y: slotY });
         this.agents.set(agentId, char);
         this.logEvent("agent_enter", meta?.name || agentId);
         this.audit("agent", "agent_enter", `${meta?.emoji || "?"} ${meta?.name || agentId} entered`, { agentId });
@@ -684,6 +692,13 @@ export class BatCaveWorld {
         this.currentQuip = null;
       }
     }
+    // Achievement popup decay.
+    if (this.achievementPopup) {
+      this.achievementPopup.timer -= deltaMs;
+      if (this.achievementPopup.timer <= 0) {
+        this.achievementPopup = null;
+      }
+    }
   }
 
   getAlfredState(): "idle" | "thinking" | "writing" {
@@ -803,14 +818,15 @@ export class BatCaveWorld {
   }
 
   /** Currently expanded panel (null = none). */
-  getExpandedPanel(): "files" | "stats" | "agents" | "agent-detail" | "history" | "audit" | "achievements" | "workspace-map" | "workflows" | "team" | null {
+  getExpandedPanel(): "files" | "stats" | "agents" | "agent-detail" | "achievement-detail" | "history" | "audit" | "achievements" | "workspace-map" | "workflows" | "team" | null {
     return this.expandedPanel;
   }
 
   /** Toggle or set expanded panel. */
-  setExpandedPanel(panel: "files" | "stats" | "agents" | "agent-detail" | "history" | "audit" | "achievements" | "workspace-map" | "workflows" | "team" | null): void {
+  setExpandedPanel(panel: "files" | "stats" | "agents" | "agent-detail" | "achievement-detail" | "history" | "audit" | "achievements" | "workspace-map" | "workflows" | "team" | null): void {
     this.expandedPanel = this.expandedPanel === panel ? null : panel;
     if (panel !== "agent-detail") this.selectedAgentId = null;
+    if (panel !== "achievement-detail") this.selectedAchievementId = null;
   }
 
   /** Handle click at canvas coordinates — hit test Batcomputer screens. */
@@ -820,7 +836,7 @@ export class BatCaveWorld {
     const bcTilesW = Math.min(5, Math.ceil(this.worldWidth / zt) - 1);
     const bcW = zt * bcTilesW;
     const bcX = Math.floor((this.worldWidth - bcW) / 2);
-    const bcY = this.wallH + zoom * 2;
+    const bcY = this.wallH + zt;
     const bcH = Math.floor(zt * 1.5);
     const screenW = Math.floor((bcW - zoom * 4) / 3);
 
@@ -865,6 +881,47 @@ export class BatCaveWorld {
       }
     }
 
+    // Click on trophy case slot → achievement detail.
+    const trophyCaseX = this.worldWidth - zt * 3;
+    const trophyCaseY = Math.floor(this.wallH * 0.25);
+    const trophySlotSize = zoom * 5;
+    const trophyCols = 3;
+    const trophyRows = Math.ceil(ACHIEVEMENTS.length / trophyCols);
+    const trophyCaseW = trophyCols * trophySlotSize + zoom * 2;
+    const trophyCaseH = trophyRows * trophySlotSize + zoom * 4;
+    if (cx >= trophyCaseX && cx <= trophyCaseX + trophyCaseW &&
+        cy >= trophyCaseY && cy <= trophyCaseY + trophyCaseH) {
+      for (let i = 0; i < ACHIEVEMENTS.length; i++) {
+        const col = i % trophyCols;
+        const row = Math.floor(i / trophyCols);
+        const sx = trophyCaseX + zoom + col * trophySlotSize;
+        const sy = trophyCaseY + zoom * 3 + row * trophySlotSize;
+        if (cx >= sx && cx <= sx + trophySlotSize && cy >= sy && cy <= sy + trophySlotSize) {
+          this.setSelectedAchievementId(ACHIEVEMENTS[i].id);
+          return;
+        }
+      }
+    }
+
+    // Click on achievement list row → achievement detail.
+    if (this.expandedPanel === "achievements") {
+      const panelW = Math.min(this.worldWidth * 0.7, 440);
+      const panelH = Math.min(this.worldHeight * 0.7, 360);
+      const px = Math.floor((this.worldWidth - panelW) / 2);
+      const py = Math.floor((this.worldHeight - panelH) / 2);
+      const pad = zoom * 4;
+      const headerH = Math.max(10, zoom * 3.5) + pad;
+      const lineH = Math.max(zoom * 5, 16);
+      const contentY = py + pad + headerH;
+      if (cx >= px && cx <= px + panelW && cy >= contentY) {
+        const rowIdx = Math.floor((cy - contentY) / lineH);
+        if (rowIdx >= 0 && rowIdx < ACHIEVEMENTS.length) {
+          this.setSelectedAchievementId(ACHIEVEMENTS[rowIdx].id);
+          return;
+        }
+      }
+    }
+
     // Click on an agent character → agent detail panel.
     const hitSize = 16 * zoom; // sprite width scaled
     for (const [agentId, agent] of this.agents) {
@@ -882,6 +939,7 @@ export class BatCaveWorld {
     if (this.expandedPanel) {
       this.expandedPanel = null;
       this.selectedAgentId = null;
+      this.selectedAchievementId = null;
     }
   }
 
@@ -925,6 +983,25 @@ export class BatCaveWorld {
   /** Currently selected agent for detail panel. */
   getSelectedAgentId(): string | null {
     return this.selectedAgentId;
+  }
+
+  /** Currently selected achievement for detail panel. */
+  getSelectedAchievementId(): string | null {
+    return this.selectedAchievementId;
+  }
+
+  setSelectedAchievementId(id: string | null): void {
+    this.selectedAchievementId = id;
+    this.expandedPanel = id ? "achievement-detail" : null;
+    if (id) this.selectedAgentId = null;
+  }
+
+  /** Get progress (0-1) for a specific achievement. */
+  getAchievementProgress(id: string): number {
+    const a = ACHIEVEMENTS.find(a => a.id === id);
+    if (!a || !a.progress) return 0;
+    const ctx = this.buildAchievementContext();
+    return a.progress(ctx);
   }
 
   /** Estimated session cost based on token usage. */
@@ -1275,7 +1352,6 @@ export class BatCaveWorld {
   /** Build context for achievement checks. */
   private buildAchievementContext(): AchievementContext {
     const stats = this.usageStats;
-    const cost = this.getSessionCost();
     const pace = this.getPace();
     const hour = new Date().getHours();
     const allAgentIds = Array.from(this.agentStats.keys());
@@ -1284,19 +1360,20 @@ export class BatCaveWorld {
       sessionToolCalls: stats?.toolCallsThisSession ?? 0,
       sessionAgentsSpawned: stats?.agentsSpawnedThisSession ?? 0,
       contextPeakPct: this.contextPeakPct,
-      costUsd: cost.costUsd,
-      costBudget: this.costBudgetUsd,
       durationMs: Date.now() - (stats?.sessionStartedAt ?? Date.now()),
       toolBreakdown: { ...this.toolBreakdown },
       uniqueAgentIds: allAgentIds,
       toolsPerMin: pace.current,
-      sessionsUnderBudget: this.sessionsUnderBudget,
       totalToolsCumulative: this.totalToolsCumulative,
       totalSessionsCumulative: this.totalSessionsCumulative,
       isNightSession: hour >= 22 || hour < 5,
       filesCount: this.fileNodes.size,
+      currentHour: hour,
     };
   }
+
+  /** Achievement popup state — shown for 4 seconds on unlock. */
+  private achievementPopup: { name: string; description: string; tier: string; icon: string; timer: number } | null = null;
 
   /** Check and unlock new achievements. */
   checkAchievements(): UnlockedAchievement[] {
@@ -1310,11 +1387,18 @@ export class BatCaveWorld {
         };
         this.unlockedAchievements.push(unlocked);
         newlyUnlocked.push(unlocked);
-        bus.emit("sound:play", { id: "agent-chime" });
+        // Show popup for the latest unlock.
+        this.achievementPopup = { name: a.name, description: a.description, tier: a.tier, icon: a.icon, timer: 4000 };
+        bus.emit("sound:play", { id: "milestone" });
         bus.emit("particle:spawn", { preset: "agent-enter", x: this.worldWidth / 2, y: this.wallH + 20 });
       }
     }
     return newlyUnlocked;
+  }
+
+  /** Get current achievement popup (or null). */
+  getAchievementPopup(): { name: string; description: string; tier: string; icon: string; timer: number } | null {
+    return this.achievementPopup;
   }
 
   getUnlockedAchievements(): UnlockedAchievement[] {
@@ -1533,6 +1617,19 @@ export class BatCaveWorld {
   // ── Per-agent idle behaviors ───────────────────────────
 
   private updateAgentBehavior(agentId: string, char: Character, dt: number): void {
+    // After enter animation finishes, walk to assigned zone.
+    if (char.state === "idle" && this.pendingWalkToZone.has(agentId)) {
+      const target = this.pendingWalkToZone.get(agentId)!;
+      this.pendingWalkToZone.delete(agentId);
+      const path = this.pathfinder.findPath(char.x, char.y, target.x, target.y);
+      if (path.length > 0) {
+        char.moveAlongPath(path);
+      } else {
+        char.moveTo(target.x, target.y);
+      }
+      return;
+    }
+
     if (char.state !== "idle") {
       this.agentBehaviorTimers.delete(agentId);
       return;
@@ -1985,7 +2082,7 @@ export class BatCaveWorld {
     return { x, y };
   }
 
-  /** Get position in a zone, with slight randomization to avoid stacking. */
+  /** Get position in a zone, with wide spacing to avoid crowding. */
   private getZonePosition(zone: AgentZone, agentId: string): { x: number; y: number } | null {
     const floorY = this.wallH + Math.floor((this.worldHeight - this.wallH) * 0.82);
     const zt = this._zt;
@@ -1993,26 +2090,26 @@ export class BatCaveWorld {
     const bcTilesW = Math.min(5, Math.ceil(this.worldWidth / zt) - 1);
     const bcW = zt * bcTilesW;
     const bcX = Math.floor((this.worldWidth - bcW) / 2);
-    // Deterministic jitter based on agent ID.
-    const jitter = (agentId.charCodeAt(0) % 7 - 3) * zoom * 3;
+    // Wide deterministic jitter — agents in same zone spread out significantly.
+    const hash = agentId.charCodeAt(0) * 31 + (agentId.charCodeAt(1) || 0);
+    const jitterX = ((hash % 11) - 5) * zoom * 6;
+    const jitterY = ((hash % 7) - 3) * zoom * 2;
 
     switch (zone) {
       case "batcomputer":
-        return { x: bcX + bcW / 2 + jitter, y: floorY - zoom * 2 };
+        return { x: bcX + bcW / 2 + jitterX, y: floorY - zoom * 4 + jitterY };
       case "server":
-        return { x: bcX - zt * 2 + jitter, y: floorY - zoom * 2 };
+        return { x: bcX - zt * 3 + jitterX, y: floorY - zoom * 2 + jitterY };
       case "workbench":
-        return { x: Math.floor(bcX - zt * 5) + jitter, y: floorY };
+        return { x: bcX - zt * 6 + jitterX, y: floorY + jitterY };
       case "display":
-        return { x: bcX + bcW + zt * 2 + jitter, y: floorY - zoom * 2 };
+        return { x: bcX + bcW + zt * 2 + jitterX, y: floorY - zoom * 2 + jitterY };
       case "patrol":
-        // Start at a random perimeter point.
-        return { x: this.worldWidth * 0.2 + jitter, y: floorY };
+        return { x: this.worldWidth * 0.15 + jitterX, y: floorY + jitterY };
       case "follow":
-        // Near Alfred with offset.
-        return { x: this.alfred.x + zoom * 12, y: this.alfred.y + zoom * 2 };
+        return { x: this.alfred.x + zoom * 16, y: this.alfred.y + zoom * 2 };
       case "entrance":
-        return { x: this.worldWidth * 0.88 + jitter, y: floorY };
+        return { x: this.worldWidth * 0.92 + jitterX, y: floorY + jitterY };
       default:
         return null;
     }

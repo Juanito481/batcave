@@ -16,7 +16,6 @@ import { AGENT_PERSONALITIES, BodyType } from "../data/agent-personalities";
 
 export interface SpriteSheet {
   canvas: OffscreenCanvas;
-  shadowCanvas: OffscreenCanvas;
   frameWidth: number;
   frameHeight: number;
   animations: Record<string, { row: number; frames: number; speed: number }>;
@@ -44,6 +43,7 @@ interface DerivedShades {
 }
 
 function deriveShades(p: CharacterPalette): DerivedShades {
+  // GBA-style 16-color budget: 6 base + 4 shadow (H,S,T,P) + 4 highlight (H,S,T,A) + outline + transparent.
   return {
     base: { H: p.hair, S: p.skin, T: p.shirt, P: p.pants, A: p.accent, E: p.eyes },
     shadow: {
@@ -51,16 +51,16 @@ function deriveShades(p: CharacterPalette): DerivedShades {
       S: darken(p.skin, 0.22),
       T: darken(p.shirt, 0.25),
       P: darken(p.pants, 0.25),
-      A: darken(p.accent, 0.25),
-      E: p.eyes,
+      A: p.accent,   // no separate shadow — budget
+      E: p.eyes,     // no separate shadow — budget
     },
     highlight: {
       H: lighten(p.hair, 0.18),
       S: lighten(p.skin, 0.15),
       T: lighten(p.shirt, 0.15),
-      P: lighten(p.pants, 0.12),
+      P: p.pants,    // no separate highlight — budget
       A: lighten(p.accent, 0.20),
-      E: lighten(p.eyes, 0.08),
+      E: p.eyes,     // no separate highlight — budget
     },
   };
 }
@@ -152,66 +152,67 @@ const PALETTES: Record<string, CharacterPalette> = {
 // All rows MUST be exactly 16 characters wide.
 
 // Standard humanoid (default for knight, chancellor, NPCs).
+// Lowercase = forced shadow, digits 1-6 = forced highlight (1=H,2=S,3=T,4=P,5=A,6=E).
 const BODY_STANDARD = [
   "......HHHH......",
-  ".....HHHHHH.....",
-  "....HHHHHHHH....",
-  "....HHSSSSHH....",
+  ".....H1HhHH.....",
+  "....HHhH1HHH....",
+  "....HhSSSSHH....",
   "....HSSEESSH....",
-  "....HSSSSSSH....",
+  "....HSSsSSH.....",
   ".....SSSSSS.....",
   "......SSSS......",
   ".....AATTAA.....",
-  "....TTTTTTTT....",
-  "...STTTATTTTS...",
-  "...STTTTTTTTS...",
-  "...STTTTTTTTS...",
-  "....TTAATTTT....",
+  "....3TTtTTTT....",
+  "...STTTaTTTTS...",
+  "...STTTtTTTTS...",
+  "...sTTTTTTTTs...",
+  "....TTtAATTT....",
   ".....TTTTTT.....",
   ".....PPPPPP.....",
-  ".....PPPPPP.....",
+  ".....Pp..pP.....",
 ];
 
 // Caped — King: wide cape draping from shoulders, regal silhouette.
 const BODY_CAPED = [
   "......HHHH......",
-  ".....HHHHHH.....",
-  "....HHHHHHHH....",
-  "....HHSSSSHH....",
+  ".....H1HhHH.....",
+  "....HHhH1HHH....",
+  "....HhSSSSHH....",
   "....HSSEESSH....",
-  "....HSSSSSSH....",
+  "....HSSsSSH.....",
   ".....SSSSSS.....",
   "......SASS......",
-  "...AAATTTTAAA...",
-  "..AATTTTTTTTAA..",
-  "..ASTTTTTTTTSA..",
-  "..ATTTTTTTTTA...",
-  "..ATTTTTTTTTA...",
-  "...ATTAATTTTA...",
+  "...5AATTTTAA5...",
+  "..AATTT3TTTAA...",
+  "..AsTTTTTTTTsA..",
+  "..ATTTtTtTTTA...",
+  "..aTTTTTTTTTa...",
+  "...aTTAATTTa....",
   "...AATTTTTTAA...",
-  "...AAPPPPPPAA...",
-  "...AAPPPPPPAA...",
+  "...AAPPPPPPaA...",
+  "...AAPp..pPAA...",
 ];
 
 // Robed — Queen: elegant dress that widens at the bottom.
 const BODY_ROBED = [
   "......HHHH......",
-  ".....HHHHHH.....",
-  "....HHHHHHHH....",
-  "....HHSSSSHH....",
+  ".....1HhH1H.....",
+  "....HHhHH1HH....",
+  "....HhSSSSHH....",
   "....HSSEESSH....",
-  "....HSSSSSSH....",
+  "....HSSsSSH.....",
   ".....SSSSSS.....",
-  "......SASS......",
+  "......sASs......",
   ".....AATTAA.....",
-  "....TTTTTTTT....",
-  "...STTTATTTTS...",
-  "...STTTTTTTTS...",
-  "....TTAATTTT....",
-  "....TTTTTTTT....",
+  "....3TTtTTTT....",
+  "...STTTaTTTTS...",
+  "...sTTTTTTTTs...",
+  "....TTtATTTT....",
+  "....TTTtTTTT....",
   "...TTTTTTTTTT...",
-  "..TTTTTTTTTTTT..",
-  "..TTTTTTTTTTTT..",
+  "..3TTTTtTTTTT...",
+  "..tTTTTtTTTTt...",
 ];
 
 // Armored — White Rook: wide, stocky, boxy torso with shield.
@@ -219,168 +220,167 @@ const BODY_ARMORED = [
   "......HHHH......",
   ".....HHHHHH.....",
   "....HHHHHHHH....",
-  "....HHSSSSHH....",
+  "....HhSSSSHH....",
   "....HSSEESSH....",
-  "....HSSSSSSH....",
+  "....HSSsSSH.....",
   ".....SSSSSS.....",
   "......SSSS......",
   "....AATTTTAA....",
-  "...TTTTTTTTTT...",
+  "...3TTTTTTTT3...",
   "..STTAAATTTTS...",
-  "..STTTTTTTTTSA..",
-  "..STTTTTTTTTSA..",
-  "...TTAATTAATT...",
+  "..sTTTtTTTTTsA..",
+  "..sTTTTtTTTTsA..",
+  "...TTtAATAATT...",
   "...TTTTTTTTTT...",
   "....PPPPPPPP....",
-  "....PPPPPPPP....",
+  "....Pp....pP....",
 ];
 
 // Coated — Bishop: long detective coat extending below waist.
 const BODY_COATED = [
   "......HHHH......",
-  ".....HHHHHH.....",
-  "....HHHHHHHH....",
-  "....HHSSSSHH....",
+  ".....H1HhHH.....",
+  "....HHhHHHHH....",
+  "....HhSSSSHH....",
   "....HSSEESSH....",
-  "....HSSSSSSH....",
+  "....HSSsSSH.....",
   ".....SSSSSS.....",
   "......SSSS......",
   ".....AATTAA.....",
-  "....TTTTTTTT....",
-  "...STTTATTTTS...",
-  "...STTATTTATS...",
-  "...STTTTTTTTS...",
-  "....TTTTTTTT....",
-  "....TAATTTTT....",
-  "....TTTTTTTT....",
-  "....TT.PP.TT....",
+  "....3TTtTTTT....",
+  "...STTTaTTTTS...",
+  "...sTTATTTATs...",
+  "...sTTTtTTTTs...",
+  "....TTTtTTTT....",
+  "....TaATTTTT....",
+  "....TTTtTTTT....",
+  "....TT.Pp.TT....",
 ];
 
 // Hooded — Black Rook: cloak with hood, narrow and sinister.
 const BODY_HOODED = [
   ".....HHHHHH.....",
-  "....HHHHHHHH....",
-  "...HHHHHHHHHH...",
-  "...HHHHSSHHHH...",
+  "....HhHHH1HH....",
+  "...HhHHHHHHHH...",
+  "...HHHhSShHHH...",
   "....HSSEESSH....",
-  "....HSSSSSSH....",
+  "....HSSsSSH.....",
   ".....SSSSSS.....",
   "......SSSS......",
-  ".....ATTTTTA....",
+  ".....aTTTTa.....",
   "....TTTTTTTT....",
-  "...HTTTATTTTH...",
-  "...HTTTTTTTTH...",
-  "...HTTTTTTTTH...",
-  "....HHHHHHHH....",
+  "...hTTTaTTTTh...",
+  "...hTTTtTTTTh...",
+  "...hTTTTTTTTh...",
+  "....hHhHhHhH....",
   "....HHTTTTHH....",
   ".....PPPPPP.....",
-  ".....PPPPPP.....",
+  ".....Pp..pP.....",
 ];
 
 // Heavy — Black Bishop: very wide shoulders, demolition build.
 const BODY_HEAVY = [
   "......HHHH......",
-  ".....HHHHHH.....",
+  ".....HhHHHH.....",
   "....HHHHHHHH....",
-  "....HHSSSSHH....",
+  "....HhSSSSHH....",
   "....HSSEESSH....",
-  "....HSSSSSSH....",
+  "....HSSsSSH.....",
   ".....SSSSSS.....",
   "......SSSS......",
   "...AAATTTTAAA...",
-  "..TTTTTTTTTTTT..",
-  ".SATTTTATTTTAS..",
-  ".STTTTTTTTTTTS..",
-  "..STTTTTTTTTTS..",
-  "..TTTTAATTTTTT..",
+  "..3TTTTtTTTTT3..",
+  ".SATTTTaTTTTAS..",
+  ".sTTTTTtTTTTTs..",
+  "..sTTTTTTTTTTs..",
+  "..TTTTAATTtTTT..",
   "...TTTTTTTTTT...",
   "....PPPPPPPP....",
-  "....PPPPPPPP....",
+  "....Pp....pP....",
 ];
 
 // Glitch — Black Knight: asymmetric, irregular silhouette.
 const BODY_GLITCH = [
   ".....HHHHH......",
-  "....HHHHHH.H....",
-  "....HHHHHHHH....",
-  "....HHSSSSHH....",
+  "....HhHHHH.H....",
+  "....HhHHH1HH....",
+  "....HhSSSSHH....",
   "...HSSEESSH.....",
-  "....HSSSSSSH....",
+  "....HSSsSSH.....",
   ".....SSSSSS.....",
   "......SSSS......",
-  "....ATATTAA.....",
-  "...TTTTTTTTT....",
-  "..SATTATTTTS....",
-  "...STTTTTTTTS...",
-  "..STTTTTATTS....",
-  "...TTATTTTTTT...",
+  "....aTaTTAa.....",
+  "...TTTtTTTTT....",
+  "..SATTaTTTTs....",
+  "...sTTTtTTTTs...",
+  "..sTTTTTaTTs....",
+  "...TTaTTTtTTT...",
   "....TTTTTTT.....",
-  "....PPPPPPP.....",
-  ".....PPPPPP.....",
+  "....pPPPPPP.....",
+  ".....Pp.pP......",
 ];
 
 // Lab coat — Cardinal: clean white coat, neat proportions.
 const BODY_LABCOAT = [
   "......HHHH......",
   ".....HHHHHH.....",
-  "....HHHHHHHH....",
-  "....HHSSSSHH....",
+  "....HHhHH1HH....",
+  "....HhSSSSHH....",
   "....HSSEESSH....",
-  "....HSSSSSSH....",
+  "....HSSsSSH.....",
   ".....SSSSSS.....",
   "......SSSS......",
   ".....AATTAA.....",
-  "....TTTTTTTT....",
-  "...STTTATTTTS...",
-  "...STTATTTATS...",
-  "...STTTTTTTTS...",
-  "....TTTTTTTT....",
-  "....TTAATTTT....",
-  "....TTPPPPTT....",
-  "....TT.PP.TT....",
+  "....3TTtTTTT....",
+  "...STTTaTTTTS...",
+  "...sTTATTTATs...",
+  "...sTTTtTTTTs...",
+  "....TTTtTTTT....",
+  "....TTaATTTT....",
+  "....TTPPpPTT....",
+  "....TT.Pp.TT....",
 ];
 
 // Geared — Scout: vest with equipment bumps, utility look.
 const BODY_GEARED = [
   "......HHHH......",
-  ".....HHHHHH.....",
-  "....HHHHHHHH....",
-  "....HHSSSSHH....",
+  ".....H1HhHH.....",
+  "....HHhHHHHH....",
+  "....HhSSSSHH....",
   "....HSSEESSH....",
-  "....HSSSSSSH....",
+  "....HSSsSSH.....",
   ".....SSSSSS.....",
   "......SSSS......",
-  "....AAATTAAA....",
-  "....TTTTTTTT....",
-  "...SATTATTTTS...",
-  "...STTTATTATS...",
-  "...STTTTTTTTS...",
-  "....TAATAATT....",
+  "....AAaTTAAA....",
+  "....3TTtTTTT....",
+  "...SATTaTTTTS...",
+  "...sTTTaTTATs...",
+  "...sTTTtTTTTs...",
+  "....TaATAATT....",
   ".....TTTTTT.....",
   ".....PPPPPP.....",
-  ".....PPPPPP.....",
+  ".....Pp..pP.....",
 ];
 
 // Compact — Pawn: shorter body, pushed down in frame.
-// Note: fewer body rows, legs start higher. Offset handled in buildPixelMap.
 const BODY_COMPACT = [
   "......HHHH......",
-  ".....HHHHHH.....",
-  "....HHHHHHHH....",
-  "....HHSSSSHH....",
+  ".....H1HhHH.....",
+  "....HHhHHHHH....",
+  "....HhSSSSHH....",
   "....HSSEESSH....",
-  "....HSSSSSSH....",
+  "....HSSsSSH.....",
   ".....SSSSSS.....",
-  "......AASS......",
+  "......AaSs......",
   ".....AATTAA.....",
-  "....TTTTTTTT....",
-  "...STTTTTTTTS...",
-  "...STTTTTTTTS...",
-  "....TTTTTTTT....",
+  "....3TTtTTTT....",
+  "...STTTtTTTTS...",
+  "...sTTTTTTTTs...",
+  "....TTtTTTTT....",
   ".....TTTTTT.....",
   ".....PPPPPP.....",
-  ".....PPPPPP.....",
-  ".....PP..PP.....",
+  ".....PPppPP.....",
+  ".....Pp..pP.....",
 ];
 
 // Naval — Ship: broad shoulders, captain's coat with buttons.
@@ -388,20 +388,20 @@ const BODY_NAVAL = [
   "......HHHH......",
   ".....HHHHHH.....",
   "....HHHHHHHH....",
-  "....HHSSSSHH....",
+  "....HhSSSSHH....",
   "....HSSEESSH....",
-  "....HSSSSSSH....",
+  "....HSSsSSH.....",
   ".....SSSSSS.....",
   "......SSSS......",
   "....AATTTTAA....",
-  "...TTTTTTTTTT...",
-  "..STTAATTTTTTS..",
-  "..STTTTATTTTS...",
-  "..STTTTATTTTS...",
-  "...TTTTTTTTTT...",
-  "....TTTTTTTT....",
+  "...3TTTtTTTT3...",
+  "..STTAATTTtTTS..",
+  "..sTTTTaTTTTs...",
+  "..sTTTTaTTTTs...",
+  "...TTTTtTTTTT...",
+  "....TTTtTTTT....",
   "....PPPPPPPP....",
-  "....PPPPPPPP....",
+  "....Pp....pP....",
 ];
 
 // Map body type string to template.
@@ -420,86 +420,85 @@ const BODY_TEMPLATES: Record<BodyType, string[]> = {
   naval: BODY_NAVAL,
 };
 
-// Back-facing variants. Most agents use standard back.
-// Only caped/robed/hooded get unique backs.
+// Back-facing variants with interior shading.
 const BACK_STANDARD = [
   "......HHHH......",
-  ".....HHHHHH.....",
-  "....HHHHHHHH....",
-  "....HHHHHHHH....",
-  "....HHHHHHHH....",
+  ".....HhHHHH.....",
+  "....HhHHHHHH....",
+  "....HhHHH1HH....",
+  "....HhHHHHHH....",
   "....HHHHHHHH....",
   ".....HHHHHH.....",
   "......SSSS......",
   ".....AATTAA.....",
-  "....TTTTTTTT....",
-  "...STTTTTTTTS...",
-  "...STTTTTTTTS...",
-  "...STTTTTTTTS...",
-  "....TTTTTTTT....",
+  "....3TTtTTTT....",
+  "...STTTtTTTTS...",
+  "...sTTTTTTTTs...",
+  "...sTTTTTTTTs...",
+  "....TTtTTTTT....",
   ".....TTTTTT.....",
   ".....PPPPPP.....",
-  ".....PPPPPP.....",
+  ".....Pp..pP.....",
 ];
 
 const BACK_CAPED = [
   "......HHHH......",
-  ".....HHHHHH.....",
-  "....HHHHHHHH....",
-  "....HHHHHHHH....",
+  ".....HhHHHH.....",
+  "....HhHHH1HH....",
+  "....HhHHHHHH....",
   "....HHHHHHHH....",
   "....HHHHHHHH....",
   ".....HHHHHH.....",
   "......SSSS......",
-  "...AAATTTTAAA...",
-  "..AATTTTTTTTAA..",
-  "..AATTTTTTTTAA..",
-  "..AATTTTTTTTAA..",
-  "..AATTTTTTTTAA..",
+  "...5AATTTTAA5...",
+  "..AATTTtTTTTAA..",
+  "..aATTTTTTTTAa..",
+  "..AATTTtTTTTAA..",
+  "..aATTTTTTTTAa..",
+  "...AATTtTTTAA...",
   "...AATTTTTTAA...",
-  "...AATTTTTTAA...",
-  "...AAPPPPPPAA...",
-  "...AAPPPPPPAA...",
+  "...AAPPPPPPaA...",
+  "...AAPp..pPAA...",
 ];
 
 const BACK_ROBED = [
   "......HHHH......",
-  ".....HHHHHH.....",
-  "....HHHHHHHH....",
-  "....HHHHHHHH....",
+  ".....HhHHHH.....",
+  "....HhHHH1HH....",
+  "....HhHHHHHH....",
   "....HHHHHHHH....",
   "....HHHHHHHH....",
   ".....HHHHHH.....",
   "......SSSS......",
   ".....AATTAA.....",
-  "....TTTTTTTT....",
-  "...STTTTTTTTS...",
-  "...STTTTTTTTS...",
-  "....TTTTTTTT....",
-  "....TTTTTTTT....",
+  "....3TTtTTTT....",
+  "...STTTtTTTTS...",
+  "...sTTTTTTTTs...",
+  "....TTtTTTTT....",
+  "....TTTtTTTT....",
   "...TTTTTTTTTT...",
-  "..TTTTTTTTTTTT..",
-  "..TTTTTTTTTTTT..",
+  "..3TTTTtTTTTT...",
+  "..tTTTTtTTTTt...",
 ];
 
 const BACK_HOODED = [
   ".....HHHHHH.....",
-  "....HHHHHHHH....",
-  "...HHHHHHHHHH...",
-  "...HHHHHHHHHH...",
+  "....hHHHH1HH....",
+  "...hHHHHHHHHH...",
+  "...hHHHHHHHHH...",
   "...HHHHHHHHHH...",
   "...HHHHHHHHHH...",
   "....HHHHHHHH....",
   "......SSSS......",
   ".....TTTTTT.....",
-  "....TTTTTTTT....",
-  "...HTTTTTTTTH...",
-  "...HTTTTTTTTH...",
-  "...HTTTTTTTTH...",
-  "....HHHHHHHH....",
+  "....TTTtTTTT....",
+  "...hTTTtTTTTh...",
+  "...hTTTTTTTTh...",
+  "...hTTTTTTTTh...",
+  "....hHhHhHhH....",
   "....HHTTTTHH....",
   ".....PPPPPP.....",
-  ".....PPPPPP.....",
+  ".....Pp..pP.....",
 ];
 
 function getBackTemplate(bodyType: BodyType): string[] {
@@ -513,58 +512,58 @@ function getBackTemplate(bodyType: BodyType): string[] {
 
 // ── Leg variants ─────────────────────────────────────────
 
-// Standard legs (used by most body types).
+// Standard legs with shoe detail (H=shoe color via hair palette).
 const LEGS_FRONT: string[][] = [
-  [".....PP..PP.....", ".....PP..PP.....", "....PP....PP...."],
-  [".....PP..PP.....", "....PP....PP....", "...PP......PP..."],
-  [".....PPPPPP.....", ".....PP..PP.....", ".....PP..PP....."],
-  [".....PP..PP.....", "....PP....PP....", "...PP......PP..."],
+  [".....PP..PP.....", ".....Pp..pP.....", ".....HH..HH....."],
+  [".....PP..PP.....", "....Pp....pP....", "....HH....HH...."],
+  [".....PPPPPP.....", ".....Pp..pP.....", ".....HH..HH....."],
+  [".....PP..PP.....", "....Pp....pP....", "....HH....HH...."],
 ];
 
 const LEGS_BACK: string[][] = [
-  [".....PP..PP.....", ".....PP..PP.....", "....PP....PP...."],
-  [".....PP..PP.....", "....PP....PP....", "...PP......PP..."],
-  [".....PPPPPP.....", ".....PP..PP.....", ".....PP..PP....."],
-  [".....PP..PP.....", "....PP....PP....", "...PP......PP..."],
+  [".....PP..PP.....", ".....Pp..pP.....", ".....HH..HH....."],
+  [".....PP..PP.....", "....Pp....pP....", "....HH....HH...."],
+  [".....PPPPPP.....", ".....Pp..pP.....", ".....HH..HH....."],
+  [".....PP..PP.....", "....Pp....pP....", "....HH....HH...."],
 ];
 
 const LEGS_SIDE: string[][] = [
-  [".....PP..PP.....", ".....PP..PP.....", ".....PP..PP....."],
-  ["....PPP.PP......", "....PP..PP......", "....PP...PP....."],
-  [".....PP..PP.....", ".....PP..PP.....", ".....PP..PP....."],
-  ["......PP.PPP....", "......PP..PP....", ".....PP...PP...."],
+  [".....PP..PP.....", ".....Pp..pP.....", ".....HH..HH....."],
+  ["....PPP.PP......", "....Pp..pP......", "....HH...HH....."],
+  [".....PP..PP.....", ".....Pp..pP.....", ".....HH..HH....."],
+  ["......PP.PPP....", "......Pp..pP....", ".....HH...HH...."],
 ];
 
-// Caped legs — cape drapes over legs.
+// Caped legs — cape drapes over legs with shoe detail.
 const LEGS_CAPED: string[][] = [
-  ["...AAPP..PPAA...", "...AAPP..PPAA...", "....PP....PP...."],
-  ["...AAPP..PPAA...", "...APP....PPA...", "....PP....PP...."],
-  ["...AAPPPPPPAA...", "...AAPP..PPAA...", "....PP....PP...."],
-  ["...AAPP..PPAA...", "...APP....PPA...", "....PP....PP...."],
+  ["...AAPP..PPaA...", "...AAPp..pPAA...", "....HH....HH...."],
+  ["...AAPP..PPaA...", "...APp....pPA...", "....HH....HH...."],
+  ["...AAPPPPPPaA...", "...AAPp..pPAA...", "....HH....HH...."],
+  ["...AAPP..PPaA...", "...APp....pPA...", "....HH....HH...."],
 ];
 
 // Robed legs — dress/robe bottom, no visible legs.
 const LEGS_ROBED: string[][] = [
-  [".TTTTTTTTTTTTTT.", ".TTTTTTTTTTTTTT.", "..TTTTTTTTTTTT.."],
-  [".TTTTTTTTTTTTTT.", "..TTTTTTTTTTTT..", "..TTTTTTTTTTTT.."],
-  ["..TTTTTTTTTTTT..", ".TTTTTTTTTTTTTT.", "..TTTTTTTTTTTT.."],
-  ["..TTTTTTTTTTTT..", ".TTTTTTTTTTTTTT.", "..TTTTTTTTTTTT.."],
+  [".3TTTTTTTTTTT3..", ".tTTTTTTTTTTTt..", "..tTTTTTTTTTt..."],
+  [".3TTTTTTTTTTT3..", "..tTTTTTTTTTt...", "..tTTTTTTTTTt..."],
+  ["..3TTTTTTTTTT3..", ".tTTTTTTTTTTTt..", "..tTTTTTTTTTt..."],
+  ["..3TTTTTTTTTT3..", ".tTTTTTTTTTTTt..", "..tTTTTTTTTTt..."],
 ];
 
-// Armored legs — wider stance.
+// Armored legs — wider stance with shoe detail.
 const LEGS_ARMORED: string[][] = [
-  ["....PP....PP....", "....PP....PP....", "...PP......PP..."],
-  ["....PP....PP....", "...PP......PP...", "...PP......PP..."],
-  ["....PPPPPPPP....", "....PP....PP....", "....PP....PP...."],
-  ["....PP....PP....", "...PP......PP...", "...PP......PP..."],
+  ["....PP....PP....", "....Pp....pP....", "...HHH....HHH..."],
+  ["....PP....PP....", "...Pp......pP...", "...HH......HH..."],
+  ["....PPPPPPPP....", "....Pp....pP....", "....HH....HH...."],
+  ["....PP....PP....", "...Pp......pP...", "...HH......HH..."],
 ];
 
-// Hooded legs — cloak over standard legs.
+// Hooded legs — cloak over standard legs with shoe detail.
 const LEGS_HOODED: string[][] = [
-  ["....HHPPPPPH....", ".....PP..PP.....", ".....PP..PP....."],
-  ["....HHPP.PPH....", "....PP....PP....", "....PP....PP...."],
-  ["....HHPPPPPH....", ".....PP..PP.....", ".....PP..PP....."],
-  ["....HHPP.PPH....", "....PP....PP....", "....PP....PP...."],
+  ["....hHPPPPPH....", ".....Pp..pP.....", ".....HH..HH....."],
+  ["....hHPP.PPH....", "....Pp....pP....", "....HH....HH...."],
+  ["....hHPPPPPH....", ".....Pp..pP.....", ".....HH..HH....."],
+  ["....hHPP.PPH....", "....Pp....pP....", "....HH....HH...."],
 ];
 
 function getFrontLegs(bodyType: BodyType): string[][] {
@@ -702,6 +701,7 @@ function renderFrame(
   lightFromLeft: boolean,
 ): void {
   // Pass 1 — Outline: empty pixels with a filled 4-neighbor.
+  // Any non-null pixel (uppercase, lowercase, digit) counts as filled.
   ctx.fillStyle = OUTLINE;
   for (let y = 0; y < FH; y++) {
     for (let x = 0; x < FW; x++) {
@@ -719,36 +719,51 @@ function renderFrame(
   }
 
   // Pass 2 — Fill with directional shading.
+  // Lowercase letters = forced shadow (h→H shadow, t→T shadow, etc.)
+  // Digit 1-6 = forced highlight (1→H, 2→S, 3→T, 4→P, 5→A, 6→E)
+  const FORCED_HIGHLIGHT: Record<string, string> = { "1": "H", "2": "S", "3": "T", "4": "P", "5": "A", "6": "E" };
+
   for (let y = 0; y < FH; y++) {
     for (let x = 0; x < FW; x++) {
-      const key = map[y][x];
-      if (key === null) continue;
+      const raw = map[y][x];
+      if (raw === null) continue;
 
       const px = flipped ? fx + FW - 1 - x : fx + x;
 
-      const rightNull = x >= FW - 1 || map[y][x + 1] === null;
-      const belowNull = y >= FH - 1 || map[y + 1][x] === null;
-      const leftNull = x <= 0 || map[y][x - 1] === null;
-      const aboveNull = y <= 0 || map[y - 1][x] === null;
-
-      let shadow: boolean;
-      let highlight: boolean;
-
-      if (lightFromLeft) {
-        shadow = rightNull || belowNull;
-        highlight = leftNull || aboveNull;
-      } else {
-        shadow = leftNull || belowNull;
-        highlight = rightNull || aboveNull;
-      }
+      // Check forced shading.
+      const isLower = raw >= "a" && raw <= "z";
+      const isDigit = FORCED_HIGHLIGHT[raw] !== undefined;
+      const key = isLower ? raw.toUpperCase() : isDigit ? FORCED_HIGHLIGHT[raw] : raw;
 
       let color: string;
-      if (shadow && !highlight) {
-        color = shades.shadow[key];
-      } else if (highlight && !shadow) {
-        color = shades.highlight[key];
+      if (isLower) {
+        color = shades.shadow[key] || shades.base[key] || OUTLINE;
+      } else if (isDigit) {
+        color = shades.highlight[key] || shades.base[key] || OUTLINE;
       } else {
-        color = shades.base[key];
+        const rightNull = x >= FW - 1 || map[y][x + 1] === null;
+        const belowNull = y >= FH - 1 || map[y + 1][x] === null;
+        const leftNull = x <= 0 || map[y][x - 1] === null;
+        const aboveNull = y <= 0 || map[y - 1][x] === null;
+
+        let shadow: boolean;
+        let highlight: boolean;
+
+        if (lightFromLeft) {
+          shadow = rightNull || belowNull;
+          highlight = leftNull || aboveNull;
+        } else {
+          shadow = leftNull || belowNull;
+          highlight = rightNull || aboveNull;
+        }
+
+        if (shadow && !highlight) {
+          color = shades.shadow[key];
+        } else if (highlight && !shadow) {
+          color = shades.highlight[key];
+        } else {
+          color = shades.base[key];
+        }
       }
 
       ctx.fillStyle = color;
@@ -767,41 +782,43 @@ export function generateSpriteSheet(characterId: string): SpriteSheet {
   const bodyBack = getBackTemplate(bodyType);
   const legsFront = getFrontLegs(bodyType);
   const legsBack = getBackLegs(bodyType);
-  const cols = 4;
+  const cols = 3;
   const rows = 5; // idle, walk-down, walk-up, walk-side, action
 
   const canvas = new OffscreenCanvas(FW * cols, FH * rows);
   const ctx = canvas.getContext("2d")!;
 
-  const bobs = [0, -1, -1, 0];
+  const bobs = [0, -1, 0];
+  // Leg pose indices: stand (0), step-left (1), step-right (3) — skip merged pose (2).
+  const legFrames = [0, 1, 3];
 
   // Row 0 — Idle (subtle bob, front-facing).
-  for (let f = 0; f < 4; f++) {
+  for (let f = 0; f < 3; f++) {
     const map = buildPixelMap(characterId, bodyFront);
     renderFrame(ctx, f * FW, 0, offsetMap(map, bobs[f]), shades, false, true);
   }
 
-  // Row 1 — Walk down (4 distinct leg poses).
-  const walkBobs = [0, -1, 0, -1];
-  for (let f = 0; f < 4; f++) {
-    const map = buildPixelMap(characterId, bodyFront, legsFront[f]);
+  // Row 1 — Walk down (3 distinct leg poses).
+  const walkBobs = [0, -1, 0];
+  for (let f = 0; f < 3; f++) {
+    const map = buildPixelMap(characterId, bodyFront, legsFront[legFrames[f]]);
     renderFrame(ctx, f * FW, FH, offsetMap(map, walkBobs[f]), shades, false, true);
   }
 
-  // Row 2 — Walk up (4 distinct leg poses, back-facing).
-  for (let f = 0; f < 4; f++) {
-    const map = buildPixelMap(characterId, bodyBack, legsBack[f]);
+  // Row 2 — Walk up (3 distinct leg poses, back-facing).
+  for (let f = 0; f < 3; f++) {
+    const map = buildPixelMap(characterId, bodyBack, legsBack[legFrames[f]]);
     renderFrame(ctx, f * FW, FH * 2, offsetMap(map, walkBobs[f]), shades, false, true);
   }
 
   // Row 3 — Walk side (flipped, with corrected shading direction).
-  for (let f = 0; f < 4; f++) {
-    const map = buildPixelMap(characterId, bodyFront, LEGS_SIDE[f]);
+  for (let f = 0; f < 3; f++) {
+    const map = buildPixelMap(characterId, bodyFront, LEGS_SIDE[legFrames[f]]);
     renderFrame(ctx, f * FW, FH * 3, offsetMap(map, walkBobs[f]), shades, true, false);
   }
 
   // Row 4 — Action (bob + sparkle overlay at arms).
-  for (let f = 0; f < 4; f++) {
+  for (let f = 0; f < 3; f++) {
     const map = buildPixelMap(characterId, bodyFront);
     renderFrame(ctx, f * FW, FH * 4, offsetMap(map, bobs[f]), shades, false, true);
     const accH = ACCESSORY_TEMPLATES[characterId]?.length ?? 0;
@@ -816,25 +833,16 @@ export function generateSpriteSheet(characterId: string): SpriteSheet {
     }
   }
 
-  // Generate shadow sheet: same layout, all opaque pixels → single dark color.
-  const shadowCanvas = new OffscreenCanvas(canvas.width, canvas.height);
-  const shadowCtx = shadowCanvas.getContext("2d")!;
-  shadowCtx.drawImage(canvas, 0, 0);
-  shadowCtx.globalCompositeOperation = "source-in";
-  shadowCtx.fillStyle = "#06040c";
-  shadowCtx.fillRect(0, 0, shadowCanvas.width, shadowCanvas.height);
-
   return {
     canvas,
-    shadowCanvas,
     frameWidth: FW,
     frameHeight: FH,
     animations: {
-      idle: { row: 0, frames: 4, speed: 400 },
-      "walk-down": { row: 1, frames: 4, speed: 180 },
-      "walk-up": { row: 2, frames: 4, speed: 180 },
-      "walk-side": { row: 3, frames: 4, speed: 180 },
-      action: { row: 4, frames: 4, speed: 250 },
+      idle: { row: 0, frames: 3, speed: 400 },
+      "walk-down": { row: 1, frames: 3, speed: 180 },
+      "walk-up": { row: 2, frames: 3, speed: 180 },
+      "walk-side": { row: 3, frames: 3, speed: 180 },
+      action: { row: 4, frames: 3, speed: 300 },
     },
   };
 }

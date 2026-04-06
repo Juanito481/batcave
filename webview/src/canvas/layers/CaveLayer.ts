@@ -1,4 +1,5 @@
 import { RenderContext, P, seed, outlineRect } from "./render-context";
+import { lighten } from "../../helpers/color";
 
 // ── Floor tile with texture ────────────────────────────
 
@@ -28,6 +29,13 @@ function drawFloorTile(
   ctx.fillStyle = P.FLOOR_SPECK;
   if (s3 > 0.82) ctx.fillRect(x + zoom * 4, y + zoom * 2, zoom, zoom);
   if (s1 > 0.9) ctx.fillRect(x + zoom * 1, y + zoom * 6, zoom, zoom);
+
+  // Corner rivets (metallic grid joints).
+  ctx.fillStyle = P.FLOOR_RIVET;
+  if (s1 > 0.3) ctx.fillRect(x, y, zoom, zoom);
+  if (s2 > 0.3) ctx.fillRect(x + zt - zoom, y, zoom, zoom);
+  if (s3 > 0.3) ctx.fillRect(x, y + zt - zoom, zoom, zoom);
+  if (s1 > 0.4 && s2 > 0.4) ctx.fillRect(x + zt - zoom, y + zt - zoom, zoom, zoom);
 }
 
 // ── Wall tile with rock texture ────────────────────────
@@ -265,6 +273,21 @@ export function drawCaveEnvironment(rc: RenderContext): void {
   for (let y = wallRows; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
       drawFloorTile(ctx, x * zt, y * zt, zt, zoom, (x + y) % 2 === 0, x * 17 + y * 31);
+    }
+  }
+
+  // ── Screen glow on floor (static lightened tiles near Batcomputer) ──
+  const bcTilesW = Math.min(5, Math.ceil(width / zt) - 1);
+  const bcCenterTile = Math.floor((width / zt) / 2);
+  const bcStartTile = bcCenterTile - Math.floor(bcTilesW / 2);
+  const bcEndTile = bcStartTile + bcTilesW;
+  const bcRowTile = wallRows; // row just below wall
+  const glowColor = lighten(P.FLOOR_A, 0.08);
+  for (let y = bcRowTile; y <= bcRowTile + 1 && y < rows; y++) {
+    for (let x = bcStartTile - 1; x <= bcEndTile; x++) {
+      if (x < 0 || x >= cols) continue;
+      ctx.fillStyle = glowColor;
+      ctx.fillRect(x * zt, y * zt, zt, zt);
     }
   }
 

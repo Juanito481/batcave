@@ -261,40 +261,6 @@ export class Character {
     ctx.save();
     ctx.globalAlpha = this.opacity;
 
-    // Contact shadow — thin dark strip at character's feet for grounding.
-    const contactW = Math.round(dw * 0.7);
-    const contactX = Math.round(this.x) - Math.round(contactW / 2);
-    ctx.fillStyle = "#060a10";
-    ctx.fillRect(contactX, groundY, contactW, Math.max(1, Math.round(zoom * 0.5)));
-    ctx.fillStyle = "#0a1018";
-    ctx.fillRect(contactX + Math.round(zoom * 0.5), groundY + Math.max(1, Math.round(zoom * 0.5)), contactW - zoom, Math.max(1, Math.round(zoom * 0.3)));
-
-    // Cast shadow — projected silhouette, light from top-left.
-    const shadowW = Math.round(dw * 1.15);
-    const shadowH = Math.round(dh * 0.28);
-    const shadowOffX = Math.round(dw * 0.18);
-    const shadowX = dx + shadowOffX;
-    const shadowY = groundY - Math.round(shadowH * 0.4);
-
-    ctx.save();
-    ctx.globalAlpha = this.opacity * 0.5;
-    if (this.flipped) {
-      ctx.save();
-      ctx.translate(shadowX + shadowW, shadowY);
-      ctx.scale(-1, 1);
-      ctx.drawImage(
-        this.sprite.shadowCanvas, sx, sy, sw, sh,
-        0, 0, shadowW, shadowH,
-      );
-      ctx.restore();
-    } else {
-      ctx.drawImage(
-        this.sprite.shadowCanvas, sx, sy, sw, sh,
-        shadowX, shadowY, shadowW, shadowH,
-      );
-    }
-    ctx.restore();
-
     // Sprite — all coordinates already snapped to integers.
     if (this.flipped) {
       ctx.save();
@@ -306,19 +272,44 @@ export class Character {
       ctx.drawImage(this.sprite.canvas, sx, sy, sw, sh, dx, dy, dw, dh);
     }
 
-    // Name label with background pill.
-    const labelFont = Math.max(8, zoom * 3.5);
+    // Name label with background box + 1px border.
+    const labelFont = Math.max(7, zoom * 2.5);
     ctx.font = `${labelFont}px "DM Mono", monospace`;
     ctx.textAlign = "center";
     const labelW = ctx.measureText(this.name).width;
     const labelPad = Math.round(zoom * 1.5);
     const labelX = Math.round(this.x - labelW / 2 - labelPad);
     const labelY = Math.round(this.y + zoom * 2);
+    const labelBoxW = Math.round(labelW + labelPad * 2);
+    const labelBoxH = Math.round(labelFont + labelPad);
+    const brd = Math.max(1, Math.floor(zoom / 2));
+    // Border.
+    ctx.fillStyle = "#2a2a3e";
+    ctx.fillRect(labelX - brd, labelY - brd, labelBoxW + brd * 2, labelBoxH + brd * 2);
+    // Background.
     ctx.fillStyle = "#0c1018";
-    ctx.fillRect(labelX, labelY, Math.round(labelW + labelPad * 2), Math.round(labelFont + labelPad));
+    ctx.fillRect(labelX, labelY, labelBoxW, labelBoxH);
+    // Text.
     ctx.fillStyle = "#B0B0CC";
     ctx.fillText(this.name, Math.round(this.x), labelY + Math.round(labelFont));
 
+    ctx.restore();
+  }
+
+  /** Draw only the shadow — called in a separate pass before furniture/characters. */
+  drawShadow(ctx: CanvasRenderingContext2D, zoom: number): void {
+    if (!this.visible || this.opacity <= 0) return;
+    const groundY = Math.round(this.state === "entering" ? this.targetY : this.y);
+    const sp = Math.max(1, Math.round(zoom * 0.75));
+    const cx = Math.round(this.x);
+    const cy = groundY;
+    ctx.save();
+    ctx.globalAlpha = this.opacity * 0.35;
+    ctx.fillStyle = "#060a10";
+    ctx.fillRect(cx - sp * 2, cy, sp * 4, sp);
+    ctx.fillRect(cx - sp * 2, cy + sp * 3, sp * 4, sp);
+    ctx.fillRect(cx - sp * 5, cy + sp, sp * 10, sp);
+    ctx.fillRect(cx - sp * 5, cy + sp * 2, sp * 10, sp);
     ctx.restore();
   }
 }
