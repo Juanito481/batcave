@@ -168,22 +168,22 @@ export const CAVE_DEPTHS: CaveDepthLayer[] = [
   {
     depth: 1, name: "The Surface", requirement: "Starting layer",
     check: () => true,
-    palette: { bg: "#0a0a12", floorA: "#13131e", floorB: "#161624", wallEdge: "#1e1e2e", accent: "#1E7FD8" },
+    palette: { bg: "#101820", floorA: "#151c24", floorB: "#161d25", wallEdge: "#1e2830", accent: "#1E7FD8" },
   },
   {
     depth: 2, name: "The Workshop", requirement: "Use all tool categories",
     check: (c) => c.toolBreakdown.read > 0 && c.toolBreakdown.write > 0 && c.toolBreakdown.bash > 0,
-    palette: { bg: "#08080e", floorA: "#101018", floorB: "#12121e", wallEdge: "#1a1a28", accent: "#2ECC71" },
+    palette: { bg: "#0c1418", floorA: "#121a20", floorB: "#141c22", wallEdge: "#1a2430", accent: "#2ECC71" },
   },
   {
     depth: 3, name: "The Vault", requirement: "Avg efficiency >5 across 10+ sessions",
     check: (c) => c.totalSessionsCumulative >= 10 && c.toolsPerMin >= 5,
-    palette: { bg: "#060610", floorA: "#0e0e1a", floorB: "#10101e", wallEdge: "#181828", accent: "#9B59B6" },
+    palette: { bg: "#0a1014", floorA: "#10181e", floorB: "#121a20", wallEdge: "#182028", accent: "#9B59B6" },
   },
   {
     depth: 4, name: "The Abyss", requirement: "1000+ tools, <$10 total",
     check: (c) => c.totalToolsCumulative >= 1000 && c.costUsd < 10,
-    palette: { bg: "#040408", floorA: "#0a0a14", floorB: "#0c0c18", wallEdge: "#141422", accent: "#E74C3C" },
+    palette: { bg: "#060c10", floorA: "#0c1418", floorB: "#0e161a", wallEdge: "#141e26", accent: "#E74C3C" },
   },
 ];
 

@@ -39,7 +39,7 @@ describe("seed", () => {
 
 describe("palette P", () => {
   it("has all required color constants", () => {
-    expect(P.BG).toBe("#0a0a12");
+    expect(P.BG).toBe("#101820");
     expect(P.ACCENT).toBe("#1E7FD8");
     expect(P.FLOOR_A).toBeDefined();
     expect(P.FLOOR_B).toBeDefined();

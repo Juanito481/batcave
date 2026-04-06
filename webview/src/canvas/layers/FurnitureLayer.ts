@@ -1,5 +1,5 @@
 import { darken, lighten } from "../../helpers/color";
-import { RenderContext, P, seed, outlineRect } from "./render-context";
+import { RenderContext, P, seed, outlineRect, contactShadow, castShadow } from "./render-context";
 import { ACHIEVEMENTS } from "../../data/gamification";
 
 // ── Batcomputer ────────────────────────────────────────
@@ -155,6 +155,11 @@ function drawBatcomputer(
   const legW = zoom * 2;
   ctx.fillRect(x + gap, y + totalH, legW, zoom * 3);
   ctx.fillRect(x + totalW - gap - legW, y + totalH, legW, zoom * 3);
+
+  // Ground shadow.
+  const deskBaseY = y + totalH + zoom * 3;
+  contactShadow(ctx, x + gap, deskBaseY, totalW - gap * 2, zoom);
+  castShadow(ctx, x, deskBaseY, totalW, totalH, zoom);
 }
 
 // ── Server rack ────────────────────────────────────────
@@ -206,6 +211,10 @@ function drawServerRack(
   for (let i = 0; i < 4; i++) {
     ctx.fillRect(x + w - zoom * 3, y + zoom * 3 + i * zoom * 3, zoom * 2, zoom);
   }
+
+  // Ground shadow.
+  contactShadow(ctx, x, y + h, w, zoom);
+  castShadow(ctx, x, y + h, w, h, zoom);
 }
 
 // ── Workbench ──────────────────────────────────────────
@@ -233,6 +242,9 @@ function drawWorkbench(
   ctx.fillStyle = "#101018";
   ctx.fillRect(x + zoom, y + h, zoom * 2, zoom * 3);
   ctx.fillRect(x + w - zoom * 3, y + h, zoom * 2, zoom * 3);
+
+  // Ground shadow.
+  contactShadow(ctx, x, y + h + zoom * 3, w, zoom);
 
   // Small screen on the workbench.
   const screenW = zoom * 8;
@@ -278,7 +290,7 @@ function drawDisplayPanel(
   const h = Math.floor(zt * 1.8);
   const theme = world.getRepoTheme();
   const font = `"DM Mono", monospace`;
-  const smallFont = Math.max(5, zoom * 2.5);
+  const smallFont = Math.max(8, zoom * 2.5);
 
   // Mounting bracket.
   ctx.fillStyle = "#141428";
@@ -403,6 +415,8 @@ function drawFloorObjects(
   ctx.fillRect(chairX + zoom * 4, chairY + zoom * 2, zoom, zoom * 2);
   // Outline.
   outlineRect(ctx, chairX, chairY - zoom * 3, zoom * 6, zoom * 7, zoom);
+  // Ground shadow.
+  contactShadow(ctx, chairX, chairY + zoom * 4, zoom * 6, zoom);
 
   // Crate (left side, near workbench).
   const crateX = Math.floor(bcX - zt * 5);
@@ -424,6 +438,7 @@ function drawFloorObjects(
   ctx.fillRect(crateX + Math.floor(crateW / 2) - Math.max(1, Math.floor(zoom / 2)), crateY + zoom, zoom, crateH - zoom * 2);
   // Outline.
   outlineRect(ctx, crateX, crateY, crateW, crateH, zoom);
+  contactShadow(ctx, crateX, crateY + crateH, crateW, zoom);
 
   // Second smaller crate stacked on top.
   const crate2W = zoom * 5;
@@ -450,6 +465,7 @@ function drawFloorObjects(
   ctx.fillStyle = "#121010";
   ctx.fillRect(crateRX + crateRW - zoom, crateRY, zoom, crateRH);
   outlineRect(ctx, crateRX, crateRY, crateRW, crateRH, zoom);
+  contactShadow(ctx, crateRX, crateRY + crateRH, crateRW, zoom);
 
   // Floor debris / scattered tools.
   const debrisSeeds = [17, 53, 89, 127, 163];
@@ -548,6 +564,9 @@ function drawBarrel(
   ctx.fillRect(bx + bw - zoom, by, zoom, bh);
   // Outline.
   outlineRect(ctx, bx, by, bw, bh, zoom);
+
+  // Ground shadow.
+  contactShadow(ctx, bx, by + bh, bw, zoom);
 }
 
 // ── Map/planning table (left side, in front of workbench area) ──
@@ -573,6 +592,8 @@ function drawMapTable(
   ctx.fillStyle = "#121220";
   ctx.fillRect(tx + zoom, ty + th, zoom, zoom * 4);
   ctx.fillRect(tx + tw - zoom * 2, ty + th, zoom, zoom * 4);
+  // Ground shadow.
+  contactShadow(ctx, tx, ty + th + zoom * 4, tw, zoom);
 
   // Map/blueprint on table (scrolled paper).
   const mapX = tx + zoom * 2;
@@ -682,6 +703,10 @@ function drawLocker(
   ctx.fillStyle = "#0c0c1a";
   ctx.fillRect(lx + zoom, ly + lh, zoom * 2, zoom * 2);
   ctx.fillRect(lx + lw - zoom * 3, ly + lh, zoom * 2, zoom * 2);
+
+  // Ground shadow.
+  contactShadow(ctx, lx, ly + lh + zoom * 2, lw, zoom);
+  castShadow(ctx, lx, ly + lh + zoom * 2, lw, lh, zoom);
 }
 
 // ── Whiteboard (wall-mounted) — todo / task board ──
@@ -696,7 +721,7 @@ function drawWhiteboard(
   const bw = Math.floor(zt * 2);
   const bh = Math.floor(zt * 1);
   const font = `"DM Mono", monospace`;
-  const smallFont = Math.max(5, zoom * 2);
+  const smallFont = Math.max(8, zoom * 2);
 
   // Board surface.
   ctx.fillStyle = "#1e1e30";
@@ -931,7 +956,7 @@ function drawEvolutionDecorations(
   if (level < 2) return;
 
   const font = `"DM Mono", monospace`;
-  const smallFont = Math.max(5, zoom * 2.5);
+  const smallFont = Math.max(8, zoom * 2.5);
 
   // Level 2+: Trophy on shelf (left wall).
   if (level >= 2) {
@@ -961,7 +986,7 @@ function drawEvolutionDecorations(
     ctx.fillRect(px, py, zoom * 6, zoom * 4);
     outlineRect(ctx, px, py, zoom * 6, zoom * 4, Math.max(1, Math.floor(zoom / 2)));
     ctx.fillStyle = "#FFD700";
-    ctx.font = `${Math.max(4, zoom * 2)}px ${font}`;
+    ctx.font = `${Math.max(8, zoom * 2)}px ${font}`;
     ctx.textAlign = "center";
     ctx.fillText("100", px + zoom * 3, py + zoom * 3);
   }
@@ -982,7 +1007,7 @@ function drawEvolutionDecorations(
     ctx.fillRect(bx + zoom, by + zoom * 5, zoom * 3, zoom);
     // Text.
     ctx.fillStyle = "#ffffff";
-    ctx.font = `bold ${Math.max(4, zoom * 2)}px ${font}`;
+    ctx.font = `bold ${Math.max(8, zoom * 2)}px ${font}`;
     ctx.textAlign = "left";
     ctx.fillText("250", bx + zoom * 2, by + zoom * 3);
   }

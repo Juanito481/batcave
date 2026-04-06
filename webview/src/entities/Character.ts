@@ -225,51 +225,59 @@ export class Character {
 
     const dw = sw * zoom;
     const dh = sh * zoom;
-    // Idle animation offsets per archetype.
+    // Idle animation offsets per archetype — snapped to integers.
     let breathOffset = 0;
     let swayOffset = 0;
     if (this.state === "idle") {
       switch (this.idleStyle) {
         case "sway": // Caped/robed — gentle lateral sway like cape/robe flowing.
-          breathOffset = Math.sin(this.breathPhase) * Math.max(0.5, zoom * 0.3);
-          swayOffset = Math.sin(this.breathPhase * 0.7) * Math.max(0.5, zoom * 0.5);
+          breathOffset = Math.round(Math.sin(this.breathPhase) * Math.max(0.5, zoom * 0.3));
+          swayOffset = Math.round(Math.sin(this.breathPhase * 0.7) * Math.max(0.5, zoom * 0.5));
           break;
         case "stomp": // Armored/heavy — slow deliberate stomp (1-2 per cycle).
           breathOffset = Math.abs(Math.sin(this.idlePhase * 0.5)) < 0.12
-            ? -Math.max(1, zoom * 0.6) : 0;
+            ? -Math.max(1, Math.round(zoom * 0.6)) : 0;
           break;
         case "twitch": // Glitch — jittery micro-offsets + random flips.
-          breathOffset = (Math.sin(this.idlePhase * 3) > 0.85 ? -1 : 0) * zoom * 0.4;
-          swayOffset = (Math.cos(this.idlePhase * 4) > 0.92 ? 1 : 0) * zoom * 0.4;
+          breathOffset = (Math.sin(this.idlePhase * 3) > 0.85 ? -1 : 0) * Math.round(zoom * 0.4);
+          swayOffset = (Math.cos(this.idlePhase * 4) > 0.92 ? 1 : 0) * Math.round(zoom * 0.4);
           break;
         case "float": // Hooded — slow ethereal hovering, clearly visible.
-          breathOffset = Math.sin(this.breathPhase * 0.6) * Math.max(1, zoom * 0.8);
+          breathOffset = Math.round(Math.sin(this.breathPhase * 0.6) * Math.max(1, zoom * 0.8));
           break;
         case "rigid": // Naval/standard — subtle but alive military posture.
-          breathOffset = Math.sin(this.breathPhase) * Math.max(0.3, zoom * 0.2);
+          breathOffset = Math.round(Math.sin(this.breathPhase) * Math.max(0.3, zoom * 0.2));
           break;
         default: // Standard breathing bob.
-          breathOffset = Math.sin(this.breathPhase) * Math.max(0.5, zoom * 0.3);
+          breathOffset = Math.round(Math.sin(this.breathPhase) * Math.max(0.5, zoom * 0.3));
           break;
       }
     }
-    const dx = this.x - dw / 2 + swayOffset;
-    const dy = this.y - dh + breathOffset;
+    // Snap all draw coordinates to integer pixels — eliminates sub-pixel blur/tremor.
+    const dx = Math.round(this.x - dw / 2) + swayOffset;
+    const dy = Math.round(this.y - dh) + breathOffset;
+    const groundY = Math.round(this.state === "entering" ? this.targetY : this.y);
 
     ctx.save();
     ctx.globalAlpha = this.opacity;
 
-    // Cast shadow — projected silhouette of the current animation frame.
-    // Light source: top-left → shadow falls to the right and slightly forward.
-    const groundY = Math.floor(this.state === "entering" ? this.targetY : this.y);
-    const shadowW = dw * 1.15;
-    const shadowH = dh * 0.28;
-    const shadowOffX = dw * 0.18;
+    // Contact shadow — thin dark strip at character's feet for grounding.
+    const contactW = Math.round(dw * 0.7);
+    const contactX = Math.round(this.x) - Math.round(contactW / 2);
+    ctx.fillStyle = "#060a10";
+    ctx.fillRect(contactX, groundY, contactW, Math.max(1, Math.round(zoom * 0.5)));
+    ctx.fillStyle = "#0a1018";
+    ctx.fillRect(contactX + Math.round(zoom * 0.5), groundY + Math.max(1, Math.round(zoom * 0.5)), contactW - zoom, Math.max(1, Math.round(zoom * 0.3)));
+
+    // Cast shadow — projected silhouette, light from top-left.
+    const shadowW = Math.round(dw * 1.15);
+    const shadowH = Math.round(dh * 0.28);
+    const shadowOffX = Math.round(dw * 0.18);
     const shadowX = dx + shadowOffX;
-    const shadowY = groundY - shadowH * 0.4;
+    const shadowY = groundY - Math.round(shadowH * 0.4);
 
     ctx.save();
-    ctx.globalAlpha = this.opacity * 0.55;
+    ctx.globalAlpha = this.opacity * 0.5;
     if (this.flipped) {
       ctx.save();
       ctx.translate(shadowX + shadowW, shadowY);
@@ -287,7 +295,7 @@ export class Character {
     }
     ctx.restore();
 
-    // Sprite.
+    // Sprite — all coordinates already snapped to integers.
     if (this.flipped) {
       ctx.save();
       ctx.translate(dx + dw, dy);
@@ -298,18 +306,18 @@ export class Character {
       ctx.drawImage(this.sprite.canvas, sx, sy, sw, sh, dx, dy, dw, dh);
     }
 
-    // Name label with background pill for readability.
+    // Name label with background pill.
     const labelFont = Math.max(8, zoom * 3.5);
     ctx.font = `${labelFont}px "DM Mono", monospace`;
     ctx.textAlign = "center";
     const labelW = ctx.measureText(this.name).width;
-    const labelPad = zoom * 1.5;
-    const labelX = this.x - labelW / 2 - labelPad;
-    const labelY = this.y + zoom * 2;
+    const labelPad = Math.round(zoom * 1.5);
+    const labelX = Math.round(this.x - labelW / 2 - labelPad);
+    const labelY = Math.round(this.y + zoom * 2);
     ctx.fillStyle = "#0c1018";
-    ctx.fillRect(labelX, labelY, labelW + labelPad * 2, labelFont + labelPad);
+    ctx.fillRect(labelX, labelY, Math.round(labelW + labelPad * 2), Math.round(labelFont + labelPad));
     ctx.fillStyle = "#B0B0CC";
-    ctx.fillText(this.name, this.x, labelY + labelFont);
+    ctx.fillText(this.name, Math.round(this.x), labelY + Math.round(labelFont));
 
     ctx.restore();
   }

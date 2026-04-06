@@ -83,19 +83,13 @@ interface Firefly {
   brightness: number; // 0-1
 }
 
-// --- Weather (rain + lightning) ---
+// --- Weather (rain) ---
 
 interface RainDrop {
   x: number;
   y: number;
   speed: number;
   length: number;
-}
-
-interface Lightning {
-  active: boolean;
-  timer: number;
-  intensity: number;
 }
 
 export class Ambient {
@@ -107,14 +101,11 @@ export class Ambient {
   private rats: Rat[] = [];
   private fireflies: Firefly[] = [];
   private rain: RainDrop[] = [];
-  private lightning: Lightning = { active: false, timer: 0, intensity: 0 };
 
   // Timers.
   private dripTimer = 0;
   private ratSpawnTimer = 0;
   private ratSpawnThreshold = 20000 + Math.random() * 20000;
-  private lightningTimer = 0;
-  private lightningThreshold = 30000 + Math.random() * 60000; // 30-90s between strikes
   private rainIntensity = 0.3 + Math.random() * 0.4; // 0.3-0.7
 
   // Cached world dimensions.
@@ -205,7 +196,6 @@ export class Ambient {
     this.drawSpiders(ctx, zoom);
     this.drawRats(ctx, zoom);
     this.drawBats(ctx, zoom);
-    this.drawLightning(ctx);
   }
 
   // --- Bats ---
@@ -665,7 +655,7 @@ export class Ambient {
     }
   }
 
-  // --- Weather (rain + lightning) ---
+  // --- Weather (rain) ---
 
   private updateWeather(dt: number): void {
     // Spawn rain drops on the right edge (cave entrance).
@@ -701,24 +691,7 @@ export class Ambient {
       this.rainIntensity = 0.2 + Math.random() * 0.6;
     }
 
-    // Lightning timer.
-    this.lightningTimer += dt;
-    if (this.lightningTimer >= this.lightningThreshold) {
-      this.lightningTimer = 0;
-      this.lightningThreshold = 30000 + Math.random() * 60000;
-      this.lightning.active = true;
-      this.lightning.timer = 0;
-      this.lightning.intensity = 0.6 + Math.random() * 0.3;
-      bus.emit("sound:play", { id: "thunder" });
-    }
-
-    // Lightning decay.
-    if (this.lightning.active) {
-      this.lightning.timer += dt;
-      if (this.lightning.timer > 150) {
-        this.lightning.active = false;
-      }
-    }
+    // (Lightning removed — bugged, doesn't fit the cave context.)
   }
 
   private drawRain(ctx: CanvasRenderingContext2D, zoom: number): void {
@@ -733,19 +706,6 @@ export class Ambient {
         Math.round(drop.length * zoom * 0.3),
       );
     }
-  }
-
-  private drawLightning(ctx: CanvasRenderingContext2D): void {
-    if (!this.lightning.active) return;
-
-    // White flash overlay (only right side — cave entrance area).
-    const progress = this.lightning.timer / 150;
-    const alpha = this.lightning.intensity * (1 - progress);
-    ctx.save();
-    ctx.fillStyle = "#ffffff";
-    ctx.globalAlpha = alpha * 0.15;
-    ctx.fillRect(Math.floor(this.wW * 0.8), 0, Math.floor(this.wW * 0.2), this.wH);
-    ctx.restore();
   }
 
   // --- Screen glow pulse ---

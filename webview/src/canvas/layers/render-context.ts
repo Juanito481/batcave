@@ -63,3 +63,36 @@ export function outlineRect(
   ctx.fillRect(x, y, zoom, h);
   ctx.fillRect(x + w - zoom, y, zoom, h);
 }
+
+// ── Contact shadow — grounding strip at base of furniture ──
+
+export function contactShadow(
+  ctx: CanvasRenderingContext2D,
+  x: number, baseY: number, w: number, zoom: number,
+): void {
+  const brd = Math.max(1, Math.round(zoom * 0.5));
+  // Primary dark strip.
+  ctx.fillStyle = "#060a10";
+  ctx.fillRect(x, baseY, w, brd);
+  // Softer secondary strip below.
+  ctx.fillStyle = "#0a1018";
+  ctx.fillRect(x + brd, baseY + brd, w - brd * 2, Math.max(1, Math.round(zoom * 0.3)));
+}
+
+// ── Cast shadow — offset dark projection to the right (light from top-left) ──
+
+export function castShadow(
+  ctx: CanvasRenderingContext2D,
+  x: number, baseY: number, w: number, h: number, zoom: number,
+): void {
+  const shadowW = Math.round(w * 0.8);
+  const shadowH = Math.round(h * 0.15);
+  const offX = Math.round(w * 0.15);
+  const brd = Math.max(1, Math.round(zoom * 0.5));
+  // Outer shadow (larger, lighter).
+  ctx.fillStyle = "#0a0e14";
+  ctx.fillRect(x + offX, baseY - brd, shadowW, shadowH + brd);
+  // Inner shadow (darker core).
+  ctx.fillStyle = "#060a10";
+  ctx.fillRect(x + offX + brd, baseY, shadowW - brd * 2, Math.max(1, Math.round(shadowH * 0.6)));
+}
