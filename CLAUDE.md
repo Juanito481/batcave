@@ -24,7 +24,7 @@ webview/src/
   canvas/
     Renderer.ts         — thin orchestrator, owns ParticleSystem + SoundSystem
     GameLoop.ts         — requestAnimationFrame with delta-time clamping (100ms max)
-    SpriteGenerator.ts  — procedural 16x32 pixel-art sprites, 12 unique body archetypes
+    SpriteGenerator.ts  — procedural 16x32 pixel-art sprites, 12 unique body archetypes, interior shading (lowercase=shadow, digits=highlight)
     layers/
       render-context.ts — RenderContext interface, shared palette P, seed(), outlineRect()
       CaveLayer.ts      — floor tiles, wall tiles, stalactites, stalagmites, time-of-day tint, Bat Signal, state-reactive LED strip, agent enter pulse

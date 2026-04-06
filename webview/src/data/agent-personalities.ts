@@ -11,6 +11,7 @@
 
 export type BodyType =
   | "standard"  // Default humanoid
+  | "batman"    // Dark cape (T-colored), utility belt, cowl (Giovanni)
   | "caped"     // Wide cape from shoulders (King)
   | "robed"     // Dress/robe widens at bottom (Queen)
   | "armored"   // Wider, stocky, boxy (White Rook)

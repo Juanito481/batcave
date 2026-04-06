@@ -141,6 +141,7 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
         }
       }],
       ["assignAgentPrompt", (m) => this.promptAssignAgent(m.agentId as string)],
+      ["whiteboardEdit", (m) => this.editWhiteboard(m.currentMessage as string)],
     ]);
 
     webviewView.webview.onDidReceiveMessage((msg: Record<string, unknown>) => {
@@ -263,6 +264,21 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
   /** Called from the export command — runs export directly since we own the data. */
   triggerExport(): void {
     this.exportSessionData();
+  }
+
+  // ── Whiteboard ───────────────────────────────────────
+
+  private async editWhiteboard(currentMessage: string): Promise<void> {
+    const msg = await vscode.window.showInputBox({
+      prompt: "Write on the whiteboard",
+      placeHolder: "Leave empty to clear",
+      value: currentMessage,
+    });
+    if (msg === undefined) return; // cancelled
+    this.view?.webview.postMessage({
+      command: "whiteboard-message",
+      payload: { message: msg || null },
+    });
   }
 
   // ── Agent Launcher ──────────────────────────────────

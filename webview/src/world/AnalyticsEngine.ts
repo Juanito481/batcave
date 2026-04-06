@@ -327,7 +327,6 @@ export class AnalyticsEngine {
   // ── Achievements + Cave Depth ──────────────────────────
 
   buildAchievementContext(stats: UsageStats | null, totalTools: number): AchievementContext {
-    const cost = this.getSessionCost(stats);
     const pace = this.getPace();
     const hour = new Date().getHours();
     return {
@@ -335,17 +334,15 @@ export class AnalyticsEngine {
       sessionToolCalls: stats?.toolCallsThisSession ?? 0,
       sessionAgentsSpawned: stats?.agentsSpawnedThisSession ?? 0,
       contextPeakPct: this.contextPeakPct,
-      costUsd: cost.costUsd,
-      costBudget: this.costBudgetUsd,
       durationMs: Date.now() - (stats?.sessionStartedAt ?? Date.now()),
       toolBreakdown: { ...this.toolBreakdown },
       uniqueAgentIds: Array.from(this.agentStats.keys()),
       toolsPerMin: pace.current,
-      sessionsUnderBudget: this.sessionsUnderBudget,
       totalToolsCumulative: totalTools,
       totalSessionsCumulative: this.totalSessionsCumulative,
       isNightSession: hour >= 22 || hour < 5,
       filesCount: this.fileNodes.size,
+      currentHour: hour,
     };
   }
 

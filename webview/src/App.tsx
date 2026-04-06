@@ -65,6 +65,8 @@ export function App() {
         world.setTeamStats(msg.payload.entries);
       } else if (msg.command === "team-server") {
         world.handleTeamServerMessage(msg.payload);
+      } else if (msg.command === "whiteboard-message") {
+        world.setWhiteboardMessage(msg.payload.message || null);
       }
     };
     window.addEventListener("message", handleMessage);
@@ -175,6 +177,9 @@ export function App() {
     });
     world.setAssignAgentCallback((agentId: string) => {
       vscode?.postMessage({ command: "assignAgentPrompt", agentId });
+    });
+    world.setWhiteboardEditCallback(() => {
+      vscode?.postMessage({ command: "whiteboardEdit", currentMessage: world.getWhiteboardMessage() || "" });
     });
 
     world.setTeamCommandCallback((msg: Record<string, unknown>) => {

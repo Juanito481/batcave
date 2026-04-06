@@ -73,8 +73,8 @@ const PALETTES: Record<string, CharacterPalette> = {
     pants: "#101820", accent: "#FFFFFF", eyes: "#1a1a2e",
   },
   giovanni: {
-    skin: "#E8C0A0", hair: "#101820", shirt: "#2A2A3A",
-    pants: "#1A1A2A", accent: "#1E7FD8", eyes: "#FFFFFF",
+    skin: "#D8B090", hair: "#0c0c18", shirt: "#1a1a2a",
+    pants: "#101820", accent: "#FFD700", eyes: "#FFFFFF",
   },
   king: {
     skin: "#F0D0A0", hair: "#FFD700", shirt: "#4A0E6B",
@@ -171,6 +171,27 @@ const BODY_STANDARD = [
   ".....TTTTTT.....",
   ".....PPPPPP.....",
   ".....Pp..pP.....",
+];
+
+// Batman — dark cape (T-colored), utility belt (A-colored), cowl silhouette.
+const BODY_BATMAN = [
+  "......HHHH......",
+  ".....HhHhHH.....",
+  "....HHhHHHHH....",
+  "....HhSSSSHH....",
+  "....HSSEESSH....",
+  "....HSSsSSH.....",
+  ".....SSSSSS.....",
+  "......SASS......",
+  "..tTTTTTTTTTTt..",
+  "..TTTTT3TTTTTt..",
+  "..tTTTTTTTTTTT..",
+  "..TTTTtTtTTTTT..",
+  "..tTTTTTTTTTTt..",
+  "...tTTAATTTt....",
+  "...TTTTTTTTTT...",
+  "...TTPPPPPPTT...",
+  "...TTPp..pPTT...",
 ];
 
 // Caped — King: wide cape draping from shoulders, regal silhouette.
@@ -407,6 +428,7 @@ const BODY_NAVAL = [
 // Map body type string to template.
 const BODY_TEMPLATES: Record<BodyType, string[]> = {
   standard: BODY_STANDARD,
+  batman: BODY_BATMAN,
   caped: BODY_CAPED,
   robed: BODY_ROBED,
   armored: BODY_ARMORED,
@@ -439,6 +461,26 @@ const BACK_STANDARD = [
   ".....TTTTTT.....",
   ".....PPPPPP.....",
   ".....Pp..pP.....",
+];
+
+const BACK_BATMAN = [
+  "......HHHH......",
+  ".....HhHHHH.....",
+  "....HhHHH1HH....",
+  "....HhHHHHHH....",
+  "....HHHHHHHH....",
+  "....HHHHHHHH....",
+  ".....HHHHHH.....",
+  "......SSSS......",
+  "..tTTTTTTTTTTt..",
+  "..TTTTTtTTTTTT..",
+  "..tTTTTTTTTTTt..",
+  "..TTTTTtTTTTTT..",
+  "..tTTTTTTTTTTt..",
+  "...TTTTtTTTTT...",
+  "...TTTTTTTTTT...",
+  "...TTPPPPPPTT...",
+  "...TTPp..pPTT...",
 ];
 
 const BACK_CAPED = [
@@ -503,6 +545,7 @@ const BACK_HOODED = [
 
 function getBackTemplate(bodyType: BodyType): string[] {
   switch (bodyType) {
+    case "batman": return BACK_BATMAN;
     case "caped": return BACK_CAPED;
     case "robed": return BACK_ROBED;
     case "hooded": return BACK_HOODED;
@@ -532,6 +575,14 @@ const LEGS_SIDE: string[][] = [
   ["....PPP.PP......", "....Pp..pP......", "....HH...HH....."],
   [".....PP..PP.....", ".....Pp..pP.....", ".....HH..HH....."],
   ["......PP.PPP....", "......Pp..pP....", ".....HH...HH...."],
+];
+
+// Batman legs — dark cape (T-colored) drapes over legs.
+const LEGS_BATMAN: string[][] = [
+  ["..tTTPP..PPTt...", "..tTTPp..pPTT...", "....HH....HH...."],
+  ["..tTTPP..PPTt...", "..tTPp....pPT...", "....HH....HH...."],
+  ["..tTTPPPPPPTt...", "..tTTPp..pPTT...", "....HH....HH...."],
+  ["..tTTPP..PPTt...", "..tTPp....pPT...", "....HH....HH...."],
 ];
 
 // Caped legs — cape drapes over legs with shoe detail.
@@ -568,6 +619,7 @@ const LEGS_HOODED: string[][] = [
 
 function getFrontLegs(bodyType: BodyType): string[][] {
   switch (bodyType) {
+    case "batman": return LEGS_BATMAN;
     case "caped": return LEGS_CAPED;
     case "robed": return LEGS_ROBED;
     case "armored": return LEGS_ARMORED;
@@ -577,8 +629,8 @@ function getFrontLegs(bodyType: BodyType): string[][] {
 }
 
 function getBackLegs(bodyType: BodyType): string[][] {
-  // Back legs are simpler — only caped/robed need variants.
   switch (bodyType) {
+    case "batman": return LEGS_BATMAN;
     case "caped": return LEGS_CAPED;
     case "robed": return LEGS_ROBED;
     default: return LEGS_BACK;
@@ -589,8 +641,9 @@ function getBackLegs(bodyType: BodyType): string[][] {
 
 const ACCESSORY_TEMPLATES: Record<string, string[]> = {
   giovanni: [
-    "....A.AAAA.A....",
-    "....AAAAAAAA....",
+    "...A..HHHH..A...",
+    "...AA.HHHH.AA...",
+    "....HHHHHHHH....",
   ],
   king: [
     "......A.AA......",
@@ -638,6 +691,7 @@ const ACCESSORY_TEMPLATES: Record<string, string[]> = {
 // ── Resolve body type for a character ───────────────────
 
 function getBodyType(characterId: string): BodyType {
+  if (characterId === "giovanni") return "batman";
   return AGENT_PERSONALITIES[characterId]?.bodyType ?? "standard";
 }
 

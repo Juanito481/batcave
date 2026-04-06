@@ -146,6 +146,9 @@ export class BatCaveWorld {
   // Todo list — for whiteboard.
   private todoList: { content: string; status: "pending" | "in_progress" | "completed" }[] = [];
 
+  // Whiteboard custom message.
+  private whiteboardMessage: string | null = null;
+
   // Audit trail — structured immutable log of all AI actions.
   private auditTrail: AuditEntry[] = [];
   private static readonly MAX_AUDIT_ENTRIES = 200;
@@ -749,6 +752,15 @@ export class BatCaveWorld {
     return this.todoList;
   }
 
+  /** Whiteboard custom message. */
+  getWhiteboardMessage(): string | null {
+    return this.whiteboardMessage;
+  }
+
+  setWhiteboardMessage(msg: string | null): void {
+    this.whiteboardMessage = msg;
+  }
+
   /** Timestamp of last agent_enter (for LED wave). 0 if never. */
   getAgentPulseStart(): number {
     return this._agentPulseStart;
@@ -881,8 +893,18 @@ export class BatCaveWorld {
       }
     }
 
+    // Click on whiteboard → request message input.
+    const wbX = Math.floor(zt * 5.5);
+    const wbY = Math.floor(this.wallH * 0.2);
+    const wbW = Math.floor(zt * 2);
+    const wbH = Math.floor(zt * 1.2) + zoom * 2; // include tray
+    if (cx >= wbX && cx <= wbX + wbW && cy >= wbY && cy <= wbY + wbH) {
+      this.requestWhiteboardEdit();
+      return;
+    }
+
     // Click on trophy case slot → achievement detail.
-    const trophyCaseX = this.worldWidth - zt * 3;
+    const trophyCaseX = zt * 2;
     const trophyCaseY = Math.floor(this.wallH * 0.25);
     const trophySlotSize = zoom * 5;
     const trophyCols = 3;
@@ -1253,6 +1275,13 @@ export class BatCaveWorld {
   setAssignAgentCallback(cb: (agentId: string) => void): void { this._onAssignAgent = cb; }
   requestAssignAgent(agentId: string): void {
     if (this._onAssignAgent) this._onAssignAgent(agentId);
+  }
+
+  /** Whiteboard message edit — request input from extension host. */
+  private _onWhiteboardEdit: (() => void) | null = null;
+  setWhiteboardEditCallback(cb: () => void): void { this._onWhiteboardEdit = cb; }
+  requestWhiteboardEdit(): void {
+    if (this._onWhiteboardEdit) this._onWhiteboardEdit();
   }
 
   /** Handle Director autonomous agent deployment. */

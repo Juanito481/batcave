@@ -766,14 +766,14 @@ function drawWhiteboard(
   const bx = Math.floor(zt * 5.5);
   const by = Math.floor(wallH * 0.2);
   const bw = Math.floor(zt * 2);
-  const bh = Math.floor(zt * 1);
+  const bh = Math.floor(zt * 1.2);
   const font = `"DM Mono", monospace`;
   const smallFont = Math.max(8, zoom * 2);
 
   // Board surface.
   ctx.fillStyle = "#1e1e30";
   ctx.fillRect(bx, by, bw, bh);
-  ctx.fillStyle = "#242438";
+  ctx.fillStyle = "#e8e4da";
   ctx.fillRect(bx + zoom, by + zoom, bw - zoom * 2, bh - zoom * 2);
   outlineRect(ctx, bx, by, bw, bh, zoom);
   // Marker tray.
@@ -781,43 +781,64 @@ function drawWhiteboard(
   ctx.fillRect(bx, by + bh, bw, zoom * 2);
   outlineRect(ctx, bx, by + bh, bw, zoom * 2, Math.max(1, Math.floor(zoom / 2)));
 
-  // Todo content.
-  const todos = world.getTodoList();
+  // Custom message (priority) or todo content.
+  const boardMsg = world.getWhiteboardMessage();
   ctx.font = `${smallFont}px ${font}`;
   ctx.textAlign = "left";
 
-  if (todos.length > 0) {
+  if (boardMsg) {
+    // Word-wrap the message on the whiteboard.
+    const maxChars = Math.max(5, Math.floor((bw - zoom * 4) / (smallFont * 0.6)));
     const lineH = Math.max(zoom * 2.5, smallFont + Math.floor(zoom * 0.5));
-    const maxLines = Math.min(todos.length, Math.floor((bh - zoom * 2) / lineH));
-    const visible = todos.slice(0, maxLines);
-    for (let t = 0; t < visible.length; t++) {
-      const todo = visible[t];
-      const ty = by + zoom * 2 + t * lineH;
-      // Status indicator.
-      const statusColor = todo.status === "completed" ? "#2ECC71"
-        : todo.status === "in_progress" ? "#F39C12" : "#555570";
-      const statusChar = todo.status === "completed" ? "\u2713"
-        : todo.status === "in_progress" ? "\u25B6" : "\u25CB";
-      ctx.fillStyle = statusColor;
-      // Truncate task name.
-      const maxChars = Math.max(5, Math.floor((bw - zoom * 4) / (smallFont * 0.6)));
-      const label = todo.content.length > maxChars
-        ? todo.content.slice(0, maxChars - 1) + "\u2026"
-        : todo.content;
-      ctx.fillText(`${statusChar} ${label}`, bx + zoom * 2, ty);
+    const maxLines = Math.floor((bh - zoom * 3) / lineH);
+    const words = boardMsg.split(" ");
+    const lines: string[] = [];
+    let current = "";
+    for (const word of words) {
+      const test = current ? `${current} ${word}` : word;
+      if (test.length > maxChars) {
+        if (current) lines.push(current);
+        current = word.length > maxChars ? word.slice(0, maxChars - 1) + "\u2026" : word;
+      } else {
+        current = test;
+      }
+      if (lines.length >= maxLines) break;
+    }
+    if (current && lines.length < maxLines) lines.push(current);
+
+    ctx.fillStyle = "#1a1a30";
+    for (let l = 0; l < lines.length; l++) {
+      ctx.fillText(lines[l], bx + zoom * 2, by + zoom * 3 + l * lineH);
     }
   } else {
-    // Fallback: decorative scribbles when no todos.
-    const theme = world.getRepoTheme();
-    ctx.fillStyle = theme.accent;
-    ctx.fillRect(bx + zoom * 2, by + zoom * 3, bw - zoom * 6, Math.max(1, Math.floor(zoom / 2)));
-    for (let i = 0; i < 3; i++) {
-      ctx.fillRect(bx + zoom * 3 + i * zoom * 2, by + zoom * 5 + i * zoom, zoom * 2, Math.max(1, Math.floor(zoom / 2)));
+    const todos = world.getTodoList();
+    if (todos.length > 0) {
+      const lineH = Math.max(zoom * 2.5, smallFont + Math.floor(zoom * 0.5));
+      const maxLines = Math.min(todos.length, Math.floor((bh - zoom * 2) / lineH));
+      const visible = todos.slice(0, maxLines);
+      for (let t = 0; t < visible.length; t++) {
+        const todo = visible[t];
+        const ty = by + zoom * 2 + t * lineH;
+        const statusColor = todo.status === "completed" ? "#2ECC71"
+          : todo.status === "in_progress" ? "#F39C12" : "#555570";
+        const statusChar = todo.status === "completed" ? "\u2713"
+          : todo.status === "in_progress" ? "\u25B6" : "\u25CB";
+        ctx.fillStyle = statusColor;
+        const maxChars = Math.max(5, Math.floor((bw - zoom * 4) / (smallFont * 0.6)));
+        const label = todo.content.length > maxChars
+          ? todo.content.slice(0, maxChars - 1) + "\u2026"
+          : todo.content;
+        ctx.fillText(`${statusChar} ${label}`, bx + zoom * 2, ty);
+      }
+    } else {
+      // Fallback: "click to write" hint.
+      ctx.fillStyle = "#999990";
+      ctx.fillText("click to write", bx + zoom * 2, by + Math.floor(bh / 2));
     }
   }
 
-  // Markers on tray (status-colored).
-  const markerColors = ["#2ECC71", "#F39C12", "#555570"];
+  // Markers on tray.
+  const markerColors = ["#E74C3C", "#1E7FD8", "#2ECC71"];
   for (let i = 0; i < markerColors.length; i++) {
     ctx.fillStyle = markerColors[i];
     ctx.fillRect(bx + zoom * 2 + i * zoom * 3, by + bh + Math.max(1, Math.floor(zoom / 2)), zoom * 2, zoom);
@@ -983,9 +1004,11 @@ export function drawAllFurniture(rc: RenderContext): void {
   // Cave evolution decorations.
   drawEvolutionDecorations(ctx, zoom, zt, wallH, width, height, now, world);
 
-  // Achievement trophy case.
+  // Achievement trophy case (left wall).
   drawTrophyCase(ctx, zoom, zt, wallH, width, now, world);
 
+  // Whiteboard (wall-mounted, left-center).
+  drawWhiteboard(ctx, zt, zoom, wallH, world);
 }
 
 // ── Cave Evolution Decorations ────────────────────────
@@ -1056,15 +1079,19 @@ function drawEvolutionDecorations(
     ctx.fillText("250", bx + zoom * 2, by + zoom * 3);
   }
 
-  // Level 5+: Gold trim on Batcomputer.
+  // Level 5+: Gold accent lines on Batcomputer edges (subtle, not bars).
   if (level >= 5) {
     const bcTilesW = Math.min(5, Math.ceil(width / zt) - 1);
     const bcW = zt * bcTilesW;
     const bcX = Math.floor((width - bcW) / 2);
-    const bcY = wallH + zoom * 2;
+    const bcY = wallH + zt;
+    const bcH = Math.floor(zt * 1.5);
+    const brd = Math.max(1, Math.floor(zoom / 2));
     ctx.fillStyle = "#FFD700";
-    ctx.fillRect(bcX, bcY, bcW, zoom);
-    ctx.fillRect(bcX, bcY + Math.floor(zt * 1.5) - zoom, bcW, zoom);
+    // Thin accent at top edge.
+    ctx.fillRect(bcX, bcY - brd, bcW, brd);
+    // Thin accent at bottom edge.
+    ctx.fillRect(bcX, bcY + bcH, bcW, brd);
   }
 
   // Level 6: Legendary — pulsing ambient glow.
@@ -1099,7 +1126,7 @@ function drawTrophyCase(
   const unlocked = world.getUnlockedAchievements();
   if (unlocked.length === 0) return;
 
-  const caseX = width - zt * 3;
+  const caseX = zt * 2;
   const caseY = Math.floor(wallH * 0.25);
   const slotSize = zoom * 5;
   const cols = 3;
