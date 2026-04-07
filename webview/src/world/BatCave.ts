@@ -28,6 +28,7 @@ import {
   FileNode,
 } from "../data/gamification";
 import { CaveLayout, getLayout } from "../canvas/layout";
+import { FourthWallSystem } from "../systems/FourthWallSystem";
 
 /** Per-agent session statistics for enterprise observability. */
 export interface AgentSessionStats {
@@ -138,6 +139,9 @@ export class BatCaveWorld {
 
   // Companion NPC system (Ab, Andrea, Arturo + Francesco).
   private companionSystem!: CompanionSystem;
+
+  // Fourth wall system — Giovanni mirror + Alfred awareness.
+  private fourthWall!: FourthWallSystem;
 
   // Agent behavior system (zone movement, quips, interactions).
   private behaviorSystem!: AgentBehaviorSystem;
@@ -376,6 +380,28 @@ export class BatCaveWorld {
       wallH: this.wallH,
       zoom: this._zoom,
       zt: this._zt,
+    });
+
+    // Fourth wall system: Giovanni mirror + Alfred fourth wall.
+    this.fourthWall = new FourthWallSystem({
+      getAlfred: () => this.alfred,
+      getGiovanni: () => this.giovanni,
+      getActiveRepo: () => this.repoTheme.label || "",
+      getSessionToolCount: () => this.usageStats?.toolCallsThisSession ?? 0,
+      getSessionDurationMs: () =>
+        Date.now() - (this.usageStats?.sessionStartedAt ?? Date.now()),
+      getTotalSessionsCumulative: () => this.totalSessionsCumulative,
+      getAlfredState: () => this.alfredState,
+      getBatcomputerPos: () => {
+        const L = this._layout;
+        return L
+          ? { x: L.bcX + L.bcW / 2, y: L.bcY + L.bcH }
+          : { x: this.worldWidth / 2, y: this.worldHeight / 2 };
+      },
+      getFloorY: () =>
+        this._layout?.floorY ??
+        this.wallH + Math.floor((this.worldHeight - this.wallH) * 0.82),
+      getZoom: () => this._zoom,
     });
   }
 
@@ -739,9 +765,11 @@ export class BatCaveWorld {
         if (this.gitLog.length > BatCaveWorld.MAX_GIT_LOG) this.gitLog.shift();
         this.audit("git", "git_commit", `commit: ${msg.slice(0, 60)}`);
 
+        // Fourth wall: Giovanni nods on commit.
+        this.fourthWall.onGitCommit();
+
         // All active agents + Alfred celebrate with star; Giovanni confirms.
         this.alfred.showEmotion("star", 2000);
-        this.giovanni.showEmotion("check", 2000);
         for (const agent of this.agents.values()) {
           if (agent.visible) agent.showEmotion("star", 2000);
         }
@@ -776,8 +804,8 @@ export class BatCaveWorld {
         });
         if (this.gitLog.length > BatCaveWorld.MAX_GIT_LOG) this.gitLog.shift();
         this.audit("git", "git_push", "pushed to remote");
-        // Giovanni celebrates the push.
-        this.giovanni.showEmotion("star", 2500);
+        // Fourth wall: Giovanni celebrates push.
+        this.fourthWall.onGitPush();
         // Deploy sparks weather effect.
         this.ambient.setWeather("sparks");
         break;
@@ -847,6 +875,9 @@ export class BatCaveWorld {
     this.companionSystem.updateFrancesco(deltaMs, (char, dt) =>
       this.maybeWander(char, dt),
     );
+    // Fourth wall system — Giovanni mirror + Alfred awareness.
+    this.fourthWall.update(deltaMs);
+    this.fourthWall.tickQuipTimer(deltaMs);
     // Idle wandering for Alfred and Giovanni.
     this.maybeWander(this.alfred, deltaMs);
     this.maybeGiovanniBatcomputer(deltaMs);
@@ -1008,6 +1039,9 @@ export class BatCaveWorld {
   }
 
   getCurrentQuip(): string | null {
+    // Fourth wall quips take priority over idle quips.
+    const fwQuip = this.fourthWall.getAlfredQuip();
+    if (fwQuip) return fwQuip;
     return this.currentQuip;
   }
 
@@ -1176,8 +1210,36 @@ export class BatCaveWorld {
       }
     }
 
+    // Click on Alfred → fourth wall contextual quip.
+    const hitSize = 16 * zoom;
+    {
+      const ax = this.alfred.x - hitSize / 2;
+      const ay = this.alfred.y - hitSize;
+      if (cx >= ax && cx <= ax + hitSize && cy >= ay && cy <= ay + hitSize) {
+        const quip = this.fourthWall.clickAlfred();
+        if (quip) {
+          this.currentQuip = quip;
+          this.quipDisplayTimer = 5000;
+        }
+        return;
+      }
+    }
+
+    // Click on Giovanni → stats mirror.
+    {
+      const gx = this.giovanni.x - hitSize / 2;
+      const gy = this.giovanni.y - hitSize;
+      if (cx >= gx && cx <= gx + hitSize && cy >= gy && cy <= gy + hitSize) {
+        const quip = this.fourthWall.clickGiovanni();
+        if (quip) {
+          this.currentQuip = quip;
+          this.quipDisplayTimer = 4000;
+        }
+        return;
+      }
+    }
+
     // Click on an agent character → agent detail panel.
-    const hitSize = 16 * zoom; // sprite width scaled
     for (const [agentId, agent] of this.agents) {
       if (!agent.visible) continue;
       const ax = agent.x - hitSize / 2;
@@ -1187,6 +1249,12 @@ export class BatCaveWorld {
         this.expandedPanel = "agent-detail";
         return;
       }
+    }
+
+    // Click on floor → Giovanni walks there.
+    if (cy > this.wallH && !this.expandedPanel) {
+      this.giovanni.moveTo(cx, cy);
+      return;
     }
 
     // Click elsewhere closes panel.
