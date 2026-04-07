@@ -27,16 +27,23 @@ export class SoundSystem {
   private enabled = false;
   private volume = 0.15;
   private unsub: (() => void) | null = null;
+  private unsubChime: (() => void) | null = null;
 
   start(): void {
     this.unsub = bus.on("sound:play", ({ id, volume }) => {
       this.play(id as SoundId, volume);
+    });
+    // Per-agent signature chimes on entry.
+    this.unsubChime = bus.on("agent:chime", ({ agentId }) => {
+      this.playAgentChime(agentId);
     });
   }
 
   stop(): void {
     this.unsub?.();
     this.unsub = null;
+    this.unsubChime?.();
+    this.unsubChime = null;
     this.ctx?.close();
     this.ctx = null;
   }

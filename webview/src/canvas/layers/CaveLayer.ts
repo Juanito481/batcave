@@ -1,5 +1,5 @@
 import { RenderContext, P, seed, outlineRect } from "./render-context";
-import { lighten } from "../../helpers/color";
+import { lighten, darken } from "../../helpers/color";
 
 // ── Floor tile with texture ────────────────────────────
 
@@ -264,6 +264,15 @@ function drawWallDetails(
         ? "#0e2a16"
         : "#0e1e30";
 
+  // Cave reaction: wall flash overrides LED strip color.
+  const reactions = world.getCaveReactions();
+  let ledColor = stateColor;
+  let ledDim = stateDim;
+  if (reactions.wallFlashColor) {
+    ledColor = reactions.wallFlashColor;
+    ledDim = darken(reactions.wallFlashColor, 0.5);
+  }
+
   // Speed up pulse when active.
   const ledSpeed = state === "idle" ? 1200 : 600;
 
@@ -275,7 +284,7 @@ function drawWallDetails(
 
   for (let x = 0; x < width; x += zoom * 6) {
     const phase = Math.sin(now / ledSpeed + x * 0.01);
-    let color = phase > 0.3 ? stateColor : stateDim;
+    let color = phase > 0.3 ? ledColor : ledDim;
 
     // Wave overlay — bright accent near the pulse wavefront.
     if (pulseActive) {
@@ -372,6 +381,7 @@ const TORCH_FLAMES = ["#FFD700", "#E67E22", "#C0392B"] as const;
  * @param wallY - Y coordinate of the wall/floor boundary (torch mounts here).
  * @param flameFrame - 0-2 discrete frame index, advanced by caller based on state speed.
  * @param floorY - Bottom of the canvas — where the light pool is drawn.
+ * @param torchBoost - Intensity multiplier from CaveReactionSystem (1.0 = normal, up to 2.0).
  */
 function drawTorch(
   ctx: CanvasRenderingContext2D,
@@ -380,17 +390,18 @@ function drawTorch(
   zoom: number,
   flameFrame: number,
   floorY: number,
+  torchBoost: number = 1.0,
 ): void {
   const tx = Math.floor(x);
   const ty = Math.floor(wallY);
 
-  // Floor light pool — 8x3 opaque rectangle, slightly lighter than FLOOR_A.
-  // Positioned centered under the torch, sitting just above the floor.
-  const poolW = Math.floor(zoom * 8);
-  const poolH = Math.floor(zoom * 3);
+  // Floor light pool — scaled by torchBoost on agent arrivals.
+  // Brighter pool color when heavily boosted (> 1.2) to sell the effect.
+  const poolW = Math.floor(zoom * 8 * torchBoost);
+  const poolH = Math.floor(zoom * 3 * torchBoost);
   const poolX = tx - Math.floor(poolW / 2);
   const poolY = floorY - poolH;
-  ctx.fillStyle = "#1a1a22";
+  ctx.fillStyle = torchBoost > 1.2 ? "#222230" : "#1a1a22";
   ctx.fillRect(poolX, poolY, poolW, poolH);
 
   // Bracket — 2px wide dark base (wall mount).
@@ -430,6 +441,7 @@ function drawTorch(
  *
  * @param alfredState - Current Claude state, controls flicker interval.
  * @param floorY - Canvas bottom (used to position the light pool).
+ * @param torchBoost - Intensity multiplier from CaveReactionSystem (1.0 = normal, up to 2.0).
  */
 function drawTorches(
   ctx: CanvasRenderingContext2D,
@@ -438,8 +450,10 @@ function drawTorches(
   zoom: number,
   alfredState: "idle" | "thinking" | "writing",
   floorY: number,
+  torchBoost: number = 1.0,
 ): void {
   // Flicker interval per state (ms per flame frame step).
+  // Torch boost also speeds up flicker — agent arrivals animate faster.
   const flickerMs =
     alfredState === "writing" ? 150 : alfredState === "thinking" ? 250 : 400;
 
@@ -457,7 +471,7 @@ function drawTorches(
 
   for (let i = 0; i < torchXPositions.length; i++) {
     const frame = (baseFrame + i * 7) % 3; // offset each torch by 7 frames
-    drawTorch(ctx, torchXPositions[i], wallH, zoom, frame, floorY);
+    drawTorch(ctx, torchXPositions[i], wallH, zoom, frame, floorY, torchBoost);
   }
 }
 
@@ -517,7 +531,8 @@ export function drawCaveEnvironment(rc: RenderContext): void {
   drawWallDetails(ctx, zt, zoom, wallH, width, height, rc.now, rc.world);
 
   // ── Wall torches (state-reactive flicker) ──
-  drawTorches(ctx, width, wallH, zoom, rc.alfredState, height);
+  const torchBoost = rc.world.getCaveReactions().torchBoost;
+  drawTorches(ctx, width, wallH, zoom, rc.alfredState, height, torchBoost);
 
   // ── Time-of-day tint ──
   const hour = new Date().getHours();

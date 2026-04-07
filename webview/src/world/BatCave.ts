@@ -627,7 +627,7 @@ export class BatCaveWorld {
           x: slotX,
           y: slotY,
         });
-        bus.emit("sound:play", { id: "agent-chime" });
+        bus.emit("agent:chime", { agentId });
         // Francesco appears during audit agents.
         if (AUDIT_AGENTS.includes(agentId)) {
           this.companionSystem.spawnFrancesco(slotX + this._zoom * 20, slotY);
@@ -807,6 +807,8 @@ export class BatCaveWorld {
           this.behaviorSystem.reactToShortCommitMessage(this.agents);
         }
 
+        // Every commit gets a fanfare — not just the first.
+        bus.emit("sound:play", { id: "commit-fanfare" });
         // All active agents + Alfred celebrate with star; Giovanni confirms.
         this.alfred.showEmotion("star", 2000);
         for (const agent of this.agents.values()) {
@@ -849,6 +851,8 @@ export class BatCaveWorld {
         this.caveReactions.triggerPushFlash();
         // XP for push.
         this.progression.awardXp("push");
+        // Push sweep — ascending rocket launch sound.
+        bus.emit("sound:play", { id: "push-sweep" });
         // Deploy sparks weather effect.
         this.ambient.setWeather("sparks");
         break;
@@ -2028,6 +2032,8 @@ export class BatCaveWorld {
       caveDepth: this.caveDepth,
       sessionsUnderBudget: this.sessionsUnderBudget,
       totalSessionsCumulative: this.totalSessionsCumulative,
+      // ProgressionSystem XP/level/upgrades persisted across webview reloads.
+      progression: this.progression.getPersistedState(),
     };
   }
 
@@ -2053,6 +2059,12 @@ export class BatCaveWorld {
     }
     if (typeof state.totalSessionsCumulative === "number") {
       this.totalSessionsCumulative = state.totalSessionsCumulative;
+    }
+    // Restore ProgressionSystem XP/level/upgrades.
+    if (state.progression && typeof state.progression === "object") {
+      this.progression.restoreState(
+        state.progression as Parameters<typeof this.progression.restoreState>[0],
+      );
     }
   }
 

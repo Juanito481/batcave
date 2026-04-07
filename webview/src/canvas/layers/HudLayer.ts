@@ -217,6 +217,44 @@ function drawOverlayHud(rc: RenderContext): void {
     ctx.textAlign = "left";
   }
 
+  // ── 1b. XP bar (under context bar) ──
+  const prog = world.getProgression();
+  const xpBarH = Math.max(2, Math.floor(zoom * 1.2));
+  const xpBarY = ctxBarH + brd;
+  const xpProgress = prog.getLevelProgress();
+  const xpLevel = prog.getLevel();
+
+  // Track background.
+  ctx.fillStyle = "#08080e";
+  ctx.fillRect(0, xpBarY, width, xpBarH);
+  // XP fill — accent colored.
+  ctx.fillStyle = theme.accent;
+  ctx.fillRect(0, xpBarY, width * xpProgress, xpBarH);
+  // Level badge (left side).
+  ctx.font = `bold ${Math.max(7, zoom * 2)}px ${font}`;
+  ctx.fillStyle = "#CCCCDD";
+  ctx.textAlign = "left";
+  ctx.fillText(
+    `Lv.${xpLevel}`,
+    zoom * 2,
+    xpBarY + xpBarH + Math.max(7, zoom * 2),
+  );
+
+  // ── 1c. Floating "+N XP" on gain ──
+  const xpGain = prog.getRecentXpGain();
+  if (xpGain) {
+    const fadeRatio = xpGain.timer / 800;
+    ctx.save();
+    ctx.globalAlpha = fadeRatio;
+    ctx.fillStyle = theme.accent;
+    ctx.font = `bold ${Math.max(8, zoom * 2.5)}px ${font}`;
+    ctx.textAlign = "right";
+    // Float upward as timer decays.
+    const floatY = xpBarY + xpBarH + zoom * 2 - (1 - fadeRatio) * zoom * 4;
+    ctx.fillText(`+${xpGain.amount} XP`, width - zoom * 2, floatY);
+    ctx.restore();
+  }
+
   // ── 2. Top-left chip: state + cost ──
   const state = world.getAlfredState();
   const stateColor: Record<string, string> = {
@@ -226,7 +264,8 @@ function drawOverlayHud(rc: RenderContext): void {
   };
   const smallFont = Math.max(9, zoom * 3);
 
-  const chipY = ctxBarH + pad;
+  // chipY accounts for both context bar and XP bar heights.
+  const chipY = ctxBarH + xpBarH + brd + pad;
   const chipX = pad;
 
   // Chip background pill.
@@ -368,6 +407,22 @@ function drawOverlayHud(rc: RenderContext): void {
       ctx.fillText(label, agentX + agentDot + zoom, agentY + zoom + agentDot);
       agentX += ctx.measureText(label).width + agentDot + zoom * 4;
     }
+  }
+
+  // ── 4b. Streak badge ──
+  const streak = prog.getStreak();
+  if (streak.currentStreak >= 2) {
+    const streakY = chipY + dotSize + zoom * (activeNames.length > 0 ? 6 : 3);
+    ctx.fillStyle =
+      streak.currentStreak >= 7
+        ? "#FFD700"
+        : streak.currentStreak >= 3
+          ? "#F39C12"
+          : "#555566";
+    ctx.font = `bold ${Math.max(8, zoom * 2.5)}px ${font}`;
+    ctx.textAlign = "left";
+    // Render without emoji (pixel font can't render emoji) — use text only.
+    ctx.fillText(`${streak.currentStreak}d streak`, chipX, streakY + zoom * 2);
   }
 
   // (Pace now shown in state chip — section 5 removed)
@@ -776,6 +831,62 @@ function drawAchievementPopup(rc: RenderContext): void {
   ctx.restore();
 }
 
+function drawLevelUpPopup(rc: RenderContext): void {
+  const { ctx, width, height, zoom, world } = rc;
+  const prog = world.getProgression();
+  const popup = prog.getLevelUpPopup();
+  if (!popup) return;
+
+  const font = `"DM Mono", monospace`;
+  const accent = "#FFD700"; // Gold for level-up
+
+  const fadeIn = Math.min(1, (4000 - popup.timer) / 400);
+  const fadeOut = Math.min(1, popup.timer / 600);
+  const alpha = Math.min(fadeIn, fadeOut);
+  const slideOffset = Math.round((1 - fadeIn) * zoom * 10);
+
+  const popupW = Math.min(width * 0.5, zoom * 50);
+  const popupH = zoom * 12;
+  const popupX = Math.round((width - popupW) / 2);
+  const popupY = Math.round(height * 0.65 - popupH / 2) + slideOffset;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // Background.
+  ctx.fillStyle = "#0a0c14";
+  ctx.fillRect(popupX, popupY, popupW, popupH);
+  // Gold border.
+  const brd = Math.max(1, Math.floor(zoom / 2));
+  ctx.fillStyle = accent;
+  ctx.fillRect(popupX, popupY, popupW, brd);
+  ctx.fillRect(popupX, popupY + popupH - brd, popupW, brd);
+  ctx.fillRect(popupX, popupY, brd, popupH);
+  ctx.fillRect(popupX + popupW - brd, popupY, brd, popupH);
+
+  // "LEVEL UP" header.
+  ctx.fillStyle = accent;
+  ctx.font = `bold ${Math.max(8, zoom * 2.5)}px ${font}`;
+  ctx.textAlign = "center";
+  ctx.fillText("LEVEL UP", popupX + popupW / 2, popupY + zoom * 3.5);
+
+  // Level number.
+  ctx.fillStyle = "#FFFFFF";
+  ctx.font = `bold ${Math.max(10, zoom * 3.5)}px ${font}`;
+  ctx.fillText(
+    `Level ${popup.level}`,
+    popupX + popupW / 2,
+    popupY + zoom * 7.5,
+  );
+
+  // Upgrade name.
+  ctx.fillStyle = "#888899";
+  ctx.font = `${Math.max(7, zoom * 2.2)}px ${font}`;
+  ctx.fillText(popup.name, popupX + popupW / 2, popupY + zoom * 10);
+
+  ctx.restore();
+}
+
 export function drawOverlay(rc: RenderContext): void {
   drawToolIcon(rc);
   drawSpeechBubbles(rc);
@@ -784,4 +895,5 @@ export function drawOverlay(rc: RenderContext): void {
   drawExpandedPanel(rc);
   drawReplayTimeline(rc);
   drawAchievementPopup(rc);
+  drawLevelUpPopup(rc);
 }

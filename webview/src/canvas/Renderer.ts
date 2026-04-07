@@ -138,6 +138,13 @@ export class Renderer {
       layout: this.layout,
     };
 
+    // Cave shake from CaveReactionSystem (achievement unlock, etc).
+    const shakeOffset = this.world.getCaveReactions().shakeOffset;
+    if (shakeOffset !== 0) {
+      rc.ctx.save();
+      rc.ctx.translate(shakeOffset, 0);
+    }
+
     // Clear.
     rc.ctx.fillStyle = P.BG;
     rc.ctx.fillRect(0, 0, rc.width, rc.height);
@@ -178,5 +185,9 @@ export class Renderer {
 
     // Layer 4: HUD overlay.
     drawOverlay(rc);
+
+    if (shakeOffset !== 0) {
+      rc.ctx.restore();
+    }
   }
 }

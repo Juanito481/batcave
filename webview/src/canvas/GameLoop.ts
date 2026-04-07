@@ -36,8 +36,12 @@ export class GameLoop {
     const delta = Math.min(rawDelta, GameLoop.MAX_DELTA_MS);
     this.lastTime = now;
 
-    this.renderer.update(delta);
-    this.renderer.render();
+    try {
+      this.renderer.update(delta);
+      this.renderer.render();
+    } catch (err) {
+      console.error("[BatCave] GameLoop crash:", err);
+    }
 
     this.animFrameId = requestAnimationFrame(this.tick);
   };
