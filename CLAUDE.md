@@ -3,6 +3,7 @@
 VSCode extension — pixel art visualization of Claude Code activity in a Batman-themed cave.
 
 ## Stack
+
 - **Extension host**: TypeScript, esbuild, Node.js
 - **Webview**: React 19, Canvas 2D, Vite
 - **Activity source**: Claude Code JSONL transcripts (`~/.claude/projects/`)
@@ -47,6 +48,7 @@ webview/src/
 ```
 
 ## Characters
+
 - **Alfred (Claude)** — butler, palette: dark tailcoat + white accent. Permanent.
 - **Giovanni (Batman)** — cowl, palette: grey/black + accent blue #1E7FD8. Permanent. Goes to Batcomputer periodically.
 - **13 Scacchiera agents** — appear/disappear when invoked via Skill/Agent tools. Each has unique sprite, zone, behavior, and quips.
@@ -54,28 +56,30 @@ webview/src/
 ## Agent Personality System (v2.0.0)
 
 Each of the 13 chess-piece agents has:
+
 - **Unique body archetype**: 12 distinct pixel-art silhouettes (caped, robed, armored, coated, hooded, heavy, glitch, labcoat, geared, compact, naval, standard)
 - **Preferred zone**: agents go to their meaningful area (server rack, workbench, display panel, batcomputer, patrol, follow Alfred, entrance)
 - **Idle behavior**: signature actions when not working (guard, inspect, pace, follow, lurk, chaos, etc.)
 - **Quips**: 4 personality-specific speech lines shown in bubbles every 20-40s idle
 
-| Agent | Body | Zone | Behavior |
-|-------|------|------|----------|
-| King | caped | batcomputer | survey |
-| Queen | robed | batcomputer | pace |
-| White Rook | armored | server | guard |
-| Bishop | coated | workbench | inspect |
-| Knight | standard | batcomputer | draft |
-| Pawn | compact | follow | note |
-| Black Rook | hooded | server | lurk |
-| Black Bishop | heavy | patrol | demolish |
-| Black Knight | glitch | patrol | chaos |
-| Chancellor | standard | server | maintain |
-| Cardinal | labcoat | workbench | test |
-| Scout | geared | display | scan |
-| Ship | naval | entrance | standby |
+| Agent        | Body     | Zone        | Behavior |
+| ------------ | -------- | ----------- | -------- |
+| King         | caped    | batcomputer | survey   |
+| Queen        | robed    | batcomputer | pace     |
+| White Rook   | armored  | server      | guard    |
+| Bishop       | coated   | workbench   | inspect  |
+| Knight       | standard | batcomputer | draft    |
+| Pawn         | compact  | follow      | note     |
+| Black Rook   | hooded   | server      | lurk     |
+| Black Bishop | heavy    | patrol      | demolish |
+| Black Knight | glitch   | patrol      | chaos    |
+| Chancellor   | standard | server      | maintain |
+| Cardinal     | labcoat  | workbench   | test     |
+| Scout        | geared   | display     | scan     |
+| Ship         | naval    | entrance    | standby  |
 
 ## Systems
+
 - **EventBus**: `bus.emit("particle:spawn", ...)`, `bus.emit("sound:play", ...)`. All state changes in BatCave emit events.
 - **ParticleSystem**: presets — `tool-spark` (orange), `agent-enter` (green), `agent-exit` (red), `write-glow`, `think-pulse` (blue). Pool of 200, zero GC.
 - **SoundSystem**: `drip`, `tool-click`, `agent-chime`, `agent-exit`, `think-chime`, `write-click`. All synthesized via OscillatorNode. Muted by default, toggle via command or `batcave.soundEnabled` setting.
@@ -94,6 +98,7 @@ The cave communicates Claude's state through environment, not UI overlays:
 - **Fireflies**: 4-6 glowing dots near ceiling, pulsing brightness, gentle drift.
 
 ## Behaviors
+
 - **Alfred quips**: 8 butler phrases, shown every 30-50s idle, 4s display. Fixed threshold per cycle.
 - **Giovanni at Batcomputer**: walks to chair every 15-25s, works 6s, wanders away. Fixed threshold per cycle.
 - **Bat Signal**: projects bat silhouette on ceiling when context hits 100%.
@@ -104,6 +109,7 @@ The cave communicates Claude's state through environment, not UI overlays:
 - **Bat swoops**: accumulator-based (3-8s threshold), frame-rate independent.
 
 ## Overlay HUD (minimal)
+
 - **Context bar**: full-width top bar, green/orange/red by usage %, quarter marks.
 - **State chip** (top-left): animated state dot + label (IDLE/THINKING/WRITING) + context %.
 - **Info chip** (top-right): repo label + model badge + session duration.
@@ -121,15 +127,20 @@ Activity monitor scans all `~/.claude/projects/*/` directories. Sessions active 
 Weighted formula: `(msgs * 2000 + tools * 1500) / 500_000 * 100`. Budget assumes ~500k effective tokens (1M context minus system prompt/memory overhead).
 
 ## Commands
+
 - `Bat Cave: Show` — focus the panel
 - `Bat Cave: Reset View` — reset world state and restart monitor
 - `Bat Cave: Toggle Sound` — enable/disable procedural audio
 
 ## Settings
+
 - `batcave.soundEnabled` (boolean, default: false)
 - `batcave.soundVolume` (0-100, default: 15)
 
 ## Rules
+
+- **No setTimeout/setInterval in webview** — all timers must use delta-time accumulators in the game loop. setTimeout breaks replay, tab-backgrounding, and creates race conditions with re-enter/exit.
+- **Furniture positions via getLayout()** — all geometry lives in `canvas/layout.ts`. Layers and BatCave.ts read from the shared CaveLayout struct. Never duplicate position math.
 - All rendering must be pixel-perfect — never enable image smoothing
 - Sprites are 16x32px base size, scaled by integer zoom factor
 - Color palette: dark cave (#0a0a12 bg), accent blue (#1E7FD8), no rgba in ambient layer
@@ -142,6 +153,7 @@ Weighted formula: `(msgs * 2000 + tools * 1500) / 500_000 * 100`. Budget assumes
 - Use ctx.save()/restore() around any globalAlpha changes
 
 ## Build
+
 ```bash
 npm run dev    # Watch mode (concurrent ext + webview)
 npm run build  # Production build

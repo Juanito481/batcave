@@ -4,6 +4,7 @@ import { SoundSystem } from "../systems/SoundSystem";
 import { ReplayEngine } from "../systems/ReplayEngine";
 import { Director } from "../systems/Director";
 import { RenderContext, P } from "./layers/render-context";
+import { CaveLayout, getLayout } from "./layout";
 import { drawCaveEnvironment } from "./layers/CaveLayer";
 import { drawAllFurniture } from "./layers/FurnitureLayer";
 import { drawOverlay } from "./layers/HudLayer";
@@ -21,6 +22,7 @@ export class Renderer {
   private sound: SoundSystem;
   private width = 0;
   private height = 0;
+  private layout: CaveLayout | null = null;
 
   private static readonly TILE = 16;
 
@@ -56,7 +58,9 @@ export class Renderer {
     );
     const zt = T * zoom;
     const wallRows = height > zt * 10 ? 3 : 2;
-    this.world.setDimensions(width, height, wallRows * zt);
+    const wallH = wallRows * zt;
+    this.layout = getLayout(width, height, zoom, zt, wallH);
+    this.world.setDimensions(width, height, wallH);
   }
 
   update(deltaMs: number): void {
@@ -110,6 +114,10 @@ export class Renderer {
     const cols = Math.ceil(this.width / zt) + 1;
     const rows = Math.ceil(this.height / zt) + 1;
     const wallRows = this.height > zt * 10 ? 3 : 2;
+    // Recompute layout if not yet initialized (shouldn't happen, but safe fallback).
+    if (!this.layout) {
+      this.layout = getLayout(this.width, this.height, zoom, zt, wallRows * zt);
+    }
 
     const rc: RenderContext = {
       ctx: this.ctx,
@@ -127,6 +135,7 @@ export class Renderer {
       theme: this.world.getRepoTheme(),
       now: Date.now(),
       alfredState: this.world.getAlfredState(),
+      layout: this.layout,
     };
 
     // Clear.

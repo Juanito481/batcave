@@ -27,7 +27,7 @@ import {
   AlertSeverity,
   FileNode,
 } from "../data/gamification";
-import { getTrophyCaseLayout } from "../canvas/layers/FurnitureLayer";
+import { CaveLayout, getLayout } from "../canvas/layout";
 
 /** Per-agent session statistics for enterprise observability. */
 export interface AgentSessionStats {
@@ -329,6 +329,7 @@ export class BatCaveWorld {
   private _zoom = 2;
   private _zt = 32;
   private nextAgentSlot = 0;
+  private _layout: CaveLayout | null = null;
 
   constructor() {
     this.sprites = generateAllSprites();
@@ -390,61 +391,45 @@ export class BatCaveWorld {
       Math.min(Math.floor(w / (16 * T)), Math.floor(h / (8 * T))),
     );
     this._zt = T * this._zoom;
-    const zoom = this._zoom;
-    const zt = this._zt;
 
-    // Batcomputer geometry (must match Renderer).
-    const bcTilesW = Math.min(5, Math.ceil(w / zt) - 1);
-    const bcW = zt * bcTilesW;
-    const bcX = Math.floor((w - bcW) / 2);
-    const bcY = wallH + zoom * 2;
-    const bcH = Math.floor(zt * 1.5);
+    // Single source of truth for all furniture positions.
+    const L = getLayout(w, h, this._zoom, this._zt, wallH);
+    this._layout = L;
 
-    // Build obstacle rects matching Renderer furniture positions.
+    // Build obstacle rects from centralized layout.
     this.obstacles = [
       // Cave wall (entire top area is not walkable).
       { x: 0, y: 0, w: w, h: wallH },
       // Batcomputer + desk legs.
-      { x: bcX, y: bcY, w: bcW, h: bcH + zoom * 3 },
+      { x: L.bcX, y: L.bcY, w: L.bcW, h: L.bcH + L.zoom * 3 },
       // Server rack.
-      { x: bcX - zt * 3, y: Math.floor(bcY - zt * 1.5), w: zt * 2, h: zt * 3 },
+      { x: L.serverX, y: L.serverY, w: L.serverW, h: L.serverH },
       // Workbench.
-      {
-        x: Math.floor(bcX - zt * 6.5),
-        y: bcY,
-        w: zt * 3,
-        h: Math.floor(zt * 1.5) + zoom * 3,
-      },
+      { x: L.workbenchX, y: L.workbenchY, w: L.workbenchW, h: L.workbenchH },
       // Display panel.
-      {
-        x: bcX + bcW + zt,
-        y: bcY - Math.floor(zt * 0.5),
-        w: Math.floor(zt * 2.5),
-        h: Math.floor(zt * 1.8),
-      },
+      { x: L.displayX, y: L.displayY, w: L.displayW, h: L.displayH },
       // Chair.
-      {
-        x: Math.floor(bcX + bcW / 2 - zoom * 3),
-        y: bcH + bcY + zoom,
-        w: zoom * 6,
-        h: zoom * 7,
-      },
+      { x: L.chairX, y: L.chairY, w: L.chairW, h: L.chairH },
     ];
 
     // Rebuild pathfinder grid.
-    const cellSize = Math.max(8, zt / 2);
+    const cellSize = Math.max(8, this._zt / 2);
     this.pathfinder.buildGrid(w, h, cellSize, this.obstacles);
 
     // Position characters on the floor.
-    const floorY = wallH + Math.floor((h - wallH) * 0.82);
     this.alfred.x = w / 2;
-    this.alfred.y = floorY;
+    this.alfred.y = L.floorY;
     this.giovanni.x = w * 0.3;
-    this.giovanni.y = floorY;
+    this.giovanni.y = L.floorY;
 
     // Propagate new dimensions to subsystems.
     this.behaviorSystem.updateDimensions(w, h, wallH, this._zoom, this._zt);
     this.companionSystem.updateDimensions(w, h, wallH, this._zoom, this._zt);
+  }
+
+  /** Get centralized layout (null before first setDimensions call). */
+  getLayout(): CaveLayout | null {
+    return this._layout;
   }
 
   /** Find a path from (sx,sy) to (tx,ty) avoiding furniture. */
@@ -1078,40 +1063,37 @@ export class BatCaveWorld {
   /** Handle click at canvas coordinates — hit test Batcomputer screens. */
   handleClick(cx: number, cy: number): void {
     const zoom = this._zoom;
-    const zt = this._zt;
-    const bcTilesW = Math.min(5, Math.ceil(this.worldWidth / zt) - 1);
-    const bcW = zt * bcTilesW;
-    const bcX = Math.floor((this.worldWidth - bcW) / 2);
-    const bcY = this.wallH + zt;
-    const bcH = Math.floor(zt * 1.5);
-    const screenW = Math.floor((bcW - zoom * 4) / 3);
+    const L = this._layout;
+    if (!L) return;
+
+    const screenGap = Math.floor(zoom * 3);
 
     // Left screen → files (toggle).
     if (
-      cx >= bcX + zoom &&
-      cx <= bcX + zoom + screenW &&
-      cy >= bcY &&
-      cy <= bcY + bcH
+      cx >= L.bcX + screenGap &&
+      cx <= L.bcX + screenGap + L.screenW &&
+      cy >= L.bcY &&
+      cy <= L.bcY + L.bcH
     ) {
       this.setExpandedPanel("files");
       return;
     }
     // Center screen → stats (toggle).
     if (
-      cx >= bcX + zoom + screenW + zoom &&
-      cx <= bcX + zoom + screenW * 2 + zoom &&
-      cy >= bcY &&
-      cy <= bcY + bcH
+      cx >= L.bcX + screenGap + L.screenW + screenGap &&
+      cx <= L.bcX + screenGap + L.screenW * 2 + screenGap &&
+      cy >= L.bcY &&
+      cy <= L.bcY + L.bcH
     ) {
       this.setExpandedPanel("stats");
       return;
     }
     // Right screen → agents (toggle).
     if (
-      cx >= bcX + zoom + (screenW + zoom) * 2 &&
-      cx <= bcX + bcW - zoom &&
-      cy >= bcY &&
-      cy <= bcY + bcH
+      cx >= L.bcX + (screenGap + L.screenW) * 2 + screenGap &&
+      cx <= L.bcX + L.bcW - screenGap &&
+      cy >= L.bcY &&
+      cy <= L.bcY + L.bcH
     ) {
       this.setExpandedPanel("agents");
       return;
@@ -1140,18 +1122,18 @@ export class BatCaveWorld {
     }
 
     // Click on whiteboard → request message input.
-    const wbX = Math.floor(zt * 5.5);
-    const wbY = Math.floor(this.wallH * 0.2);
-    const wbW = Math.floor(zt * 2);
-    const wbH = Math.floor(zt * 1.2) + zoom * 2; // include tray
-    if (cx >= wbX && cx <= wbX + wbW && cy >= wbY && cy <= wbY + wbH) {
+    if (
+      cx >= L.whiteboardX &&
+      cx <= L.whiteboardX + L.whiteboardW &&
+      cy >= L.whiteboardY &&
+      cy <= L.whiteboardY + L.whiteboardH
+    ) {
       this.requestWhiteboardEdit();
       return;
     }
 
     // Click on trophy case slot → achievement detail.
-    // Uses shared layout function to stay in sync with FurnitureLayer rendering.
-    const tc = getTrophyCaseLayout(zoom, zt, this.wallH);
+    const tc = L.trophyCase;
     if (
       cx >= tc.caseX &&
       cx <= tc.caseX + tc.caseW &&
@@ -1313,6 +1295,11 @@ export class BatCaveWorld {
       outputTokens,
       costUsd: Math.round(costUsd * 100) / 100,
     };
+  }
+
+  /** Cost budget — 0 means no limit configured. */
+  getCostBudget(): number {
+    return 0;
   }
 
   /** Set session history from extension host. */

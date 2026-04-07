@@ -22,6 +22,9 @@ export interface CompanionState {
   stayTimer: number;
   stayThreshold: number;
   preferredZone: "server" | "workbench" | "display";
+  /** Delta-time exit timer — replaces setTimeout for exit animation. */
+  exitTimer: number;
+  exiting: boolean;
 }
 
 /**
@@ -49,6 +52,8 @@ export class CompanionSystem {
   // Francesco — appears only when audit agents are active.
   private francesco: Character | null = null;
   private francescoVisible = false;
+  private francescoExitTimer = 0;
+  private francescoExiting = false;
 
   private deps: CompanionDeps;
 
@@ -68,6 +73,8 @@ export class CompanionSystem {
         stayTimer: 0,
         stayThreshold: 30000 + Math.random() * 60000,
         preferredZone: "server",
+        exitTimer: 0,
+        exiting: false,
       },
       {
         id: "andrea",
@@ -80,6 +87,8 @@ export class CompanionSystem {
         stayTimer: 0,
         stayThreshold: 30000 + Math.random() * 60000,
         preferredZone: "workbench",
+        exitTimer: 0,
+        exiting: false,
       },
       {
         id: "arturo",
@@ -92,6 +101,8 @@ export class CompanionSystem {
         stayTimer: 0,
         stayThreshold: 30000 + Math.random() * 60000,
         preferredZone: "display",
+        exitTimer: 0,
+        exiting: false,
       },
     ];
   }
@@ -136,6 +147,18 @@ export class CompanionSystem {
    */
   updateCompanions(dt: number): void {
     for (const c of this.companions) {
+      // Delta-time exit animation (replaces setTimeout).
+      if (c.exiting) {
+        c.exitTimer += dt;
+        if (c.exitTimer >= 500) {
+          // Guard: only hide if still not re-spawned during exit animation.
+          if (c.char && !c.present) c.char.visible = false;
+          c.exiting = false;
+          c.exitTimer = 0;
+        }
+        continue;
+      }
+
       if (!c.present) {
         // Off-screen — count toward next spawn.
         c.spawnTimer += dt;
@@ -158,6 +181,7 @@ export class CompanionSystem {
           }
           c.char.enter(pos.x, pos.y);
           c.present = true;
+          c.exiting = false;
         }
       } else {
         // In cave — update character, wander, count toward exit.
@@ -171,10 +195,9 @@ export class CompanionSystem {
           c.present = false;
           c.spawnTimer = 0;
           c.spawnThreshold = 20000 + Math.random() * 40000;
-          // Let exit animation finish before hiding.
-          window.setTimeout(() => {
-            if (c.char && !c.present) c.char.visible = false;
-          }, 500);
+          // Start delta-time exit timer (replaces setTimeout).
+          c.exiting = true;
+          c.exitTimer = 0;
         }
       }
     }
@@ -185,6 +208,17 @@ export class CompanionSystem {
     dt: number,
     maybeWander: (char: Character, dt: number) => void,
   ): void {
+    // Delta-time exit animation for Francesco.
+    if (this.francescoExiting) {
+      this.francescoExitTimer += dt;
+      if (this.francescoExitTimer >= 500) {
+        if (this.francesco && !this.francescoVisible) {
+          this.francesco.visible = false;
+        }
+        this.francescoExiting = false;
+        this.francescoExitTimer = 0;
+      }
+    }
     if (this.francesco && this.francescoVisible) {
       this.francesco.update(dt);
       maybeWander(this.francesco, dt);
@@ -236,10 +270,9 @@ export class CompanionSystem {
     if (!this.francescoVisible || !this.francesco) return;
     this.francesco.exit();
     this.francescoVisible = false;
-    window.setTimeout(() => {
-      if (this.francesco && !this.francescoVisible)
-        this.francesco.visible = false;
-    }, 500);
+    // Delta-time exit timer (replaces setTimeout).
+    this.francescoExiting = true;
+    this.francescoExitTimer = 0;
   }
 
   // ── Private: zone positions ────────────────────────────

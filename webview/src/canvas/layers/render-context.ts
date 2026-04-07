@@ -1,6 +1,7 @@
 import { BatCaveWorld, RepoTheme } from "../../world/BatCave";
 import { ReplayEngine } from "../../systems/ReplayEngine";
 import { Director } from "../../systems/Director";
+import { CaveLayout } from "../layout";
 
 /** Snapshot of render state, built once per frame by Renderer. */
 export interface RenderContext {
@@ -20,6 +21,8 @@ export interface RenderContext {
   now: number;
   /** Claude's current activity state — drives torch flicker speed. */
   alfredState: "idle" | "thinking" | "writing";
+  /** Centralized furniture positions — single source of truth. */
+  layout: CaveLayout;
 }
 
 // ── Shared palette (opaque, no transparency) ─────────────

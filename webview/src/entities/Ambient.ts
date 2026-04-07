@@ -113,18 +113,23 @@ interface Spark {
 
 export class Ambient {
   private bats: Bat[] = [];
-  private drips: Drip[] = [];
   private motes: Mote[] = [];
   private glow: GlowPulse = { phase: 0 };
   private spiders: Spider[] = [];
-  private rats: Rat[] = [];
   private fireflies: Firefly[] = [];
   private rain: RainDrop[] = [];
   private fog: FogPatch[] = [];
   private sparks: Spark[] = [];
 
-  // Timers.
+  // Pool-based drips (fixed size, recycled — no splice, no GC).
+  private static readonly MAX_DRIPS = 8;
+  private dripPool: Drip[] = [];
   private dripTimer = 0;
+
+  // Pool-based rats (fixed size, active flag).
+  private static readonly MAX_RATS = 4;
+  private ratPool: Rat[] = [];
+  private activeRatCount = 0;
   private ratSpawnTimer = 0;
   private ratSpawnThreshold = 20000 + Math.random() * 20000;
   private rainIntensity = 0.3 + Math.random() * 0.4; // 0.3-0.7
@@ -139,7 +144,14 @@ export class Ambient {
   private wallH = 64;
 
   constructor() {
-    // Entities spawn lazily on first update when dimensions are known.
+    // Pre-allocate drip pool (reusable, no GC).
+    for (let i = 0; i < Ambient.MAX_DRIPS; i++) {
+      this.dripPool.push({ x: 0, y: 0, velocityY: 0, splashTimer: -2 });
+    }
+    // Pre-allocate rat pool.
+    for (let i = 0; i < Ambient.MAX_RATS; i++) {
+      this.ratPool.push({ x: 0, y: 0, speedX: 0, frame: 0, frameTimer: 0, active: false });
+    }
   }
 
   // Context pressure (0-100) — controls base drip interval.
@@ -362,36 +374,36 @@ export class Ambient {
     if (this.dripTimer >= interval) {
       this.dripTimer = 0;
 
-      // Spawn from a random stalactite position (distributed across width).
-      const numSlots = Math.max(1, Math.floor(this.wW / 48));
-      const slot = Math.floor(Math.random() * numSlots);
-      this.drips.push({
-        x: (slot + 0.5) * (this.wW / numSlots) + (Math.random() - 0.5) * 4,
-        y: this.wallH + Math.random() * 10,
-        velocityY: 0.04,
-        splashTimer: -1,
-      });
+      // Find a dead drip in the pool to recycle.
+      const drip = this.dripPool.find(d => d.splashTimer === -2);
+      if (drip) {
+        const numSlots = Math.max(1, Math.floor(this.wW / 48));
+        const slot = Math.floor(Math.random() * numSlots);
+        drip.x = (slot + 0.5) * (this.wW / numSlots) + (Math.random() - 0.5) * 4;
+        drip.y = this.wallH + Math.random() * 10;
+        drip.velocityY = 0.04;
+        drip.splashTimer = -1; // -1 = falling, -2 = dead/available
+      }
     }
 
-    for (let i = this.drips.length - 1; i >= 0; i--) {
-      const drip = this.drips[i];
+    for (const drip of this.dripPool) {
+      if (drip.splashTimer === -2) continue; // Dead — skip.
 
       if (drip.splashTimer < 0) {
         // Falling.
-        drip.velocityY += 0.0002 * dt; // gravity
+        drip.velocityY += 0.0002 * dt;
         drip.y += drip.velocityY * dt;
 
-        // Hit floor.
         if (drip.y >= this.wH - 4) {
           drip.splashTimer = 0;
           drip.y = this.wH - 4;
           bus.emit("sound:play", { id: "drip", volume: 0.5 });
         }
       } else {
-        // Splash animation.
+        // Splash animation — recycle after 300ms.
         drip.splashTimer += dt;
         if (drip.splashTimer > 300) {
-          this.drips.splice(i, 1);
+          drip.splashTimer = -2; // Return to pool.
         }
       }
     }
@@ -405,7 +417,8 @@ export class Ambient {
     const DRIP_MID = "#142e48";
     const DRIP_DIM = "#0e1e30";
 
-    for (const drip of this.drips) {
+    for (const drip of this.dripPool) {
+      if (drip.splashTimer === -2) continue; // Dead.
       if (drip.splashTimer < 0) {
         // Falling drop.
         ctx.fillStyle = DRIP_BRIGHT;
@@ -601,29 +614,28 @@ export class Ambient {
   // --- Rats ---
 
   private updateRats(dt: number): void {
-    // Spawn timer.
+    // Spawn timer — use counter instead of .filter() (O(1) vs O(n)).
     this.ratSpawnTimer += dt;
-    if (
-      this.ratSpawnTimer >= this.ratSpawnThreshold &&
-      this.rats.filter((r) => r.active).length < 2
-    ) {
+    if (this.ratSpawnTimer >= this.ratSpawnThreshold && this.activeRatCount < 2) {
       this.ratSpawnTimer = 0;
       this.ratSpawnThreshold = 20000 + Math.random() * 25000;
 
-      const goingRight = Math.random() > 0.5;
-      this.rats.push({
-        x: goingRight ? -10 : this.wW + 10,
-        y: this.wH - 6,
-        speedX: (goingRight ? 1 : -1) * (0.06 + Math.random() * 0.04),
-        frame: 0,
-        frameTimer: 0,
-        active: true,
-      });
+      // Find a dead rat in the pool to recycle.
+      const rat = this.ratPool.find(r => !r.active);
+      if (rat) {
+        const goingRight = Math.random() > 0.5;
+        rat.x = goingRight ? -10 : this.wW + 10;
+        rat.y = this.wH - 6;
+        rat.speedX = (goingRight ? 1 : -1) * (0.06 + Math.random() * 0.04);
+        rat.frame = 0;
+        rat.frameTimer = 0;
+        rat.active = true;
+        this.activeRatCount++;
+      }
     }
 
     // Update active rats.
-    for (let i = this.rats.length - 1; i >= 0; i--) {
-      const rat = this.rats[i];
+    for (const rat of this.ratPool) {
       if (!rat.active) continue;
 
       rat.x += rat.speedX * dt;
@@ -633,13 +645,13 @@ export class Ambient {
         rat.frame = rat.frame === 0 ? 1 : 0;
       }
 
-      // Remove when off-screen.
+      // Recycle when off-screen.
       if (
         (rat.speedX > 0 && rat.x > this.wW + 20) ||
         (rat.speedX < 0 && rat.x < -20)
       ) {
         rat.active = false;
-        this.rats.splice(i, 1);
+        this.activeRatCount--;
       }
     }
   }
@@ -647,7 +659,7 @@ export class Ambient {
   private drawRats(ctx: CanvasRenderingContext2D, zoom: number): void {
     const s = Math.max(1, Math.floor(zoom * 0.4));
 
-    for (const rat of this.rats) {
+    for (const rat of this.ratPool) {
       if (!rat.active) continue;
       const rx = Math.round(rat.x);
       const ry = Math.round(rat.y);
