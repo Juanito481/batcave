@@ -113,6 +113,138 @@ export class AgentBehaviorSystem {
     return this.agentQuips.get(agentId)?.text ?? null;
   }
 
+  // ── Event-reactive agent behaviors ─────────────────
+
+  /**
+   * React to a tool event — agents have opinions about your code.
+   * Called by BatCave on tool_start.
+   */
+  reactToTool(
+    toolName: string,
+    agents: Map<string, Character>,
+    consecutiveBashCount: number,
+  ): void {
+    // Bishop reacts to Edit without Read.
+    if ((toolName === "Edit" || toolName === "Write") && agents.has("bishop")) {
+      // Bishop walks toward Alfred and comments.
+      const bishop = agents.get("bishop")!;
+      if (bishop.visible && bishop.state === "idle") {
+        const alfred = this.deps.getAlfred();
+        const path = this.deps.pathfinder.findPath(
+          bishop.x,
+          bishop.y,
+          alfred.x + this.deps.zoom * 10,
+          alfred.y,
+        );
+        if (path.length > 0) bishop.moveAlongPath(path);
+        bishop.showEmotion("check", 1200);
+      }
+    }
+
+    // Chancellor warns after 5+ consecutive Bash.
+    if (
+      toolName === "Bash" &&
+      consecutiveBashCount >= 5 &&
+      agents.has("chancellor")
+    ) {
+      this.agentQuips.set("chancellor", {
+        text: "The pipeline WILL break.",
+        timer: 3500,
+      });
+      const chancellor = agents.get("chancellor")!;
+      if (chancellor.visible) chancellor.showEmotion("!", 1500);
+    }
+
+    // Cardinal runs to workbench when tests might be involved.
+    if (toolName === "Bash" && agents.has("cardinal")) {
+      const cardinal = agents.get("cardinal")!;
+      if (cardinal.visible && cardinal.state === "idle") {
+        const pos = this.getZonePosition("workbench", "cardinal");
+        if (pos) {
+          const path = this.deps.pathfinder.findPath(
+            cardinal.x,
+            cardinal.y,
+            pos.x,
+            pos.y,
+          );
+          if (path.length > 0) cardinal.moveAlongPath(path);
+        }
+      }
+    }
+  }
+
+  /**
+   * React to agent spawn — other agents acknowledge newcomers.
+   */
+  reactToAgentEnter(newAgentId: string, agents: Map<string, Character>): void {
+    // King acknowledges with a nod.
+    if (newAgentId !== "king" && agents.has("king")) {
+      const king = agents.get("king")!;
+      if (king.visible) king.showEmotion("check", 1200);
+    }
+
+    // Queen analyzes with a question.
+    if (newAgentId !== "queen" && agents.has("queen")) {
+      const queen = agents.get("queen")!;
+      if (queen.visible) queen.showEmotion("?", 1200);
+    }
+
+    // Pawn runs to brief the newcomer.
+    if (newAgentId !== "pawn" && agents.has("pawn")) {
+      const pawn = agents.get("pawn")!;
+      const newAgent = agents.get(newAgentId);
+      if (pawn.visible && newAgent && pawn.state === "idle") {
+        const path = this.deps.pathfinder.findPath(
+          pawn.x,
+          pawn.y,
+          newAgent.x + this.deps.zoom * 8,
+          newAgent.y,
+        );
+        if (path.length > 0) pawn.moveAlongPath(path);
+        this.agentQuips.set("pawn", {
+          text: "I'll brief them, sir!",
+          timer: 3000,
+        });
+      }
+    }
+  }
+
+  /**
+   * React to a short commit message — Bishop disapproves.
+   */
+  reactToShortCommitMessage(agents: Map<string, Character>): void {
+    if (agents.has("bishop")) {
+      const bishop = agents.get("bishop")!;
+      if (bishop.visible) {
+        bishop.showEmotion("?", 2000);
+        this.agentQuips.set("bishop", {
+          text: "That commit message... really?",
+          timer: 3500,
+        });
+      }
+    }
+  }
+
+  /**
+   * Handle click on an agent — they turn and respond directly.
+   * Returns a contextual quip or null.
+   */
+  clickAgent(agentId: string, agents: Map<string, Character>): string | null {
+    const char = agents.get(agentId);
+    if (!char || !char.visible) return null;
+
+    const personality = AGENT_PERSONALITIES[agentId];
+    if (!personality || personality.quips.length === 0) return null;
+
+    // Show emotion and pick a quip.
+    char.showEmotion("!", 1000);
+    const quip =
+      personality.quips[Math.floor(Math.random() * personality.quips.length)];
+    this.agentQuips.set(agentId, { text: quip, timer: 4000 });
+    bus.emit("sound:play", { id: "interaction-chime" });
+    return quip;
+  }
+
   // ── Zone position helpers ──────────────────────────────
 
   /** Get spawn/target position for an agent zone (deterministic jitter). */

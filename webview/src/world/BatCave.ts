@@ -29,6 +29,7 @@ import {
 } from "../data/gamification";
 import { CaveLayout, getLayout } from "../canvas/layout";
 import { FourthWallSystem } from "../systems/FourthWallSystem";
+import { CaveReactionSystem } from "../systems/CaveReactionSystem";
 
 /** Per-agent session statistics for enterprise observability. */
 export interface AgentSessionStats {
@@ -143,6 +144,9 @@ export class BatCaveWorld {
   // Fourth wall system — Giovanni mirror + Alfred awareness.
   private fourthWall!: FourthWallSystem;
 
+  // Cave reaction system — event-driven environmental effects.
+  private caveReactions = new CaveReactionSystem();
+
   // Agent behavior system (zone movement, quips, interactions).
   private behaviorSystem!: AgentBehaviorSystem;
 
@@ -167,6 +171,7 @@ export class BatCaveWorld {
   // Current tool (for tool visualization).
   private currentTool: string | null = null;
   private currentToolTimer = 0;
+  private consecutiveBashCount = 0;
 
   // Recent files touched — ring buffer for Batcomputer left screen.
   private recentFiles: { name: string; tool: string; timestamp: number }[] = [];
@@ -594,6 +599,9 @@ export class BatCaveWorld {
           { agentId },
         );
         this._agentPulseStart = Date.now();
+        this.caveReactions.triggerTorchBoost();
+        // Other agents react to the newcomer.
+        this.behaviorSystem.reactToAgentEnter(agentId, this.agents);
         this.trackAgentHistory(
           agentId,
           meta?.name || agentId,
@@ -718,6 +726,19 @@ export class BatCaveWorld {
         if (this.currentTool === "Edit" || this.currentTool === "Write") {
           this.alfred.showEmotion("check", 1000);
         }
+        // Cave reacts to tool types.
+        if (this.currentTool === "Bash") {
+          this.caveReactions.triggerServerGlow();
+          this.consecutiveBashCount++;
+        } else {
+          this.consecutiveBashCount = 0;
+        }
+        // Agents react to tools (opinions, movements).
+        this.behaviorSystem.reactToTool(
+          this.currentTool || "?",
+          this.agents,
+          this.consecutiveBashCount,
+        );
 
         // Analytics: heatmap + breakdown + pace + evolution.
         this.recordToolForAnalytics(this.currentTool || "?");
@@ -767,6 +788,12 @@ export class BatCaveWorld {
 
         // Fourth wall: Giovanni nods on commit.
         this.fourthWall.onGitCommit();
+        // Cave reacts: green wall flash.
+        this.caveReactions.triggerCommitFlash();
+        // Bishop judges short commit messages.
+        if (msg.length < 10) {
+          this.behaviorSystem.reactToShortCommitMessage(this.agents);
+        }
 
         // All active agents + Alfred celebrate with star; Giovanni confirms.
         this.alfred.showEmotion("star", 2000);
@@ -806,6 +833,8 @@ export class BatCaveWorld {
         this.audit("git", "git_push", "pushed to remote");
         // Fourth wall: Giovanni celebrates push.
         this.fourthWall.onGitPush();
+        // Cave reacts: blue wall flash.
+        this.caveReactions.triggerPushFlash();
         // Deploy sparks weather effect.
         this.ambient.setWeather("sparks");
         break;
@@ -878,6 +907,8 @@ export class BatCaveWorld {
     // Fourth wall system — Giovanni mirror + Alfred awareness.
     this.fourthWall.update(deltaMs);
     this.fourthWall.tickQuipTimer(deltaMs);
+    // Cave reactions — event-driven environmental effects.
+    this.caveReactions.update(deltaMs);
     // Idle wandering for Alfred and Giovanni.
     this.maybeWander(this.alfred, deltaMs);
     this.maybeGiovanniBatcomputer(deltaMs);
@@ -938,6 +969,11 @@ export class BatCaveWorld {
 
   getRepoTheme(): RepoTheme {
     return this.repoTheme;
+  }
+
+  /** Cave reaction state for rendering layers. */
+  getCaveReactions(): import("../systems/CaveReactionSystem").CaveReactionState {
+    return this.caveReactions.getState();
   }
 
   private trackAgentHistory(
@@ -1239,12 +1275,14 @@ export class BatCaveWorld {
       }
     }
 
-    // Click on an agent character → agent detail panel.
+    // Click on an agent character → react + show detail panel.
     for (const [agentId, agent] of this.agents) {
       if (!agent.visible) continue;
       const ax = agent.x - hitSize / 2;
       const ay = agent.y - hitSize;
       if (cx >= ax && cx <= ax + hitSize && cy >= ay && cy <= ay + hitSize) {
+        // Agent reacts to being clicked (turns, quips, emotion).
+        this.behaviorSystem.clickAgent(agentId, this.agents);
         this.selectedAgentId = agentId;
         this.expandedPanel = "agent-detail";
         return;

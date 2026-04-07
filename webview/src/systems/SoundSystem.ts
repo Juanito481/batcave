@@ -5,9 +5,22 @@
  */
 
 import { bus } from "./EventBus";
+import { AGENT_CHIMES } from "../data/agent-sounds";
 
-type SoundId = "drip" | "tool-click" | "agent-chime" | "agent-exit" | "think-chime" | "write-click"
-  | "spider-silk" | "rat-scurry" | "thunder" | "interaction-chime" | "milestone";
+type SoundId =
+  | "drip"
+  | "tool-click"
+  | "agent-chime"
+  | "agent-exit"
+  | "think-chime"
+  | "write-click"
+  | "spider-silk"
+  | "rat-scurry"
+  | "thunder"
+  | "interaction-chime"
+  | "milestone"
+  | "commit-fanfare"
+  | "push-sweep";
 
 export class SoundSystem {
   private ctx: AudioContext | null = null;
@@ -58,7 +71,14 @@ export class SoundSystem {
 
     switch (id) {
       case "drip":
-        this.playTone(ctx, gain, 2000 + Math.random() * 400, "sine", 0.05, v * 0.4);
+        this.playTone(
+          ctx,
+          gain,
+          2000 + Math.random() * 400,
+          "sine",
+          0.05,
+          v * 0.4,
+        );
         break;
       case "tool-click":
         this.playTone(ctx, gain, 1200, "triangle", 0.04, v * 0.3);
@@ -73,24 +93,52 @@ export class SoundSystem {
         this.playChime(ctx, gain, [523, 659], v * 0.15);
         break;
       case "write-click":
-        this.playTone(ctx, gain, 3500 + Math.random() * 1000, "square", 0.01, v * 0.08);
+        this.playTone(
+          ctx,
+          gain,
+          3500 + Math.random() * 1000,
+          "square",
+          0.01,
+          v * 0.08,
+        );
         break;
       case "spider-silk":
         // High whisper — silk thread descending.
-        this.playTone(ctx, gain, 6000 + Math.random() * 2000, "sine", 0.08, v * 0.06);
+        this.playTone(
+          ctx,
+          gain,
+          6000 + Math.random() * 2000,
+          "sine",
+          0.08,
+          v * 0.06,
+        );
         break;
       case "rat-scurry":
         // Fast clicking — tiny feet on stone.
         for (let i = 0; i < 4; i++) {
           setTimeout(() => {
-            this.playTone(ctx, gain, 4000 + Math.random() * 2000, "triangle", 0.02, v * 0.05);
+            this.playTone(
+              ctx,
+              gain,
+              4000 + Math.random() * 2000,
+              "triangle",
+              0.02,
+              v * 0.05,
+            );
           }, i * 40);
         }
         break;
       case "thunder":
         // Low rumble — distant thunder.
         this.playSlide(ctx, gain, 80, 40, 0.8, v * 0.3);
-        this.playTone(ctx, gain, 60 + Math.random() * 30, "sawtooth", 0.6, v * 0.15);
+        this.playTone(
+          ctx,
+          gain,
+          60 + Math.random() * 30,
+          "sawtooth",
+          0.6,
+          v * 0.15,
+        );
         break;
       case "interaction-chime":
         // Two-note dialogue — agents talking.
@@ -100,12 +148,52 @@ export class SoundSystem {
         // Triumphant ascending arpeggio.
         this.playChime(ctx, gain, [523, 659, 784, 1047], v * 0.3);
         break;
+      case "commit-fanfare":
+        // "da-da-da-DUM" — 4-note signature for first commit of the day.
+        this.playChime(ctx, gain, [392, 440, 494, 659], v * 0.25);
+        break;
+      case "push-sweep":
+        // Ascending sweep — rocket launch feeling.
+        this.playSlide(ctx, gain, 200, 1200, 0.3, v * 0.2);
+        break;
+    }
+  }
+
+  /**
+   * Play a per-agent signature chime when they enter the cave.
+   * Each agent has a unique audio identity defined in agent-sounds.ts.
+   */
+  playAgentChime(agentId: string): void {
+    const ctx = this.getContext();
+    if (!ctx) return;
+    const chime = AGENT_CHIMES[agentId];
+    if (!chime) return;
+
+    const gain = ctx.createGain();
+    gain.connect(ctx.destination);
+
+    for (let i = 0; i < chime.notes.length; i++) {
+      const osc = ctx.createOscillator();
+      osc.type = chime.type;
+      osc.frequency.value = chime.notes[i];
+      const noteGain = ctx.createGain();
+      noteGain.connect(gain);
+      const t = ctx.currentTime + i * (chime.noteDuration + chime.noteGap);
+      noteGain.gain.setValueAtTime(chime.volume * this.volume, t);
+      noteGain.gain.exponentialRampToValueAtTime(0.001, t + chime.noteDuration);
+      osc.connect(noteGain);
+      osc.start(t);
+      osc.stop(t + chime.noteDuration + 0.01);
     }
   }
 
   private playTone(
-    ctx: AudioContext, gain: GainNode,
-    freq: number, type: OscillatorType, duration: number, vol: number,
+    ctx: AudioContext,
+    gain: GainNode,
+    freq: number,
+    type: OscillatorType,
+    duration: number,
+    vol: number,
   ): void {
     const osc = ctx.createOscillator();
     osc.type = type;
@@ -117,7 +205,12 @@ export class SoundSystem {
     osc.stop(ctx.currentTime + duration + 0.01);
   }
 
-  private playChime(ctx: AudioContext, gain: GainNode, notes: number[], vol: number): void {
+  private playChime(
+    ctx: AudioContext,
+    gain: GainNode,
+    notes: number[],
+    vol: number,
+  ): void {
     notes.forEach((freq, i) => {
       const osc = ctx.createOscillator();
       osc.type = "sine";
@@ -134,13 +227,20 @@ export class SoundSystem {
   }
 
   private playSlide(
-    ctx: AudioContext, gain: GainNode,
-    fromFreq: number, toFreq: number, duration: number, vol: number,
+    ctx: AudioContext,
+    gain: GainNode,
+    fromFreq: number,
+    toFreq: number,
+    duration: number,
+    vol: number,
   ): void {
     const osc = ctx.createOscillator();
     osc.type = "sine";
     osc.frequency.setValueAtTime(fromFreq, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(toFreq, ctx.currentTime + duration);
+    osc.frequency.exponentialRampToValueAtTime(
+      toFreq,
+      ctx.currentTime + duration,
+    );
     gain.gain.setValueAtTime(vol, ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
     osc.connect(gain);
