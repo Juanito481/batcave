@@ -30,6 +30,7 @@ import {
 import { CaveLayout, getLayout } from "../canvas/layout";
 import { FourthWallSystem } from "../systems/FourthWallSystem";
 import { CaveReactionSystem } from "../systems/CaveReactionSystem";
+import { ProgressionSystem } from "../systems/ProgressionSystem";
 
 /** Per-agent session statistics for enterprise observability. */
 export interface AgentSessionStats {
@@ -146,6 +147,9 @@ export class BatCaveWorld {
 
   // Cave reaction system — event-driven environmental effects.
   private caveReactions = new CaveReactionSystem();
+
+  // Progression system — XP, levels, cave upgrades, streak.
+  private progression = new ProgressionSystem();
 
   // Agent behavior system (zone movement, quips, interactions).
   private behaviorSystem!: AgentBehaviorSystem;
@@ -740,6 +744,8 @@ export class BatCaveWorld {
           this.consecutiveBashCount,
         );
 
+        // XP for tool call.
+        this.progression.awardXp(this.currentTool || "Read");
         // Analytics: heatmap + breakdown + pace + evolution.
         this.recordToolForAnalytics(this.currentTool || "?");
         this.attributeToolToAgents(this.currentTool || "?", filePath || null);
@@ -790,6 +796,8 @@ export class BatCaveWorld {
         this.fourthWall.onGitCommit();
         // Cave reacts: green wall flash.
         this.caveReactions.triggerCommitFlash();
+        // XP for commit.
+        this.progression.awardXp("commit");
         // Bishop judges short commit messages.
         if (msg.length < 10) {
           this.behaviorSystem.reactToShortCommitMessage(this.agents);
@@ -835,6 +843,8 @@ export class BatCaveWorld {
         this.fourthWall.onGitPush();
         // Cave reacts: blue wall flash.
         this.caveReactions.triggerPushFlash();
+        // XP for push.
+        this.progression.awardXp("push");
         // Deploy sparks weather effect.
         this.ambient.setWeather("sparks");
         break;
@@ -909,6 +919,8 @@ export class BatCaveWorld {
     this.fourthWall.tickQuipTimer(deltaMs);
     // Cave reactions — event-driven environmental effects.
     this.caveReactions.update(deltaMs);
+    // Progression system — XP and level-up popup.
+    this.progression.update(deltaMs);
     // Idle wandering for Alfred and Giovanni.
     this.maybeWander(this.alfred, deltaMs);
     this.maybeGiovanniBatcomputer(deltaMs);
@@ -974,6 +986,11 @@ export class BatCaveWorld {
   /** Cave reaction state for rendering layers. */
   getCaveReactions(): import("../systems/CaveReactionSystem").CaveReactionState {
     return this.caveReactions.getState();
+  }
+
+  /** Progression system — for HUD rendering. */
+  getProgression(): ProgressionSystem {
+    return this.progression;
   }
 
   private trackAgentHistory(
