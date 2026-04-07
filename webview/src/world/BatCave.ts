@@ -432,7 +432,8 @@ export class BatCaveWorld {
     this._zt = T * this._zoom;
 
     // Single source of truth for all furniture positions.
-    const L = getLayout(w, h, this._zoom, this._zt, wallH);
+    const upgrades = new Set(this.progression.getUnlockedUpgrades());
+    const L = getLayout(w, h, this._zoom, this._zt, wallH, upgrades);
     this._layout = L;
 
     // Build obstacle rects from centralized layout.
@@ -1250,7 +1251,7 @@ export class BatCaveWorld {
       for (let i = 0; i < ACHIEVEMENTS.length; i++) {
         const col = i % tc.cols;
         const row = Math.floor(i / tc.cols);
-        const sx = tc.caseX + zoom + col * tc.slotSize;
+        const sx = tc.caseX + tc.pad + col * tc.slotSize;
         const sy = tc.caseY + zoom * 3 + row * tc.slotSize;
         if (
           cx >= sx &&

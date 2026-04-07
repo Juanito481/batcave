@@ -621,6 +621,41 @@ export function drawCaveEnvironment(rc: RenderContext): void {
     ctx.restore();
   }
 
+  // ── Easter egg: floor eye crack ──
+  const easterEggs = rc.world.getEasterEggs();
+  if (easterEggs.floorEyeActive) {
+    const eyeX = Math.floor(easterEggs.floorEyeX);
+    const eyeY = Math.floor(easterEggs.floorEyeY);
+    const ez = Math.max(1, zoom);
+    const fadeRatio = easterEggs.floorEyeTimer / 2000;
+
+    ctx.save();
+    ctx.globalAlpha = fadeRatio;
+
+    // Crack lines (3 diagonal dark lines radiating from center).
+    ctx.fillStyle = "#040408";
+    ctx.fillRect(eyeX - ez * 4, eyeY - ez, ez * 3, ez);
+    ctx.fillRect(eyeX + ez * 2, eyeY, ez * 3, ez);
+    ctx.fillRect(eyeX - ez, eyeY + ez * 2, ez, ez * 2);
+    ctx.fillRect(eyeX, eyeY - ez * 3, ez, ez * 2);
+
+    // Eye socket (dark oval).
+    ctx.fillStyle = "#020204";
+    ctx.fillRect(eyeX - ez * 2, eyeY - ez, ez * 4, ez * 3);
+
+    // Eyeball (white).
+    ctx.fillStyle = "#c0c0c0";
+    ctx.fillRect(eyeX - ez, eyeY, ez * 3, ez);
+    ctx.fillRect(eyeX - ez * 2, eyeY, ez, ez);
+    ctx.fillRect(eyeX + ez * 2, eyeY, ez, ez);
+
+    // Pupil (red, looking up).
+    ctx.fillStyle = "#8a1a1a";
+    ctx.fillRect(eyeX, eyeY, ez, ez);
+
+    ctx.restore();
+  }
+
   // ── Bat Signal (context 100%) ──
   if (rc.world.isBatSignalActive()) {
     drawBatSignal(ctx, width, wallH, zoom);

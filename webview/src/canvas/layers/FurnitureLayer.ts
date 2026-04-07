@@ -12,6 +12,8 @@ import {
   TIER_COLORS,
   ICON_PIXELS,
 } from "../../data/gamification";
+import { bus } from "../../systems/EventBus";
+import type { CaveLayout } from "../layout";
 
 // ── Batcomputer ────────────────────────────────────────
 
@@ -308,6 +310,34 @@ function drawServerRack(
   ctx.fillStyle = "#060a10";
   for (let v = 0; v < 3; v++) {
     ctx.fillRect(x + zoom * 2, y + zoom * 3 + v * zoom * 3, zoom * 2, zoom);
+  }
+
+  // Animated cooling fans (2 fans, alternating frames).
+  // Speed is constant — fans always spin, future expansion could vary by agent count.
+  const fanSpeed = 200; // ms per frame
+  const fanFrame = Math.floor(now / fanSpeed) % 2;
+  const fanY = y + Math.floor(h * 0.7);
+  const fanSize = zoom * 3;
+
+  for (let fi = 0; fi < 2; fi++) {
+    const fx = x + zoom * 3 + fi * zoom * 6;
+    // Fan housing.
+    ctx.fillStyle = "#0c0c18";
+    ctx.fillRect(fx, fanY, fanSize, fanSize);
+    // Fan blades (2 frames: + shape and x shape).
+    ctx.fillStyle = "#1a1a30";
+    if (fanFrame === 0) {
+      // + shape.
+      ctx.fillRect(fx + zoom, fanY, zoom, fanSize);
+      ctx.fillRect(fx, fanY + zoom, fanSize, zoom);
+    } else {
+      // x shape.
+      ctx.fillRect(fx, fanY, zoom, zoom);
+      ctx.fillRect(fx + zoom * 2, fanY, zoom, zoom);
+      ctx.fillRect(fx + zoom, fanY + zoom, zoom, zoom);
+      ctx.fillRect(fx, fanY + zoom * 2, zoom, zoom);
+      ctx.fillRect(fx + zoom * 2, fanY + zoom * 2, zoom, zoom);
+    }
   }
 
   // Ground shadow.
@@ -675,15 +705,13 @@ function drawFloorObjects(
 
 function drawWeaponRack(
   ctx: CanvasRenderingContext2D,
-  zt: number,
   zoom: number,
-  wallH: number,
+  L: CaveLayout,
 ): void {
-  // Lowered for visibility, bigger footprint.
-  const rackX = Math.floor(zt * 0.5);
-  const rackY = Math.floor(wallH * 0.45);
-  const rackW = Math.floor(zt * 2.2);
-  const rackH = Math.floor(zt * 1.5);
+  const rackX = L.arsenalRack.x;
+  const rackY = L.arsenalRack.y;
+  const rackW = L.arsenalRack.w;
+  const rackH = L.arsenalRack.h;
 
   // Back board.
   ctx.fillStyle = "#141220";
@@ -929,15 +957,15 @@ function drawLocker(
 
 function drawWhiteboard(
   ctx: CanvasRenderingContext2D,
-  zt: number,
   zoom: number,
-  wallH: number,
   world: RenderContext["world"],
+  L: CaveLayout,
 ): void {
-  const bx = Math.floor(zt * 5.5);
-  const by = Math.floor(wallH * 0.2);
-  const bw = Math.floor(zt * 2);
-  const bh = Math.floor(zt * 1.2);
+  const bx = L.whiteboardX;
+  const by = L.whiteboardY;
+  const bw = L.whiteboardW;
+  // Board surface height excludes marker tray (zoom*2).
+  const bh = bw > 0 ? L.whiteboardH - zoom * 2 : 0;
   const font = `"DM Mono", monospace`;
   const smallFont = Math.max(8, zoom * 2);
 
@@ -1210,8 +1238,36 @@ export function drawAllFurniture(rc: RenderContext): void {
   const bcTilesW = L.bcTilesW;
 
   drawCables(ctx, bcX, bcY, zt, zoom, bcTilesW);
-  drawServerRack(ctx, bcX - zt * 3, bcY - zt, zt, zoom, now);
-  drawWorkbench(ctx, bcX - zt * 6, bcY, zt, zoom, now);
+  drawServerRack(ctx, L.serverX, L.serverY, zt, zoom, now);
+
+  // Server rack glow overlay (active during Bash commands).
+  const reactions = world.getCaveReactions();
+  if (reactions.serverGlow) {
+    const rackX = L.serverX;
+    const rackY = L.serverY;
+    ctx.fillStyle = "#1a3a1a";
+    ctx.fillRect(
+      rackX + zoom,
+      rackY + zoom,
+      zt * 2 - zoom * 2,
+      zt * 3 - zoom * 2,
+    );
+  }
+
+  drawWorkbench(ctx, L.workbenchX, bcY, zt, zoom, now);
+
+  // Workbench sparks when Bishop/Cardinal are active.
+  if (reactions.workbenchSpark) {
+    const sparkTimer = Math.floor(now / 400) % 3;
+    if (sparkTimer === 0) {
+      bus.emit("particle:spawn", {
+        preset: "tool-spark",
+        x: L.workbenchX + L.workbenchW / 2,
+        y: L.workbenchY + zoom * 2,
+      });
+    }
+  }
+
   drawDisplayPanel(ctx, bcX + bcW + zt, bcY - zt, zt, zoom, now, world);
   drawBatcomputer(ctx, bcX, bcY, zt, zoom, bcTilesW, now, world);
 
@@ -1226,16 +1282,16 @@ export function drawAllFurniture(rc: RenderContext): void {
   drawFloorScatter(ctx, zt, zoom, width, height);
 
   // Cave evolution decorations.
-  drawEvolutionDecorations(ctx, zoom, zt, wallH, width, height, now, world);
+  drawEvolutionDecorations(ctx, zoom, zt, width, height, now, world, L);
 
-  // Achievement trophy case (left wall).
-  drawTrophyCase(ctx, zoom, zt, wallH, width, now, world);
+  // Achievement trophy case (left wall, 5 columns).
+  drawTrophyCase(ctx, zoom, now, world, L);
 
-  // Whiteboard (wall-mounted, left-center).
-  drawWhiteboard(ctx, zt, zoom, wallH, world);
+  // Whiteboard (wall-mounted, center-left).
+  drawWhiteboard(ctx, zoom, world, L);
 
-  // Arsenal rack (weapon + tools merged, left wall).
-  drawWeaponRack(ctx, zt, zoom, wallH);
+  // Arsenal rack (weapon + tools, right wall).
+  drawWeaponRack(ctx, zoom, L);
 
   // Map table (left side floor, in front of workbench).
   drawMapTable(ctx, zt, zoom, wallH);
@@ -1253,11 +1309,11 @@ function drawEvolutionDecorations(
   ctx: CanvasRenderingContext2D,
   zoom: number,
   zt: number,
-  wallH: number,
   width: number,
   height: number,
   now: number,
   world: RenderContext["world"],
+  L: CaveLayout,
 ): void {
   const level = world.getCaveLevel();
   if (level < 2) return;
@@ -1267,8 +1323,8 @@ function drawEvolutionDecorations(
 
   // Level 2+: Trophy on shelf (left wall).
   if (level >= 2) {
-    const tx = zt * 2;
-    const ty = wallH - zoom * 2;
+    const tx = L.trophyShelf.x;
+    const ty = L.trophyShelf.y;
     // Shelf.
     ctx.fillStyle = "#1c1c2e";
     ctx.fillRect(tx, ty, zoom * 8, zoom * 2);
@@ -1284,10 +1340,10 @@ function drawEvolutionDecorations(
     ctx.fillRect(tx + zoom * 2, ty - zoom, zoom * 4, zoom);
   }
 
-  // Level 3+: Achievement plaques on wall (left side, below trophy shelf).
+  // Level 3+: Achievement plaques on wall (right of trophy case).
   if (level >= 3) {
-    const px = zt * 2;
-    const py = Math.floor(wallH * 0.6);
+    const px = L.levelPlaques.x;
+    const py = L.levelPlaques.y;
     // Plaque 1.
     ctx.fillStyle = "#2a2a3e";
     ctx.fillRect(px, py, zoom * 6, zoom * 4);
@@ -1305,10 +1361,10 @@ function drawEvolutionDecorations(
     ctx.fillText("100", px + zoom * 3, py + zoom * 3);
   }
 
-  // Level 4+: Banner/flag on wall.
+  // Level 4+: Banner/flag on wall (center).
   if (level >= 4) {
-    const bx = Math.floor(width * 0.15);
-    const by = Math.floor(wallH * 0.3);
+    const bx = L.levelFlag.x;
+    const by = L.levelFlag.y;
     // Pole.
     ctx.fillStyle = "#3a3a4e";
     ctx.fillRect(bx, by, zoom, zoom * 8);
@@ -1328,17 +1384,10 @@ function drawEvolutionDecorations(
 
   // Level 5+: Gold accent lines on Batcomputer edges (subtle, not bars).
   if (level >= 5) {
-    const bcTilesW = Math.min(5, Math.ceil(width / zt) - 1);
-    const bcW = zt * bcTilesW;
-    const bcX = Math.floor((width - bcW) / 2);
-    const bcY = wallH + zt;
-    const bcH = Math.floor(zt * 1.5);
     const brd = Math.max(1, Math.floor(zoom / 2));
     ctx.fillStyle = "#FFD700";
-    // Thin accent at top edge.
-    ctx.fillRect(bcX, bcY - brd, bcW, brd);
-    // Thin accent at bottom edge.
-    ctx.fillRect(bcX, bcY + bcH, bcW, brd);
+    ctx.fillRect(L.bcX, L.bcY - brd, L.bcW, brd);
+    ctx.fillRect(L.bcX, L.bcY + L.bcH, L.bcW, brd);
   }
 
   // Level 6: Legendary — pulsing ambient glow.
@@ -1349,6 +1398,109 @@ function drawEvolutionDecorations(
     ctx.globalAlpha = pulse * 0.03;
     ctx.fillRect(0, 0, width, height);
     ctx.restore();
+  }
+
+  // ── ProgressionSystem upgrades (permanent, XP-based) ──
+  const prog = world.getProgression();
+
+  // Lv3: Repo banner on wall (below trophy case).
+  if (prog.hasUpgrade("repo-banner")) {
+    const theme = world.getRepoTheme();
+    const bannerX = L.repoBanner.x;
+    const bannerY = L.repoBanner.y;
+    const bannerW = L.repoBanner.w;
+    const bannerH = L.repoBanner.h;
+    // Banner fabric.
+    ctx.fillStyle = theme.accentDark || "#122840";
+    ctx.fillRect(bannerX, bannerY, bannerW, bannerH);
+    // Accent stripe at top.
+    ctx.fillStyle = theme.accent;
+    ctx.fillRect(bannerX, bannerY, bannerW, zoom);
+    // Repo label.
+    ctx.fillStyle = theme.accent;
+    ctx.font = `bold ${Math.max(8, zoom * 2.5)}px "DM Mono", monospace`;
+    ctx.textAlign = "center";
+    ctx.fillText(
+      theme.label || "---",
+      bannerX + bannerW / 2,
+      bannerY + bannerH / 2 + zoom,
+    );
+    ctx.textAlign = "left";
+    // Mounting rod.
+    ctx.fillStyle = "#2a2a3e";
+    ctx.fillRect(bannerX - zoom, bannerY - zoom, bannerW + zoom * 2, zoom);
+  }
+
+  // Lv8: Bat-cat sleeping on server rack.
+  if (prog.hasUpgrade("bat-cat")) {
+    const rackTopX = L.serverX + Math.floor(L.serverW * 0.2);
+    const rackTopY = L.serverY + zoom;
+    const catS = Math.max(1, zoom);
+    // Body (5x2).
+    ctx.fillStyle = "#2a2030";
+    ctx.fillRect(rackTopX, rackTopY - catS * 3, catS * 5, catS * 2);
+    // Head (2x2).
+    ctx.fillStyle = "#322838";
+    ctx.fillRect(rackTopX - catS, rackTopY - catS * 4, catS * 2, catS * 2);
+    // Ears.
+    ctx.fillStyle = "#3a2e40";
+    ctx.fillRect(rackTopX - catS, rackTopY - catS * 5, catS, catS);
+    ctx.fillRect(rackTopX, rackTopY - catS * 5, catS, catS);
+    // Tail (curves right).
+    ctx.fillStyle = "#2a2030";
+    ctx.fillRect(rackTopX + catS * 5, rackTopY - catS * 2, catS * 2, catS);
+    ctx.fillRect(rackTopX + catS * 6, rackTopY - catS * 3, catS, catS);
+    // Tail wag (animated — two positions alternating every 800ms).
+    const wagFrame = Math.floor(now / 800) % 2;
+    if (wagFrame === 1) {
+      ctx.fillRect(rackTopX + catS * 7, rackTopY - catS * 3, catS, catS);
+    } else {
+      ctx.fillRect(rackTopX + catS * 7, rackTopY - catS * 2, catS, catS);
+    }
+    // Closed eyes (sleeping — just two dark dots).
+    ctx.fillStyle = "#1a1020";
+    ctx.fillRect(
+      rackTopX - catS + Math.floor(catS * 0.3),
+      rackTopY - catS * 3,
+      catS,
+      catS,
+    );
+  }
+
+  // Lv12: Luminous crystals embedded in cave wall.
+  if (prog.hasUpgrade("wall-crystals")) {
+    const wH = L.wallH;
+    const crystalPositions = [
+      { x: width * 0.2, y: wH * 0.6, color: "#2a6a8a" },
+      { x: width * 0.65, y: wH * 0.35, color: "#6a2a8a" },
+      { x: width * 0.85, y: wH * 0.5, color: "#8a2a5a" },
+      { x: width * 0.4, y: wH * 0.7, color: "#2a8a6a" },
+    ];
+    const crystalPulse = Math.sin(now / 1000) * 0.4 + 0.6;
+    for (const cp of crystalPositions) {
+      const cx = Math.floor(cp.x);
+      const cy = Math.floor(cp.y);
+      const cs = Math.max(1, zoom);
+      // Crystal shape: triangle pointing up (3 rects stacked).
+      ctx.fillStyle = cp.color;
+      ctx.fillRect(cx, cy - cs * 3, cs, cs);
+      ctx.fillRect(cx - cs, cy - cs * 2, cs * 3, cs);
+      ctx.fillRect(cx - cs, cy - cs, cs * 3, cs * 2);
+      // Glow halo (pulsing).
+      if (crystalPulse > 0.7) {
+        ctx.fillStyle = cp.color;
+        ctx.fillRect(cx - cs * 2, cy - cs, cs, cs);
+        ctx.fillRect(cx + cs * 2, cy - cs, cs, cs);
+      }
+    }
+  }
+
+  // Lv35: Gold trim on all furniture.
+  if (prog.hasUpgrade("gold-trim")) {
+    ctx.fillStyle = "#FFD700";
+    ctx.fillRect(L.bcX, L.bcY, L.bcW, zoom);
+    ctx.fillRect(L.serverX, L.serverY, L.serverW, zoom);
+    ctx.fillRect(L.workbenchX, L.workbenchY, L.workbenchW, zoom);
   }
 
   // Cave level label (bottom-left).
@@ -1368,36 +1520,18 @@ function drawEvolutionDecorations(
 
 // TIER_COLORS and ICON_PIXELS imported from gamification.ts
 
-/** Trophy case layout constants — shared with BatCave.handleClick(). */
-export function getTrophyCaseLayout(zoom: number, zt: number, wallH: number) {
-  const slotSize = zoom * 4;
-  const cols = 3;
-  const rows = Math.ceil(ACHIEVEMENTS.length / cols);
-  const pad = zoom;
-  const caseW = cols * slotSize + pad * 2;
-  const caseH = rows * slotSize + zoom * 4;
-  const caseX = Math.floor(zt * 1.5);
-  const caseY = Math.floor(wallH * 0.18);
-  return { slotSize, cols, rows, pad, caseW, caseH, caseX, caseY };
-}
-
 function drawTrophyCase(
   ctx: CanvasRenderingContext2D,
   zoom: number,
-  zt: number,
-  wallH: number,
-  _width: number,
   now: number,
   world: RenderContext["world"],
+  L: CaveLayout,
 ): void {
-  // Always render the case frame so the wall decoration is visible even with no achievements.
   const unlocked = world.getUnlockedAchievements();
+  const { slotSize, cols, caseW, caseH, caseX, caseY } = L.trophyCase;
 
-  const { slotSize, cols, caseW, caseH, caseX, caseY } = getTrophyCaseLayout(
-    zoom,
-    zt,
-    wallH,
-  );
+  // XL upgrade: golden frame accent.
+  const isXl = world.getProgression().hasUpgrade("trophy-case-xl");
 
   // Glass case background.
   ctx.save();
@@ -1406,25 +1540,28 @@ function drawTrophyCase(
   ctx.fillRect(caseX, caseY, caseW, caseH);
   ctx.restore();
 
-  // Case border.
+  // Case border (golden if XL).
   const brd = Math.max(1, Math.floor(zoom / 2));
-  ctx.fillStyle = "#2a2a3e";
+  ctx.fillStyle = isXl ? "#FFD700" : "#2a2a3e";
   ctx.fillRect(caseX, caseY, caseW, brd);
   ctx.fillRect(caseX, caseY + caseH - brd, caseW, brd);
   ctx.fillRect(caseX, caseY, brd, caseH);
   ctx.fillRect(caseX + caseW - brd, caseY, brd, caseH);
 
   // "TROPHIES" label.
-  ctx.fillStyle = "#555568";
+  ctx.fillStyle = isXl ? "#FFD700" : "#555568";
   ctx.font = `${Math.max(5, zoom * 2)}px "DM Mono", monospace`;
   ctx.textAlign = "center";
   ctx.fillText("TROPHIES", caseX + caseW / 2, caseY + zoom * 2.2);
 
+  // Header padding before slots: zoom*3 (unchanged from v3).
+  const headerPad = zoom * 3;
+
   for (let i = 0; i < ACHIEVEMENTS.length; i++) {
     const col = i % cols;
     const row = Math.floor(i / cols);
-    const sx = caseX + zoom + col * slotSize;
-    const sy = caseY + zoom * 3 + row * slotSize;
+    const sx = caseX + L.trophyCase.pad + col * slotSize;
+    const sy = caseY + headerPad + row * slotSize;
     const a = ACHIEVEMENTS[i];
     const isUnlocked = unlocked.some((u) => u.id === a.id);
 
@@ -1439,6 +1576,20 @@ function drawTrophyCase(
       ctx.globalAlpha = 0.15 + Math.sin(now / 800 + i) * 0.05;
       ctx.fillRect(sx, sy, slotSize - zoom, slotSize - zoom);
       ctx.restore();
+
+      // Legendary tier: pulsing red glow halo.
+      if (a.tier === "legendary") {
+        const glowPulse = Math.sin(now / 600 + i * 2) * 0.5 + 0.5;
+        if (glowPulse > 0.6) {
+          ctx.fillStyle = "#4a1a1a";
+          ctx.fillRect(
+            sx - zoom,
+            sy - zoom,
+            slotSize + zoom * 2,
+            slotSize + zoom * 2,
+          );
+        }
+      }
 
       // Icon pixels — centered in slot.
       const iconSize = px * 4;

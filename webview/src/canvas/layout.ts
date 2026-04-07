@@ -35,7 +35,7 @@ export interface CaveLayout {
   serverW: number;
   serverH: number;
 
-  // Workbench (far left).
+  // Workbench (far left, clamped to stay on-screen).
   workbenchX: number;
   workbenchY: number;
   workbenchW: number;
@@ -53,7 +53,7 @@ export interface CaveLayout {
   chairW: number;
   chairH: number;
 
-  // Trophy case (left wall).
+  // Trophy case (left wall, 5 columns).
   trophyCase: {
     slotSize: number;
     cols: number;
@@ -65,11 +65,20 @@ export interface CaveLayout {
     caseY: number;
   };
 
-  // Whiteboard (wall-mounted).
+  // Whiteboard (wall-mounted, center-left).
   whiteboardX: number;
   whiteboardY: number;
   whiteboardW: number;
   whiteboardH: number;
+
+  // Arsenal/weapon rack (right wall).
+  arsenalRack: { x: number; y: number; w: number; h: number };
+
+  // Evolution decoration anchors (wall-mounted).
+  trophyShelf: { x: number; y: number };
+  levelPlaques: { x: number; y: number };
+  levelFlag: { x: number; y: number };
+  repoBanner: { x: number; y: number; w: number; h: number };
 }
 
 /**
@@ -92,6 +101,7 @@ export function getLayout(
   zoom: number,
   zt: number,
   wallH: number,
+  upgrades: ReadonlySet<string> = new Set(),
 ): CaveLayout {
   const cols = Math.ceil(width / zt) + 1;
 
@@ -114,8 +124,8 @@ export function getLayout(
   const serverW = zt * 2;
   const serverH = zt * 3;
 
-  // Workbench — far left.
-  const workbenchX = bcX - zt * 6;
+  // Workbench — far left, clamped to stay on-screen.
+  const workbenchX = Math.max(Math.floor(zt * 0.5), bcX - zt * 6);
   const workbenchY = bcY;
   const workbenchW = zt * 3;
   const workbenchH = Math.floor(zt * 1.5) + zoom * 3;
@@ -132,21 +142,51 @@ export function getLayout(
   const chairX = Math.floor(bcX + bcW / 2 - zoom * 3);
   const chairY = bcH + bcY + zoom;
 
-  // Trophy case — left wall.
-  const tcSlotSize = zoom * 4;
-  const tcCols = 3;
+  // Trophy case — left wall, 5 columns. Slot size adapts to wallH and XL upgrade.
+  const tcCols = 5;
   const tcRows = Math.ceil(ACHIEVEMENTS.length / tcCols);
-  const tcPad = zoom;
+  const tcSlotSize = upgrades.has("trophy-case-xl")
+    ? zoom * 8
+    : Math.max(zoom * 4, Math.min(zoom * 6, Math.floor((wallH * 0.8) / tcRows)));
+  const tcPad = zoom * 2;
   const tcCaseW = tcCols * tcSlotSize + tcPad * 2;
-  const tcCaseH = tcRows * tcSlotSize + zoom * 4;
-  const tcCaseX = Math.floor(zt * 1.5);
-  const tcCaseY = Math.floor(wallH * 0.18);
+  const tcCaseH = tcRows * tcSlotSize + zoom * 5;
+  const tcCaseX = Math.floor(zt * 1);
+  const tcCaseY = Math.max(zoom * 2, Math.floor((wallH - tcCaseH) * 0.3));
 
-  // Whiteboard — wall-mounted.
-  const whiteboardX = Math.floor(zt * 5.5);
-  const whiteboardY = Math.floor(wallH * 0.2);
-  const whiteboardW = Math.floor(zt * 2);
-  const whiteboardH = Math.floor(zt * 1.2) + zoom * 2;
+  // Whiteboard — wall-mounted, center-left, 50% larger than v3.
+  const whiteboardW = Math.floor(zt * 3);
+  const whiteboardH = Math.floor(zt * 1.8);
+  const whiteboardX = Math.floor(width * 0.28);
+  const whiteboardY = Math.floor(wallH * 0.1);
+
+  // Arsenal/weapon rack — right wall (moved from left to avoid trophy case overlap).
+  const arsenalRack = {
+    x: width - Math.floor(zt * 4.5),
+    y: Math.floor(wallH * 0.3),
+    w: Math.floor(zt * 2.2),
+    h: Math.floor(zt * 1.5),
+  };
+
+  // Evolution decoration anchors.
+  const trophyShelf = {
+    x: Math.floor(zt * 2),
+    y: wallH - zoom * 2,
+  };
+  const levelPlaques = {
+    x: tcCaseX + tcCaseW + Math.floor(zt * 0.5),
+    y: Math.floor(wallH * 0.6),
+  };
+  const levelFlag = {
+    x: Math.floor(width * 0.38),
+    y: Math.floor(wallH * 0.15),
+  };
+  const repoBanner = {
+    x: tcCaseX,
+    y: tcCaseY + tcCaseH + zoom * 2,
+    w: Math.floor(zt * 1.8),
+    h: Math.floor(zt * 0.6),
+  };
 
   return {
     width,
@@ -191,5 +231,10 @@ export function getLayout(
     whiteboardY,
     whiteboardW,
     whiteboardH,
+    arsenalRack,
+    trophyShelf,
+    levelPlaques,
+    levelFlag,
+    repoBanner,
   };
 }

@@ -59,7 +59,8 @@ export class Renderer {
     const zt = T * zoom;
     const wallRows = height > zt * 10 ? 3 : 2;
     const wallH = wallRows * zt;
-    this.layout = getLayout(width, height, zoom, zt, wallH);
+    const upgrades = new Set(this.world.getProgression().getUnlockedUpgrades());
+    this.layout = getLayout(width, height, zoom, zt, wallH, upgrades);
     this.world.setDimensions(width, height, wallH);
   }
 
@@ -116,7 +117,8 @@ export class Renderer {
     const wallRows = this.height > zt * 10 ? 3 : 2;
     // Recompute layout if not yet initialized (shouldn't happen, but safe fallback).
     if (!this.layout) {
-      this.layout = getLayout(this.width, this.height, zoom, zt, wallRows * zt);
+      const upgrades = new Set(this.world.getProgression().getUnlockedUpgrades());
+      this.layout = getLayout(this.width, this.height, zoom, zt, wallRows * zt, upgrades);
     }
 
     const rc: RenderContext = {

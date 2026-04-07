@@ -268,7 +268,8 @@ export class AgentBehaviorSystem {
       case "server":
         return { x: bcX - zt * 3 + jitterX, y: floorY - zoom * 2 + jitterY };
       case "workbench":
-        return { x: bcX - zt * 6 + jitterX, y: floorY + jitterY };
+        // Clamp to stay on-screen (matches layout.ts workbench clamp).
+        return { x: Math.max(zt * 2, bcX - zt * 6) + jitterX, y: floorY + jitterY };
       case "display":
         return {
           x: bcX + bcW + zt * 2 + jitterX,
