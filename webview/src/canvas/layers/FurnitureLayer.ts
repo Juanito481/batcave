@@ -1,13 +1,29 @@
 import { darken, lighten } from "../../helpers/color";
-import { RenderContext, P, seed, outlineRect, contactShadow, castShadow } from "./render-context";
-import { ACHIEVEMENTS, TIER_COLORS, ICON_PIXELS } from "../../data/gamification";
+import {
+  RenderContext,
+  P,
+  seed,
+  outlineRect,
+  contactShadow,
+  castShadow,
+} from "./render-context";
+import {
+  ACHIEVEMENTS,
+  TIER_COLORS,
+  ICON_PIXELS,
+} from "../../data/gamification";
 
 // ── Batcomputer ────────────────────────────────────────
 
 function drawBatcomputer(
   ctx: CanvasRenderingContext2D,
-  x: number, y: number, zt: number, zoom: number, tilesW: number,
-  now: number, world: RenderContext["world"],
+  x: number,
+  y: number,
+  zt: number,
+  zoom: number,
+  tilesW: number,
+  now: number,
+  world: RenderContext["world"],
 ): void {
   const state = world.getAlfredState();
   const totalW = zt * tilesW;
@@ -28,13 +44,15 @@ function drawBatcomputer(
   const sw = Math.floor(screenAreaW / 3);
   const sh = totalH - gap * 2;
 
-  const screenColors = state === "thinking"
-    ? [P.ACCENT, P.ACCENT, "#1a3a5a"]
-    : state === "writing"
-    ? ["#1a3a1a", "#2ECC71", "#1a3a1a"]
-    : ["#1e2438", "#222840", "#1e2438"];
+  const screenColors =
+    state === "thinking"
+      ? [P.ACCENT, P.ACCENT, "#1a3a5a"]
+      : state === "writing"
+        ? ["#1a3a1a", "#2ECC71", "#1a3a1a"]
+        : ["#1e2438", "#222840", "#1e2438"];
 
-  const tremor = state === "writing" ? Math.floor(Math.sin(now / 80) * zoom * 0.5) : 0;
+  const tremor =
+    state === "writing" ? Math.floor(Math.sin(now / 80) * zoom * 0.5) : 0;
   const font = `"DM Mono", monospace`;
   const smallFont = Math.max(8, zoom * 2.5);
   const labelFont = Math.max(10, zoom * 3);
@@ -53,7 +71,12 @@ function drawBatcomputer(
     const glowBase = screenColors[i];
     const glow = phase > 0 ? lighten(glowBase, phase * 0.15) : glowBase;
     ctx.fillStyle = glow;
-    ctx.fillRect(sx + zoom + tremor, y + gap + zoom, sw - zoom * 2, sh - zoom * 2);
+    ctx.fillRect(
+      sx + zoom + tremor,
+      y + gap + zoom,
+      sw - zoom * 2,
+      sh - zoom * 2,
+    );
     // Scanlines.
     ctx.fillStyle = "#040408";
     for (let sl = 0; sl < sh; sl += zoom * 2) {
@@ -74,20 +97,35 @@ function drawBatcomputer(
 
   if (files.length > 0) {
     const lineH = Math.max(zoom * 3, smallFont + zoom);
-    const maxLines = Math.min(files.length, Math.floor((sh - zoom * 5) / lineH));
+    const maxLines = Math.min(
+      files.length,
+      Math.floor((sh - zoom * 5) / lineH),
+    );
     const visible = files.slice(-maxLines);
     for (let f = 0; f < visible.length; f++) {
       const file = visible[f];
       const fy = screenY + zoom * 5 + f * lineH;
       // Color by tool type.
-      const toolCat = ["Edit", "Write", "NotebookEdit"].includes(file.tool) ? "write"
-        : ["Read", "Grep", "Glob"].includes(file.tool) ? "read" : "other";
-      ctx.fillStyle = toolCat === "write" ? "#2ECC71" : toolCat === "read" ? "#5a8ab8" : "#888899";
+      const toolCat = ["Edit", "Write", "NotebookEdit"].includes(file.tool)
+        ? "write"
+        : ["Read", "Grep", "Glob"].includes(file.tool)
+          ? "read"
+          : "other";
+      ctx.fillStyle =
+        toolCat === "write"
+          ? "#2ECC71"
+          : toolCat === "read"
+            ? "#5a8ab8"
+            : "#888899";
       // Truncate filename.
-      const maxChars = Math.max(6, Math.floor((sw - zoom * 4) / (smallFont * 0.6)));
-      const display = file.name.length > maxChars
-        ? file.name.slice(0, maxChars - 1) + "\u2026"
-        : file.name;
+      const maxChars = Math.max(
+        6,
+        Math.floor((sw - zoom * 4) / (smallFont * 0.6)),
+      );
+      const display =
+        file.name.length > maxChars
+          ? file.name.slice(0, maxChars - 1) + "\u2026"
+          : file.name;
       ctx.fillText(display, leftX + zoom * 2, fy);
     }
   } else {
@@ -102,27 +140,49 @@ function drawBatcomputer(
   // State label (big).
   ctx.font = `bold ${labelFont}px ${font}`;
   ctx.textAlign = "center";
-  ctx.fillStyle = state === "thinking" ? "#3399EE"
-    : state === "writing" ? "#33DD88" : "#778899";
-  ctx.fillText(activeData.state, centerX + sw / 2 + tremor, screenY + Math.floor(sh * 0.35));
+  ctx.fillStyle =
+    state === "thinking"
+      ? "#3399EE"
+      : state === "writing"
+        ? "#33DD88"
+        : "#778899";
+  ctx.fillText(
+    activeData.state,
+    centerX + sw / 2 + tremor,
+    screenY + Math.floor(sh * 0.35),
+  );
 
   // Current tool name.
   ctx.font = `${smallFont}px ${font}`;
   ctx.fillStyle = "#888899";
-  const toolDisplay = activeData.tool.length > 10
-    ? activeData.tool.slice(0, 9) + "\u2026"
-    : activeData.tool;
-  ctx.fillText(toolDisplay, centerX + sw / 2 + tremor, screenY + Math.floor(sh * 0.55));
+  const toolDisplay =
+    activeData.tool.length > 10
+      ? activeData.tool.slice(0, 9) + "\u2026"
+      : activeData.tool;
+  ctx.fillText(
+    toolDisplay,
+    centerX + sw / 2 + tremor,
+    screenY + Math.floor(sh * 0.55),
+  );
 
   // Divider line.
   ctx.fillStyle = "#1a1a30";
-  ctx.fillRect(centerX + zoom * 2, screenY + Math.floor(sh * 0.62), sw - zoom * 4, Math.max(1, Math.floor(zoom / 2)));
+  ctx.fillRect(
+    centerX + zoom * 2,
+    screenY + Math.floor(sh * 0.62),
+    sw - zoom * 4,
+    Math.max(1, Math.floor(zoom / 2)),
+  );
 
   // Active agents count.
   const agentCount = world.getActiveAgentNames().length;
   if (agentCount > 0) {
     ctx.fillStyle = "#2ECC71";
-    ctx.fillText(`${agentCount} agent${agentCount > 1 ? "s" : ""}`, centerX + sw / 2, screenY + Math.floor(sh * 0.78));
+    ctx.fillText(
+      `${agentCount} agent${agentCount > 1 ? "s" : ""}`,
+      centerX + sw / 2,
+      screenY + Math.floor(sh * 0.78),
+    );
   }
 
   // ── Right screen: agents ──
@@ -166,7 +226,10 @@ function drawBatcomputer(
 
 function drawServerRack(
   ctx: CanvasRenderingContext2D,
-  x: number, y: number, zt: number, zoom: number,
+  x: number,
+  y: number,
+  zt: number,
+  zoom: number,
   now: number,
 ): void {
   const w = zt * 2;
@@ -211,7 +274,8 @@ function drawServerRack(
     ctx.fillRect(x + zoom * 2, ledY, zoom, zoom);
     // Second LED.
     const phase2 = Math.sin(now / 600 + i * 2.3);
-    ctx.fillStyle = phase2 > 0 ? ledColors[(i + 2) % ledColors.length] : "#0a0a12";
+    ctx.fillStyle =
+      phase2 > 0 ? ledColors[(i + 2) % ledColors.length] : "#0a0a12";
     ctx.fillRect(x + zoom * 4, ledY, zoom, zoom);
   }
 
@@ -230,7 +294,10 @@ function drawServerRack(
 
 function drawWorkbench(
   ctx: CanvasRenderingContext2D,
-  x: number, y: number, zt: number, zoom: number,
+  x: number,
+  y: number,
+  zt: number,
+  zoom: number,
   now: number,
 ): void {
   const w = zt * 3;
@@ -263,18 +330,33 @@ function drawWorkbench(
 
   // Screen stand.
   ctx.fillStyle = "#141422";
-  ctx.fillRect(screenX + Math.floor(screenW / 2) - zoom, y - zoom, zoom * 2, zoom);
+  ctx.fillRect(
+    screenX + Math.floor(screenW / 2) - zoom,
+    y - zoom,
+    zoom * 2,
+    zoom,
+  );
 
   // Bezel.
   ctx.fillStyle = "#0a0a14";
-  ctx.fillRect(screenX - zoom, screenY - zoom, screenW + zoom * 2, screenH + zoom * 2);
+  ctx.fillRect(
+    screenX - zoom,
+    screenY - zoom,
+    screenW + zoom * 2,
+    screenH + zoom * 2,
+  );
   // Surface.
   ctx.fillStyle = "#060610";
   ctx.fillRect(screenX, screenY, screenW, screenH);
   // Screen glow — terracotta (opaque cycling).
   const pulse = Math.sin(now / 1200);
   ctx.fillStyle = pulse > 0 ? "#3a2218" : "#2e1a12";
-  ctx.fillRect(screenX + zoom, screenY + zoom, screenW - zoom * 2, screenH - zoom * 2);
+  ctx.fillRect(
+    screenX + zoom,
+    screenY + zoom,
+    screenW - zoom * 2,
+    screenH - zoom * 2,
+  );
   // Scanlines.
   ctx.fillStyle = "#040408";
   for (let sl = 0; sl < screenH; sl += zoom * 2) {
@@ -292,8 +374,12 @@ function drawWorkbench(
 
 function drawDisplayPanel(
   ctx: CanvasRenderingContext2D,
-  x: number, y: number, zt: number, zoom: number,
-  now: number, world: RenderContext["world"],
+  x: number,
+  y: number,
+  zt: number,
+  zoom: number,
+  now: number,
+  world: RenderContext["world"],
 ): void {
   const w = Math.floor(zt * 2.5);
   const h = Math.floor(zt * 1.8);
@@ -340,17 +426,24 @@ function drawDisplayPanel(
   const history = world.getAgentHistory();
   if (history.length > 0) {
     const lineH = Math.max(zoom * 3, smallFont + zoom);
-    const maxLines = Math.min(history.length, Math.floor((screenH - zoom * 5) / lineH));
+    const maxLines = Math.min(
+      history.length,
+      Math.floor((screenH - zoom * 5) / lineH),
+    );
     const visible = history.slice(-maxLines);
     for (let a = 0; a < visible.length; a++) {
       const entry = visible[a];
       const ay = sy + zoom * 5 + a * lineH;
       ctx.fillStyle = entry.action === "enter" ? "#2ECC71" : "#E74C3C";
       const arrow = entry.action === "enter" ? "\u25B6" : "\u25C0";
-      const maxChars = Math.max(6, Math.floor((screenW - zoom * 4) / (smallFont * 0.6)));
-      const label = entry.name.length > maxChars
-        ? entry.name.slice(0, maxChars - 1) + "\u2026"
-        : entry.name;
+      const maxChars = Math.max(
+        6,
+        Math.floor((screenW - zoom * 4) / (smallFont * 0.6)),
+      );
+      const label =
+        entry.name.length > maxChars
+          ? entry.name.slice(0, maxChars - 1) + "\u2026"
+          : entry.name;
       ctx.fillText(`${arrow} ${label}`, sx + zoom * 2, ay);
     }
   } else {
@@ -371,7 +464,11 @@ function drawDisplayPanel(
 
 function drawCables(
   ctx: CanvasRenderingContext2D,
-  bcX: number, bcY: number, zt: number, zoom: number, bcTilesW: number,
+  bcX: number,
+  bcY: number,
+  zt: number,
+  zoom: number,
+  bcTilesW: number,
 ): void {
   const bcW = zt * bcTilesW;
   const rackRightX = bcX - zt;
@@ -399,8 +496,13 @@ function drawCables(
 
 function drawFloorObjects(
   ctx: CanvasRenderingContext2D,
-  bcX: number, bcY: number, zt: number, zoom: number, bcTilesW: number,
-  width: number, height: number,
+  bcX: number,
+  bcY: number,
+  zt: number,
+  zoom: number,
+  bcTilesW: number,
+  width: number,
+  height: number,
 ): void {
   const bcW = zt * bcTilesW;
   const bcBottom = bcY + Math.floor(zt * 1.5) + zoom * 3;
@@ -417,7 +519,12 @@ function drawFloorObjects(
   ctx.fillStyle = "#161624";
   ctx.fillRect(chairX + zoom, chairY - zoom * 3, zoom * 4, zoom * 3);
   ctx.fillStyle = P.HIGHLIGHT;
-  ctx.fillRect(chairX + zoom, chairY - zoom * 3, zoom * 4, Math.max(1, Math.floor(zoom / 2)));
+  ctx.fillRect(
+    chairX + zoom,
+    chairY - zoom * 3,
+    zoom * 4,
+    Math.max(1, Math.floor(zoom / 2)),
+  );
   // Legs.
   ctx.fillStyle = "#101018";
   ctx.fillRect(chairX + zoom, chairY + zoom * 2, zoom, zoom * 2);
@@ -452,11 +559,26 @@ function drawFloorObjects(
   ctx.fillRect(crateX + crateW - zoom, crateY, zoom, crateH);
   // Cross planks.
   ctx.fillStyle = "#24200a";
-  ctx.fillRect(crateX + zoom, crateY + Math.floor(crateH / 2) - Math.max(1, Math.floor(zoom / 2)), crateW - zoom * 2, zoom);
-  ctx.fillRect(crateX + Math.floor(crateW / 2) - Math.max(1, Math.floor(zoom / 2)), crateY + zoom, zoom, crateH - zoom * 2);
+  ctx.fillRect(
+    crateX + zoom,
+    crateY + Math.floor(crateH / 2) - Math.max(1, Math.floor(zoom / 2)),
+    crateW - zoom * 2,
+    zoom,
+  );
+  ctx.fillRect(
+    crateX + Math.floor(crateW / 2) - Math.max(1, Math.floor(zoom / 2)),
+    crateY + zoom,
+    zoom,
+    crateH - zoom * 2,
+  );
   // Nails at cross intersection.
   ctx.fillStyle = "#3a3a4a";
-  ctx.fillRect(crateX + Math.floor(crateW / 2), crateY + Math.floor(crateH / 2), zoom, zoom);
+  ctx.fillRect(
+    crateX + Math.floor(crateW / 2),
+    crateY + Math.floor(crateH / 2),
+    zoom,
+    zoom,
+  );
   // Outline.
   outlineRect(ctx, crateX, crateY, crateW, crateH, zoom);
   contactShadow(ctx, crateX, crateY + crateH, crateW, zoom);
@@ -509,16 +631,19 @@ function drawFloorObjects(
   ctx.fillRect(cableEndX, cableY - zoom, zoom * 2, zoom * 3);
 }
 
-// ── Weapon rack (wall-mounted, left side) ──────────────
+// ── Arsenal Rack (weapon rack + tools merged, wall-mounted left side) ──
 
 function drawWeaponRack(
   ctx: CanvasRenderingContext2D,
-  zt: number, zoom: number, wallH: number,
+  zt: number,
+  zoom: number,
+  wallH: number,
 ): void {
+  // Lowered for visibility, bigger footprint.
   const rackX = Math.floor(zt * 0.5);
-  const rackY = Math.floor(wallH * 0.3);
-  const rackW = Math.floor(zt * 1.8);
-  const rackH = Math.floor(zt * 1.2);
+  const rackY = Math.floor(wallH * 0.45);
+  const rackW = Math.floor(zt * 2.2);
+  const rackH = Math.floor(zt * 1.5);
 
   // Back board.
   ctx.fillStyle = "#141220";
@@ -527,6 +652,11 @@ function drawWeaponRack(
   ctx.fillRect(rackX, rackY, rackW, zoom);
   outlineRect(ctx, rackX, rackY, rackW, rackH, zoom);
 
+  // Mounting screws — 2 bright corner dots.
+  ctx.fillStyle = "#3a3a4a";
+  ctx.fillRect(rackX + zoom, rackY + zoom, zoom, zoom);
+  ctx.fillRect(rackX + rackW - zoom * 2, rackY + zoom, zoom, zoom);
+
   // Horizontal pegs (2 rows).
   const pegY1 = rackY + Math.floor(rackH * 0.3);
   const pegY2 = rackY + Math.floor(rackH * 0.7);
@@ -534,29 +664,33 @@ function drawWeaponRack(
   ctx.fillRect(rackX + zoom * 2, pegY1, rackW - zoom * 4, zoom);
   ctx.fillRect(rackX + zoom * 2, pegY2, rackW - zoom * 4, zoom);
 
-  // Batarang silhouette (top peg) — simple diamond shape.
+  // Batarang — boomerang V shape.
   const batX = rackX + zoom * 4;
-  ctx.fillStyle = "#1a2a3a";
-  ctx.fillRect(batX, pegY1 - zoom * 2, zoom * 4, zoom);
-  ctx.fillRect(batX + zoom, pegY1 - zoom * 3, zoom * 2, zoom);
-  ctx.fillRect(batX + zoom, pegY1 - zoom, zoom * 2, zoom);
+  ctx.fillStyle = "#2a3a4a";
+  // Left arm: diagonal going up-left.
+  ctx.fillRect(batX - zoom * 2, pegY1 - zoom * 3, zoom, zoom);
+  ctx.fillRect(batX - zoom, pegY1 - zoom * 2, zoom, zoom);
+  ctx.fillRect(batX, pegY1 - zoom, zoom * 2, zoom);
+  // Right arm: diagonal going up-right.
+  ctx.fillRect(batX + zoom * 3, pegY1 - zoom * 3, zoom, zoom);
+  ctx.fillRect(batX + zoom * 2, pegY1 - zoom * 2, zoom, zoom);
 
-  // Grapple hook shape (bottom peg).
+  // Wrench on bottom peg (merged from Tool Board).
   const grX = rackX + zoom * 5;
-  ctx.fillStyle = "#222236";
-  ctx.fillRect(grX, pegY2 - zoom * 2, zoom, zoom * 3);
+  ctx.fillStyle = "#3a3a50";
+  ctx.fillRect(grX, pegY2 - zoom * 2, zoom, zoom * 4);
+  ctx.fillRect(grX - zoom, pegY2 - zoom * 2, zoom * 3, zoom);
   ctx.fillRect(grX - zoom, pegY2 + zoom, zoom * 3, zoom);
-  // Hook tip.
-  ctx.fillStyle = "#2a2a40";
-  ctx.fillRect(grX - zoom, pegY2, zoom, zoom);
-  ctx.fillRect(grX + zoom, pegY2, zoom, zoom);
 }
 
 // ── Barrel (right side, near crates) ──────────────────
 
 function drawBarrel(
   ctx: CanvasRenderingContext2D,
-  bcX: number, bcW: number, zt: number, zoom: number,
+  bcX: number,
+  bcW: number,
+  zt: number,
+  zoom: number,
   height: number,
 ): void {
   const bx = bcX + bcW + Math.floor(zt * 3.5);
@@ -581,7 +715,12 @@ function drawBarrel(
   }
   // Knot detail.
   ctx.fillStyle = "#161210";
-  ctx.fillRect(bx + Math.floor(bw * 0.4), by + Math.floor(bh * 0.5), zoom, zoom);
+  ctx.fillRect(
+    bx + Math.floor(bw * 0.4),
+    by + Math.floor(bh * 0.5),
+    zoom,
+    zoom,
+  );
   // Top rim (lighter).
   ctx.fillStyle = "#24201a";
   ctx.fillRect(bx, by, bw, zoom * 2);
@@ -613,7 +752,9 @@ function drawBarrel(
 
 function drawMapTable(
   ctx: CanvasRenderingContext2D,
-  zt: number, zoom: number, wallH: number,
+  zt: number,
+  zoom: number,
+  wallH: number,
 ): void {
   const tx = Math.floor(zt * 1.5);
   const ty = wallH + Math.floor(zt * 2.5);
@@ -645,9 +786,19 @@ function drawMapTable(
   // Grid lines on map.
   ctx.fillStyle = "#242838";
   for (let i = 0; i < 4; i++) {
-    ctx.fillRect(mapX + Math.floor(i * mapW / 4), mapY, Math.max(1, Math.floor(zoom / 2)), mapH);
+    ctx.fillRect(
+      mapX + Math.floor((i * mapW) / 4),
+      mapY,
+      Math.max(1, Math.floor(zoom / 2)),
+      mapH,
+    );
   }
-  ctx.fillRect(mapX, mapY + Math.floor(mapH / 2), mapW, Math.max(1, Math.floor(zoom / 2)));
+  ctx.fillRect(
+    mapX,
+    mapY + Math.floor(mapH / 2),
+    mapW,
+    Math.max(1, Math.floor(zoom / 2)),
+  );
   // Pin/marker on map.
   ctx.fillStyle = "#3a1a1a";
   ctx.fillRect(mapX + Math.floor(mapW * 0.6), mapY + zoom, zoom, zoom);
@@ -657,7 +808,9 @@ function drawMapTable(
 
 function drawToolBoard(
   ctx: CanvasRenderingContext2D,
-  zt: number, zoom: number, wallH: number,
+  zt: number,
+  zoom: number,
+  wallH: number,
 ): void {
   const bx = Math.floor(zt * 3.5);
   const by = Math.floor(wallH * 0.4);
@@ -676,7 +829,8 @@ function drawToolBoard(
       ctx.fillRect(
         bx + zoom * 2 + px * zoom * 3,
         by + zoom * 2 + py * zoom * 3,
-        zoom, zoom
+        zoom,
+        zoom,
       );
     }
   }
@@ -703,7 +857,9 @@ function drawToolBoard(
 
 function drawLocker(
   ctx: CanvasRenderingContext2D,
-  zt: number, zoom: number, wallH: number,
+  zt: number,
+  zoom: number,
+  wallH: number,
   width: number,
 ): void {
   const lx = width - Math.floor(zt * 2.2);
@@ -718,7 +874,12 @@ function drawLocker(
   ctx.fillStyle = "#14142a";
   for (let ty = zoom * 2; ty < lh - zoom * 2; ty += zoom * 3) {
     if (seed(ty * 11) > 0.4) {
-      ctx.fillRect(lx + zoom, ly + ty, lw - zoom * 2, Math.max(1, Math.floor(zoom / 2)));
+      ctx.fillRect(
+        lx + zoom,
+        ly + ty,
+        lw - zoom * 2,
+        Math.max(1, Math.floor(zoom / 2)),
+      );
     }
   }
   // Top highlight.
@@ -735,15 +896,30 @@ function drawLocker(
 
   // Door handles.
   ctx.fillStyle = "#2a2a40";
-  ctx.fillRect(lx + Math.floor(lw / 2) - zoom * 2, ly + Math.floor(lh * 0.4), zoom, zoom * 3);
-  ctx.fillRect(lx + Math.floor(lw / 2) + zoom, ly + Math.floor(lh * 0.4), zoom, zoom * 3);
+  ctx.fillRect(
+    lx + Math.floor(lw / 2) - zoom * 2,
+    ly + Math.floor(lh * 0.4),
+    zoom,
+    zoom * 3,
+  );
+  ctx.fillRect(
+    lx + Math.floor(lw / 2) + zoom,
+    ly + Math.floor(lh * 0.4),
+    zoom,
+    zoom * 3,
+  );
 
   // Ventilation slits (top of each door).
   ctx.fillStyle = "#080812";
   for (let i = 0; i < 3; i++) {
     const sy = ly + zoom * 3 + i * zoom * 2;
     ctx.fillRect(lx + zoom * 2, sy, Math.floor(lw / 2) - zoom * 4, zoom);
-    ctx.fillRect(lx + Math.floor(lw / 2) + zoom * 2, sy, Math.floor(lw / 2) - zoom * 4, zoom);
+    ctx.fillRect(
+      lx + Math.floor(lw / 2) + zoom * 2,
+      sy,
+      Math.floor(lw / 2) - zoom * 4,
+      zoom,
+    );
   }
 
   // Feet.
@@ -760,7 +936,9 @@ function drawLocker(
 
 function drawWhiteboard(
   ctx: CanvasRenderingContext2D,
-  zt: number, zoom: number, wallH: number,
+  zt: number,
+  zoom: number,
+  wallH: number,
   world: RenderContext["world"],
 ): void {
   const bx = Math.floor(zt * 5.5);
@@ -779,7 +957,14 @@ function drawWhiteboard(
   // Marker tray.
   ctx.fillStyle = "#1a1a2e";
   ctx.fillRect(bx, by + bh, bw, zoom * 2);
-  outlineRect(ctx, bx, by + bh, bw, zoom * 2, Math.max(1, Math.floor(zoom / 2)));
+  outlineRect(
+    ctx,
+    bx,
+    by + bh,
+    bw,
+    zoom * 2,
+    Math.max(1, Math.floor(zoom / 2)),
+  );
 
   // Custom message (priority) or todo content.
   const boardMsg = world.getWhiteboardMessage();
@@ -788,7 +973,10 @@ function drawWhiteboard(
 
   if (boardMsg) {
     // Word-wrap the message on the whiteboard.
-    const maxChars = Math.max(5, Math.floor((bw - zoom * 4) / (smallFont * 0.6)));
+    const maxChars = Math.max(
+      5,
+      Math.floor((bw - zoom * 4) / (smallFont * 0.6)),
+    );
     const lineH = Math.max(zoom * 2.5, smallFont + Math.floor(zoom * 0.5));
     const maxLines = Math.floor((bh - zoom * 3) / lineH);
     const words = boardMsg.split(" ");
@@ -798,7 +986,10 @@ function drawWhiteboard(
       const test = current ? `${current} ${word}` : word;
       if (test.length > maxChars) {
         if (current) lines.push(current);
-        current = word.length > maxChars ? word.slice(0, maxChars - 1) + "\u2026" : word;
+        current =
+          word.length > maxChars
+            ? word.slice(0, maxChars - 1) + "\u2026"
+            : word;
       } else {
         current = test;
       }
@@ -814,20 +1005,35 @@ function drawWhiteboard(
     const todos = world.getTodoList();
     if (todos.length > 0) {
       const lineH = Math.max(zoom * 2.5, smallFont + Math.floor(zoom * 0.5));
-      const maxLines = Math.min(todos.length, Math.floor((bh - zoom * 2) / lineH));
+      const maxLines = Math.min(
+        todos.length,
+        Math.floor((bh - zoom * 2) / lineH),
+      );
       const visible = todos.slice(0, maxLines);
       for (let t = 0; t < visible.length; t++) {
         const todo = visible[t];
         const ty = by + zoom * 2 + t * lineH;
-        const statusColor = todo.status === "completed" ? "#2ECC71"
-          : todo.status === "in_progress" ? "#F39C12" : "#555570";
-        const statusChar = todo.status === "completed" ? "\u2713"
-          : todo.status === "in_progress" ? "\u25B6" : "\u25CB";
+        const statusColor =
+          todo.status === "completed"
+            ? "#2ECC71"
+            : todo.status === "in_progress"
+              ? "#F39C12"
+              : "#555570";
+        const statusChar =
+          todo.status === "completed"
+            ? "\u2713"
+            : todo.status === "in_progress"
+              ? "\u25B6"
+              : "\u25CB";
         ctx.fillStyle = statusColor;
-        const maxChars = Math.max(5, Math.floor((bw - zoom * 4) / (smallFont * 0.6)));
-        const label = todo.content.length > maxChars
-          ? todo.content.slice(0, maxChars - 1) + "\u2026"
-          : todo.content;
+        const maxChars = Math.max(
+          5,
+          Math.floor((bw - zoom * 4) / (smallFont * 0.6)),
+        );
+        const label =
+          todo.content.length > maxChars
+            ? todo.content.slice(0, maxChars - 1) + "\u2026"
+            : todo.content;
         ctx.fillText(`${statusChar} ${label}`, bx + zoom * 2, ty);
       }
     } else {
@@ -841,7 +1047,12 @@ function drawWhiteboard(
   const markerColors = ["#E74C3C", "#1E7FD8", "#2ECC71"];
   for (let i = 0; i < markerColors.length; i++) {
     ctx.fillStyle = markerColors[i];
-    ctx.fillRect(bx + zoom * 2 + i * zoom * 3, by + bh + Math.max(1, Math.floor(zoom / 2)), zoom * 2, zoom);
+    ctx.fillRect(
+      bx + zoom * 2 + i * zoom * 3,
+      by + bh + Math.max(1, Math.floor(zoom / 2)),
+      zoom * 2,
+      zoom,
+    );
   }
 }
 
@@ -849,7 +1060,9 @@ function drawWhiteboard(
 
 function drawScala(
   ctx: CanvasRenderingContext2D,
-  zt: number, zoom: number, height: number,
+  zt: number,
+  zoom: number,
+  height: number,
 ): void {
   const sx = zt;
   const sy = height - zt * 3;
@@ -872,7 +1085,12 @@ function drawScala(
   // Center void.
   const voidSize = Math.floor(zt * 0.6);
   ctx.fillStyle = "#020204";
-  ctx.fillRect(sx + Math.floor((w - voidSize) / 2), sy + Math.floor((h - voidSize) / 2), voidSize, voidSize);
+  ctx.fillRect(
+    sx + Math.floor((w - voidSize) / 2),
+    sy + Math.floor((h - voidSize) / 2),
+    voidSize,
+    voidSize,
+  );
 
   // Railing outline.
   outlineRect(ctx, sx, sy, w, h, zoom);
@@ -889,8 +1107,10 @@ function drawScala(
 
 function drawFloorCableRuns(
   ctx: CanvasRenderingContext2D,
-  zt: number, zoom: number,
-  width: number, height: number,
+  zt: number,
+  zoom: number,
+  width: number,
+  height: number,
 ): void {
   // Long cable from far left to center-left (power run).
   const cableY1 = height - zoom * 5;
@@ -899,7 +1119,12 @@ function drawFloorCableRuns(
   // Cable tie dots.
   ctx.fillStyle = "#181830";
   for (let i = 0; i < 4; i++) {
-    ctx.fillRect(zoom * 4 + i * zt, cableY1 - Math.max(1, Math.floor(zoom / 2)), zoom * 2, zoom * 2);
+    ctx.fillRect(
+      zoom * 4 + i * zt,
+      cableY1 - Math.max(1, Math.floor(zoom / 2)),
+      zoom * 2,
+      zoom * 2,
+    );
   }
 
   // Right side cable from display panel area toward locker.
@@ -921,8 +1146,10 @@ function drawFloorCableRuns(
 
 function drawFloorScatter(
   ctx: CanvasRenderingContext2D,
-  zt: number, zoom: number,
-  width: number, height: number,
+  zt: number,
+  zoom: number,
+  width: number,
+  height: number,
 ): void {
   // Scattered bolts/screws.
   const scatterColors = ["#1a1a28", "#181822", "#1e1e2e", "#161620"];
@@ -977,7 +1204,8 @@ function drawFloorScatter(
 // ── Orchestrator ───────────────────────────────────────
 
 export function drawAllFurniture(rc: RenderContext): void {
-  const { ctx, width, height, now, world, zoom, zt, cols, wallRows, wallH } = rc;
+  const { ctx, width, height, now, world, zoom, zt, cols, wallRows, wallH } =
+    rc;
 
   // Batcomputer positioning — tile-aligned.
   const bcTilesW = Math.min(5, cols - 2);
@@ -1015,8 +1243,12 @@ export function drawAllFurniture(rc: RenderContext): void {
 
 function drawEvolutionDecorations(
   ctx: CanvasRenderingContext2D,
-  zoom: number, zt: number, wallH: number,
-  width: number, height: number, now: number,
+  zoom: number,
+  zt: number,
+  wallH: number,
+  width: number,
+  height: number,
+  now: number,
   world: RenderContext["world"],
 ): void {
   const level = world.getCaveLevel();
@@ -1051,7 +1283,14 @@ function drawEvolutionDecorations(
     // Plaque 1.
     ctx.fillStyle = "#2a2a3e";
     ctx.fillRect(px, py, zoom * 6, zoom * 4);
-    outlineRect(ctx, px, py, zoom * 6, zoom * 4, Math.max(1, Math.floor(zoom / 2)));
+    outlineRect(
+      ctx,
+      px,
+      py,
+      zoom * 6,
+      zoom * 4,
+      Math.max(1, Math.floor(zoom / 2)),
+    );
     ctx.fillStyle = "#FFD700";
     ctx.font = `${Math.max(8, zoom * 2)}px ${font}`;
     ctx.textAlign = "center";
@@ -1109,7 +1348,11 @@ function drawEvolutionDecorations(
     ctx.fillStyle = "#333344";
     ctx.font = `${smallFont}px ${font}`;
     ctx.textAlign = "left";
-    ctx.fillText(`LV${level} ${world.getCaveLevelName()}`, zoom * 3, height - zoom * 3);
+    ctx.fillText(
+      `LV${level} ${world.getCaveLevelName()}`,
+      zoom * 3,
+      height - zoom * 3,
+    );
   }
 }
 
@@ -1132,14 +1375,21 @@ export function getTrophyCaseLayout(zoom: number, zt: number, wallH: number) {
 
 function drawTrophyCase(
   ctx: CanvasRenderingContext2D,
-  zoom: number, zt: number, wallH: number,
-  _width: number, now: number,
+  zoom: number,
+  zt: number,
+  wallH: number,
+  _width: number,
+  now: number,
   world: RenderContext["world"],
 ): void {
   const unlocked = world.getUnlockedAchievements();
   if (unlocked.length === 0) return;
 
-  const { slotSize, cols, caseW, caseH, caseX, caseY } = getTrophyCaseLayout(zoom, zt, wallH);
+  const { slotSize, cols, caseW, caseH, caseX, caseY } = getTrophyCaseLayout(
+    zoom,
+    zt,
+    wallH,
+  );
 
   // Glass case background.
   ctx.save();
@@ -1168,7 +1418,7 @@ function drawTrophyCase(
     const sx = caseX + zoom + col * slotSize;
     const sy = caseY + zoom * 3 + row * slotSize;
     const a = ACHIEVEMENTS[i];
-    const isUnlocked = unlocked.some(u => u.id === a.id);
+    const isUnlocked = unlocked.some((u) => u.id === a.id);
 
     if (isUnlocked) {
       const color = TIER_COLORS[a.tier] || "#888899";
@@ -1192,8 +1442,12 @@ function drawTrophyCase(
       }
     } else {
       ctx.fillStyle = "#111118";
-      ctx.fillRect(sx + brd, sy + brd, slotSize - zoom - brd * 2, slotSize - zoom - brd * 2);
+      ctx.fillRect(
+        sx + brd,
+        sy + brd,
+        slotSize - zoom - brd * 2,
+        slotSize - zoom - brd * 2,
+      );
     }
   }
 }
-

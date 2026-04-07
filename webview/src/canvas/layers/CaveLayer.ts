@@ -563,27 +563,47 @@ function drawBatSignal(
   wallH: number,
   zoom: number,
 ): void {
-  // Light circle on ceiling.
   const cx = Math.floor(width / 2);
   const cy = Math.floor(wallH * 0.4);
   const r = zoom * 12;
-  ctx.fillStyle = "#1a1a30";
-  ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
 
-  // Bat silhouette (negative space) — pixel art.
+  // Brightness pulse — sin wave oscillates between 0.70 and 1.00.
+  const pulse = Math.sin(Date.now() / 400) * 0.15 + 0.85;
+
+  // Outer glow rect — slightly larger, dimmer, drawn first so the main
+  // spotlight sits on top and reads as a brighter core.
+  const glow = Math.floor(r * 1.18);
+  // Dim the glow color proportional to pulse so it breathes with the core.
+  const glowAlpha = pulse * 0.6; // 0.42–0.60 range, subtle halo
+  ctx.save();
+  ctx.globalAlpha = glowAlpha;
+  ctx.fillStyle = "#252540";
+  ctx.fillRect(cx - glow, cy - glow, glow * 2, glow * 2);
+  ctx.restore();
+
+  // Main spotlight — brighter base color, further modulated by pulse.
+  ctx.save();
+  ctx.globalAlpha = pulse;
+  ctx.fillStyle = "#252540";
+  ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+  ctx.restore();
+
+  // Bat silhouette — darker fill for maximum contrast on brighter spotlight.
   const s = Math.max(1, zoom);
-  ctx.fillStyle = "#0a0a12";
-  // Body.
-  ctx.fillRect(cx - s * 2, cy - s, s * 4, s * 3);
+  ctx.fillStyle = "#060610";
+  // Body (wider).
+  ctx.fillRect(cx - s * 3, cy - s, s * 6, s * 3);
   // Head.
-  ctx.fillRect(cx - s, cy - s * 2, s * 2, s);
+  ctx.fillRect(cx - s, cy - s * 3, s * 2, s * 2);
   // Ears.
-  ctx.fillRect(cx - s * 2, cy - s * 3, s, s);
-  ctx.fillRect(cx + s, cy - s * 3, s, s);
-  // Left wing.
-  ctx.fillRect(cx - s * 6, cy - s, s * 4, s * 2);
-  ctx.fillRect(cx - s * 7, cy, s * 2, s);
-  // Right wing.
-  ctx.fillRect(cx + s * 2, cy - s, s * 4, s * 2);
-  ctx.fillRect(cx + s * 5, cy, s * 2, s);
+  ctx.fillRect(cx - s * 2, cy - s * 4, s, s);
+  ctx.fillRect(cx + s, cy - s * 4, s, s);
+  // Left wing (8s span, with internal shape).
+  ctx.fillRect(cx - s * 8, cy - s, s * 5, s * 2);
+  ctx.fillRect(cx - s * 9, cy, s * 2, s);
+  ctx.fillRect(cx - s * 7, cy - s * 2, s * 2, s);
+  // Right wing (mirror).
+  ctx.fillRect(cx + s * 3, cy - s, s * 5, s * 2);
+  ctx.fillRect(cx + s * 7, cy, s * 2, s);
+  ctx.fillRect(cx + s * 5, cy - s * 2, s * 2, s);
 }
