@@ -108,8 +108,11 @@ export function App() {
     canvas.addEventListener("click", handleClick);
     canvas.style.cursor = "pointer";
 
-    // Keyboard shortcuts for replay.
+    // Keyboard shortcuts for replay + easter eggs.
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Always pass to keyboard handler for Konami code detection.
+      world.getKeyboard().handleKeyDown(e.key);
+
       if (!replay.isActive()) {
         // 'R' to start replay from current session audit trail.
         if (e.key === "r" || e.key === "R") {

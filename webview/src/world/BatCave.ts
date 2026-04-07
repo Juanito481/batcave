@@ -31,6 +31,7 @@ import { CaveLayout, getLayout } from "../canvas/layout";
 import { FourthWallSystem } from "../systems/FourthWallSystem";
 import { CaveReactionSystem } from "../systems/CaveReactionSystem";
 import { ProgressionSystem } from "../systems/ProgressionSystem";
+import { KeyboardHandler } from "../systems/KeyboardHandler";
 
 /** Per-agent session statistics for enterprise observability. */
 export interface AgentSessionStats {
@@ -150,6 +151,9 @@ export class BatCaveWorld {
 
   // Progression system — XP, levels, cave upgrades, streak.
   private progression = new ProgressionSystem();
+
+  // Keyboard handler — Konami code and easter eggs.
+  private keyboard = new KeyboardHandler();
 
   // Agent behavior system (zone movement, quips, interactions).
   private behaviorSystem!: AgentBehaviorSystem;
@@ -921,6 +925,8 @@ export class BatCaveWorld {
     this.caveReactions.update(deltaMs);
     // Progression system — XP and level-up popup.
     this.progression.update(deltaMs);
+    // Keyboard easter eggs.
+    this.keyboard.update(deltaMs);
     // Idle wandering for Alfred and Giovanni.
     this.maybeWander(this.alfred, deltaMs);
     this.maybeGiovanniBatcomputer(deltaMs);
@@ -991,6 +997,16 @@ export class BatCaveWorld {
   /** Progression system — for HUD rendering. */
   getProgression(): ProgressionSystem {
     return this.progression;
+  }
+
+  /** Keyboard handler — for easter eggs. */
+  getKeyboard(): KeyboardHandler {
+    return this.keyboard;
+  }
+
+  /** Easter egg state for rendering. */
+  getEasterEggs(): import("../systems/KeyboardHandler").EasterEggState {
+    return this.keyboard.getEasterEggState();
   }
 
   private trackAgentHistory(
@@ -1306,9 +1322,10 @@ export class BatCaveWorld {
       }
     }
 
-    // Click on floor → Giovanni walks there.
+    // Click on floor → Giovanni walks there + easter egg detection.
     if (cy > this.wallH && !this.expandedPanel) {
       this.giovanni.moveTo(cx, cy);
+      this.keyboard.handleFloorClick(cx, cy);
       return;
     }
 
