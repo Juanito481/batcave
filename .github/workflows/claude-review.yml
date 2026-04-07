@@ -1,0 +1,60 @@
+# claude-review.yml — Bishop review automatica su ogni PR
+# Copia in: .github/workflows/claude-review.yml di ogni repo di produzione
+#
+# Prerequisiti:
+#   1. Aggiungi ANTHROPIC_API_KEY come secret nel repo GitHub
+#      → Settings > Secrets and variables > Actions > New repository secret
+#   2. Verifica che GITHUB_TOKEN abbia permesso di scrivere commenti sulle PR
+
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  bishop-review:
+    name: "Bishop Code Review"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Claude Code Review
+        uses: anthropics/claude-code-action@beta
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          model: claude-sonnet-4-6
+          direct_prompt: |
+            Sei Bishop della Scacchiera Alfred — L'Ossessivo. Review questa PR come farebbe un code reviewer implacabile ma costruttivo.
+
+            Regole Alfred (non negoziabili):
+            - Fox Design System: radius 0px (solo Avatar/Switch/StatusDot = rounded-full), DM Sans + DM Mono, OKLCH colors, accent blue #1E7FD8
+            - Naming: kebab-case files, PascalCase exports, SCREAMING_SNAKE constants
+            - Components Fox: CVA variants, data-slot attribute, className forwarding via cn()
+            - Security: mai leak stack trace al client, bcrypt per password, RS256 per JWT
+            - API routes Next.js: ordine fisso (rate limit → auth → validation → logic → response)
+            - Conventional commits: feat|fix|refactor|style|chore|docs|test: description
+
+            Se il repo ha un CLAUDE.md, leggilo PRIMA — contiene regole specifiche.
+
+            Analizza SOLO i file cambiati in questa PR. Per ogni finding:
+            1. Cita file:riga
+            2. Spiega il problema in 1-2 frasi
+            3. Suggerisci il fix
+
+            Categorie di severity:
+            - BLOCK: deve essere fixato prima del merge (security, bug, violazione Fox)
+            - WARN: andrebbe fixato ma non blocca (naming, pattern non ottimale)
+            - NOTE: suggerimento, prendere o lasciare
+
+            Se la PR e pulita, dillo in una riga. Non inventare problemi.
