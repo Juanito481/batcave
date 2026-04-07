@@ -77,9 +77,9 @@ function drawBatcomputer(
       sw - zoom * 2,
       sh - zoom * 2,
     );
-    // Scanlines.
+    // Scanlines — 1px pitch per zoom unit for crisp pixel-art density.
     ctx.fillStyle = "#040408";
-    for (let sl = 0; sl < sh; sl += zoom * 2) {
+    for (let sl = 0; sl < sh; sl += zoom) {
       ctx.fillRect(sx, y + gap + sl, sw, zoom);
     }
   }
@@ -216,6 +216,26 @@ function drawBatcomputer(
   ctx.fillRect(x + gap, y + totalH, legW, zoom * 3);
   ctx.fillRect(x + totalW - gap - legW, y + totalH, legW, zoom * 3);
 
+  // Desk surface items — keyboard and coffee mug.
+  const deskSurfaceY = y + totalH - zoom * 2;
+  // Keyboard (row of alternating light/dark keys).
+  ctx.fillStyle = "#1e1e30";
+  ctx.fillRect(x + zoom * 4, deskSurfaceY, zoom * 8, zoom);
+  for (let k = 0; k < 4; k++) {
+    ctx.fillStyle = k % 2 === 0 ? "#2a2a40" : "#222238";
+    ctx.fillRect(x + zoom * 4 + k * zoom * 2, deskSurfaceY, zoom * 2, zoom);
+  }
+  // Coffee mug (2x3 with handle).
+  ctx.fillStyle = "#2a2030";
+  ctx.fillRect(
+    x + totalW - zoom * 6,
+    deskSurfaceY - zoom * 2,
+    zoom * 2,
+    zoom * 3,
+  );
+  ctx.fillStyle = "#342a3e";
+  ctx.fillRect(x + totalW - zoom * 4, deskSurfaceY - zoom, zoom, zoom * 2);
+
   // Ground shadow.
   const deskBaseY = y + totalH + zoom * 3;
   contactShadow(ctx, x + gap, deskBaseY, totalW - gap * 2, zoom);
@@ -279,10 +299,15 @@ function drawServerRack(
     ctx.fillRect(x + zoom * 4, ledY, zoom, zoom);
   }
 
-  // Ventilation holes.
+  // Right ventilation holes.
   ctx.fillStyle = "#080812";
   for (let i = 0; i < 4; i++) {
     ctx.fillRect(x + w - zoom * 3, y + zoom * 3 + i * zoom * 3, zoom * 2, zoom);
+  }
+  // Left ventilation — symmetric with right side.
+  ctx.fillStyle = "#060a10";
+  for (let v = 0; v < 3; v++) {
+    ctx.fillRect(x + zoom * 2, y + zoom * 3 + v * zoom * 3, zoom * 2, zoom);
   }
 
   // Ground shadow.
@@ -328,12 +353,12 @@ function drawWorkbench(
   const screenX = x + zoom * 2;
   const screenY = y - screenH - zoom;
 
-  // Screen stand.
+  // Screen stand — wider base for better proportion.
   ctx.fillStyle = "#141422";
   ctx.fillRect(
     screenX + Math.floor(screenW / 2) - zoom,
     y - zoom,
-    zoom * 2,
+    zoom * 3,
     zoom,
   );
 
@@ -368,6 +393,16 @@ function drawWorkbench(
   ctx.fillRect(x + w - zoom * 6, y - zoom, zoom * 3, zoom);
   ctx.fillStyle = "#2a2a40";
   ctx.fillRect(x + w - zoom * 3, y - zoom, zoom * 2, zoom);
+
+  // Pixel tools on workbench surface.
+  // Soldering iron (horizontal).
+  ctx.fillStyle = "#3a3a50";
+  ctx.fillRect(x + zoom * 3, y + h - zoom * 3, zoom * 5, zoom);
+  ctx.fillStyle = "#E67E22";
+  ctx.fillRect(x + zoom * 8, y + h - zoom * 3, zoom, zoom); // hot tip
+  // Wire coil.
+  ctx.fillStyle = "#1E7FD8";
+  ctx.fillRect(x + zt * 2, y + h - zoom * 4, zoom * 2, zoom * 2);
 }
 
 // ── Display panel (wall-mounted, right side) — agent tracker ──
@@ -529,8 +564,13 @@ function drawFloorObjects(
   ctx.fillStyle = "#101018";
   ctx.fillRect(chairX + zoom, chairY + zoom * 2, zoom, zoom * 2);
   ctx.fillRect(chairX + zoom * 4, chairY + zoom * 2, zoom, zoom * 2);
-  // Outline.
-  outlineRect(ctx, chairX, chairY - zoom * 3, zoom * 6, zoom * 7, zoom);
+  // Separate outlines for backrest and seat (cleaner silhouette than a single rect).
+  outlineRect(ctx, chairX + zoom, chairY - zoom * 3, zoom * 4, zoom * 3, zoom); // backrest
+  outlineRect(ctx, chairX, chairY, zoom * 6, zoom * 2, zoom); // seat
+  // Armrests.
+  ctx.fillStyle = "#1a1a2a";
+  ctx.fillRect(chairX, chairY - zoom, zoom, zoom * 2);
+  ctx.fillRect(chairX + zoom * 5, chairY - zoom, zoom, zoom * 2);
   // Ground shadow.
   contactShadow(ctx, chairX, chairY + zoom * 4, zoom * 6, zoom);
 
@@ -759,7 +799,8 @@ function drawMapTable(
   const tx = Math.floor(zt * 1.5);
   const ty = wallH + Math.floor(zt * 2.5);
   const tw = Math.floor(zt * 2);
-  const th = zoom * 4;
+  // One full tile tall — much more visible than the original zoom*4 sliver.
+  const th = zt;
 
   // Table top surface.
   ctx.fillStyle = "#1a1a28";
@@ -769,22 +810,23 @@ function drawMapTable(
   // Outline.
   outlineRect(ctx, tx, ty, tw, th, zoom);
 
-  // Legs.
+  // Legs — sturdier (zoom*2 wide, zoom*5 tall).
   ctx.fillStyle = "#121220";
-  ctx.fillRect(tx + zoom, ty + th, zoom, zoom * 4);
-  ctx.fillRect(tx + tw - zoom * 2, ty + th, zoom, zoom * 4);
+  ctx.fillRect(tx + zoom, ty + th, zoom * 2, zoom * 5);
+  ctx.fillRect(tx + tw - zoom * 3, ty + th, zoom * 2, zoom * 5);
   // Ground shadow.
-  contactShadow(ctx, tx, ty + th + zoom * 4, tw, zoom);
+  contactShadow(ctx, tx, ty + th + zoom * 5, tw, zoom);
 
   // Map/blueprint on table (scrolled paper).
   const mapX = tx + zoom * 2;
   const mapY = ty - zoom * 2;
   const mapW = tw - zoom * 4;
-  const mapH = zoom * 3;
+  // Taller blueprint — zoom*5 instead of zoom*3.
+  const mapH = zoom * 5;
   ctx.fillStyle = "#1e2028";
   ctx.fillRect(mapX, mapY, mapW, mapH);
-  // Grid lines on map.
-  ctx.fillStyle = "#242838";
+  // Grid lines slightly brighter.
+  ctx.fillStyle = "#2a3040";
   for (let i = 0; i < 4; i++) {
     ctx.fillRect(
       mapX + Math.floor((i * mapW) / 4),
@@ -799,58 +841,9 @@ function drawMapTable(
     mapW,
     Math.max(1, Math.floor(zoom / 2)),
   );
-  // Pin/marker on map.
-  ctx.fillStyle = "#3a1a1a";
-  ctx.fillRect(mapX + Math.floor(mapW * 0.6), mapY + zoom, zoom, zoom);
-}
-
-// ── Tool board (wall-mounted, between server rack and workbench) ──
-
-function drawToolBoard(
-  ctx: CanvasRenderingContext2D,
-  zt: number,
-  zoom: number,
-  wallH: number,
-): void {
-  const bx = Math.floor(zt * 3.5);
-  const by = Math.floor(wallH * 0.4);
-  const bw = Math.floor(zt * 1.2);
-  const bh = Math.floor(zt * 0.8);
-
-  // Pegboard background.
-  ctx.fillStyle = "#161424";
-  ctx.fillRect(bx, by, bw, bh);
-  outlineRect(ctx, bx, by, bw, bh, zoom);
-
-  // Peg holes grid.
-  ctx.fillStyle = "#0e0c1a";
-  for (let py = 0; py < 3; py++) {
-    for (let px = 0; px < 4; px++) {
-      ctx.fillRect(
-        bx + zoom * 2 + px * zoom * 3,
-        by + zoom * 2 + py * zoom * 3,
-        zoom,
-        zoom,
-      );
-    }
-  }
-
-  // Hanging tools.
-  // Wrench shape.
-  ctx.fillStyle = "#2a2a3e";
-  ctx.fillRect(bx + zoom * 2, by + zoom * 2, zoom, zoom * 4);
-  ctx.fillRect(bx + zoom, by + zoom * 2, zoom * 3, zoom);
-
-  // Screwdriver.
-  ctx.fillStyle = "#282838";
-  ctx.fillRect(bx + zoom * 6, by + zoom * 3, zoom, zoom * 5);
-  ctx.fillStyle = "#3a2a1a";
-  ctx.fillRect(bx + zoom * 6, by + zoom * 2, zoom, zoom);
-
-  // Small hammer.
-  ctx.fillStyle = "#2a2a3e";
-  ctx.fillRect(bx + zoom * 9, by + zoom * 3, zoom, zoom * 4);
-  ctx.fillRect(bx + zoom * 8, by + zoom * 2, zoom * 3, zoom * 2);
+  // Pin/marker — bright red, zoom*2 x zoom*3.
+  ctx.fillStyle = "#E74C3C";
+  ctx.fillRect(mapX + Math.floor(mapW * 0.6), mapY + zoom, zoom * 2, zoom * 3);
 }
 
 // ── Locker (tall, far right) ──────────────────────────
@@ -1095,12 +1088,14 @@ function drawScala(
   // Railing outline.
   outlineRect(ctx, sx, sy, w, h, zoom);
 
-  // Label.
+  // Down arrow (▼) instead of "EXIT" text.
   ctx.fillStyle = "#444458";
-  ctx.font = `${Math.max(4, zoom * 1.8)}px "DM Mono", monospace`;
-  ctx.textAlign = "center";
-  ctx.fillText("EXIT", sx + w / 2, sy - zoom);
-  ctx.textAlign = "left";
+  const arrowX = sx + Math.floor(w / 2);
+  const arrowY = sy - zoom * 3;
+  const as = Math.max(1, zoom);
+  ctx.fillRect(arrowX - as * 2, arrowY, as * 4, as);
+  ctx.fillRect(arrowX - as, arrowY + as, as * 2, as);
+  ctx.fillRect(arrowX - Math.floor(as / 2), arrowY + as * 2, as, as);
 }
 
 // ── Floor cable runs (more life on the floor) ─────────
@@ -1207,11 +1202,12 @@ export function drawAllFurniture(rc: RenderContext): void {
   const { ctx, width, height, now, world, zoom, zt, cols, wallRows, wallH } =
     rc;
 
-  // Batcomputer positioning — tile-aligned.
-  const bcTilesW = Math.min(5, cols - 2);
-  const bcW = zt * bcTilesW;
-  const bcX = Math.floor((width - bcW) / 2);
-  const bcY = wallH + zt;
+  // Batcomputer positioning — read from centralized layout.
+  const L = rc.layout;
+  const bcX = L.bcX;
+  const bcY = L.bcY;
+  const bcW = L.bcW;
+  const bcTilesW = L.bcTilesW;
 
   drawCables(ctx, bcX, bcY, zt, zoom, bcTilesW);
   drawServerRack(ctx, bcX - zt * 3, bcY - zt, zt, zoom, now);
@@ -1237,6 +1233,18 @@ export function drawAllFurniture(rc: RenderContext): void {
 
   // Whiteboard (wall-mounted, left-center).
   drawWhiteboard(ctx, zt, zoom, wallH, world);
+
+  // Arsenal rack (weapon + tools merged, left wall).
+  drawWeaponRack(ctx, zt, zoom, wallH);
+
+  // Map table (left side floor, in front of workbench).
+  drawMapTable(ctx, zt, zoom, wallH);
+
+  // Barrel (right side, near crates).
+  drawBarrel(ctx, bcX, bcW, zt, zoom, height);
+
+  // Locker (far right wall).
+  drawLocker(ctx, zt, zoom, wallH, width);
 }
 
 // ── Cave Evolution Decorations ────────────────────────
@@ -1382,8 +1390,8 @@ function drawTrophyCase(
   now: number,
   world: RenderContext["world"],
 ): void {
+  // Always render the case frame so the wall decoration is visible even with no achievements.
   const unlocked = world.getUnlockedAchievements();
-  if (unlocked.length === 0) return;
 
   const { slotSize, cols, caseW, caseH, caseX, caseY } = getTrophyCaseLayout(
     zoom,

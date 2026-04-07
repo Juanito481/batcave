@@ -186,6 +186,16 @@ export class Renderer {
     // Layer 4: HUD overlay.
     drawOverlay(rc);
 
+    // Easter egg: mirror cave — invert colors via compositing (no filter API needed).
+    const easterEggs = this.world.getEasterEggs();
+    if (easterEggs.mirrorCave) {
+      rc.ctx.save();
+      rc.ctx.globalCompositeOperation = "difference";
+      rc.ctx.fillStyle = "#FFFFFF";
+      rc.ctx.fillRect(0, 0, rc.width, rc.height);
+      rc.ctx.restore();
+    }
+
     if (shakeOffset !== 0) {
       rc.ctx.restore();
     }

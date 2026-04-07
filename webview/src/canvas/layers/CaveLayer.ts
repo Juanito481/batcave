@@ -142,6 +142,47 @@ function drawStalactiteLayer(
 }
 
 /**
+ * Draws bioluminescent glow dots at the tip of every 5th stalactite when the
+ * "glow-stalactites" upgrade is active (Lv5). Pulses independently per column
+ * so tips breathe at different rates, avoiding a uniform heartbeat effect.
+ *
+ * @param cols - Number of tile columns.
+ * @param zt - Tile size in pixels.
+ * @param zoom - Integer pixel scale factor.
+ * @param wallH - Y coordinate where the ceiling ends and the cave floor begins.
+ * @param now - Current timestamp (ms) from RenderContext.
+ */
+function drawStalactiteGlow(
+  ctx: CanvasRenderingContext2D,
+  cols: number,
+  zt: number,
+  zoom: number,
+  wallH: number,
+  now: number,
+): void {
+  const GLOW_COLORS = ["#1a5a5a", "#2a7a7a", "#1a6a6a"];
+  for (let x = 0; x < cols + 1; x++) {
+    const s1 = seed(x);
+    if (x % 5 === 0 && s1 > 0.2) {
+      const h = Math.floor(zoom * (4 + s1 * 7));
+      const w = zoom * (2 + Math.floor(seed(x * 3 + 7) * 2));
+      const sx = Math.floor(x * zt + zt / 2 - w / 2);
+      const tipY = wallH + h;
+      // Pulsing glow at the tip.
+      const pulse = Math.sin(now / 1200 + x * 0.7) * 0.5 + 0.5;
+      const glowSize = Math.max(1, Math.floor(zoom * (1 + pulse)));
+      ctx.fillStyle = GLOW_COLORS[x % 3];
+      ctx.fillRect(sx + Math.floor(w / 4), tipY, Math.ceil(w / 2), glowSize);
+      // Core bright dot.
+      if (pulse > 0.6) {
+        ctx.fillStyle = "#3a9a9a";
+        ctx.fillRect(sx + Math.floor(w / 2), tipY, zoom, zoom);
+      }
+    }
+  }
+}
+
+/**
  * Draws two parallax stalactite layers — background moves slower than foreground,
  * giving a subtle sense of cave depth without any alpha transparency.
  * Motion uses Date.now() internally so no extra parameters are needed.
@@ -316,9 +357,9 @@ function drawWallDetails(
   const monPulse = Math.sin(now / 1500 + 3);
   ctx.fillStyle = monPulse > 0 ? "#0a2a0a" : "#081e08";
   ctx.fillRect(monX + zoom, monY + zoom, monW - zoom * 2, monH - zoom * 2);
-  // Scanlines.
+  // Scanlines — 1px pitch per zoom unit for crisp pixel-art density.
   ctx.fillStyle = "#040408";
-  for (let sl = 0; sl < monH; sl += zoom * 2) {
+  for (let sl = 0; sl < monH; sl += zoom) {
     ctx.fillRect(monX, monY + sl, monW, Math.max(1, Math.floor(zoom / 2)));
   }
 
@@ -495,6 +536,30 @@ export function drawCaveEnvironment(rc: RenderContext): void {
     }
   }
 
+  // Lv25 upgrade: lava cracks in floor tiles.
+  if (rc.world.getProgression().hasUpgrade("lava-cracks")) {
+    for (let y = wallRows; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        const s = seed(x * 17 + y * 31 + 99);
+        if (s > 0.88) {
+          // ~12% of tiles
+          const tx = x * zt;
+          const ty = y * zt;
+          const pulse = Math.sin(rc.now / 800 + s * 20) * 0.5 + 0.5;
+          ctx.fillStyle = pulse > 0.5 ? "#6a3018" : "#4a2010";
+          // Crack shape: diagonal line.
+          ctx.fillRect(tx + zoom * 2, ty + zoom * 3, zoom * 3, zoom);
+          ctx.fillRect(tx + zoom * 4, ty + zoom * 4, zoom * 2, zoom);
+          // Glow beneath.
+          if (pulse > 0.7) {
+            ctx.fillStyle = "#8a4020";
+            ctx.fillRect(tx + zoom * 3, ty + zoom * 3, zoom, zoom);
+          }
+        }
+      }
+    }
+  }
+
   // ── Screen glow on floor (static lightened tiles near Batcomputer) ──
   const bcTilesW = Math.min(5, Math.ceil(width / zt) - 1);
   const bcCenterTile = Math.floor(width / zt / 2);
@@ -519,6 +584,11 @@ export function drawCaveEnvironment(rc: RenderContext): void {
 
   // ── Stalactites ──
   drawStalactites(ctx, cols, zt, zoom, wallH);
+
+  // Lv5 upgrade: bioluminescent stalactite tips.
+  if (rc.world.getProgression().hasUpgrade("glow-stalactites")) {
+    drawStalactiteGlow(ctx, cols, zt, zoom, wallH, rc.now);
+  }
 
   // Wall bottom edge (opaque, no rgba).
   ctx.fillStyle = P.OUTLINE;
