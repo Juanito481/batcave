@@ -5,8 +5,12 @@ import { lighten } from "../../helpers/color";
 
 function drawFloorTile(
   ctx: CanvasRenderingContext2D,
-  x: number, y: number, zt: number, zoom: number,
-  isLight: boolean, seedIdx: number,
+  x: number,
+  y: number,
+  zt: number,
+  zoom: number,
+  isLight: boolean,
+  seedIdx: number,
 ): void {
   // Base fill.
   ctx.fillStyle = isLight ? P.FLOOR_B : P.FLOOR_A;
@@ -35,19 +39,26 @@ function drawFloorTile(
   if (s1 > 0.3) ctx.fillRect(x, y, zoom, zoom);
   if (s2 > 0.3) ctx.fillRect(x + zt - zoom, y, zoom, zoom);
   if (s3 > 0.3) ctx.fillRect(x, y + zt - zoom, zoom, zoom);
-  if (s1 > 0.4 && s2 > 0.4) ctx.fillRect(x + zt - zoom, y + zt - zoom, zoom, zoom);
+  if (s1 > 0.4 && s2 > 0.4)
+    ctx.fillRect(x + zt - zoom, y + zt - zoom, zoom, zoom);
 }
 
 // ── Wall tile with rock texture ────────────────────────
 
 function drawWallTile(
   ctx: CanvasRenderingContext2D,
-  x: number, y: number, zt: number, zoom: number,
-  row: number, totalRows: number, seedIdx: number,
+  x: number,
+  y: number,
+  zt: number,
+  zoom: number,
+  row: number,
+  totalRows: number,
+  seedIdx: number,
 ): void {
-  const colors = totalRows === 3
-    ? [P.WALL_TOP, P.WALL_MID, P.WALL_BOT]
-    : [P.WALL_TOP, P.WALL_MID];
+  const colors =
+    totalRows === 3
+      ? [P.WALL_TOP, P.WALL_MID, P.WALL_BOT]
+      : [P.WALL_TOP, P.WALL_MID];
   ctx.fillStyle = colors[row];
   ctx.fillRect(x, y, zt, zt);
 
@@ -64,7 +75,12 @@ function drawWallTile(
     }
     if (s2 > 0.7) {
       ctx.fillStyle = P.WALL_LIGHT;
-      ctx.fillRect(x + Math.floor(s2 * (zt - zoom * 2)), y + Math.floor(s * (zt - zoom * 2)), zoom, zoom);
+      ctx.fillRect(
+        x + Math.floor(s2 * (zt - zoom * 2)),
+        y + Math.floor(s * (zt - zoom * 2)),
+        zoom,
+        zoom,
+      );
     }
   }
 
@@ -77,40 +93,85 @@ function drawWallTile(
 
 // ── Stalactites ────────────────────────────────────────
 
-function drawStalactites(
+/**
+ * Draws one layer of stalactites with a horizontal parallax offset.
+ * @param offsetX - Integer pixel shift applied to all stalactites in this layer.
+ * @param seedBase - Seed offset so background/foreground layers use different shapes.
+ * @param step - Column sampling step (background uses every 7th, foreground every 5th).
+ * @param darken - Whether to tint the layer darker (background = less contrast).
+ */
+function drawStalactiteLayer(
   ctx: CanvasRenderingContext2D,
-  cols: number, zt: number, zoom: number, wallH: number,
+  cols: number,
+  zt: number,
+  zoom: number,
+  wallH: number,
+  offsetX: number,
+  seedBase: number,
+  step: number,
+  darken: boolean,
 ): void {
-  for (let x = 0; x < cols; x++) {
-    const s1 = seed(x);
-    const s2 = seed(x * 3 + 7);
+  for (let x = 0; x < cols + 1; x++) {
+    const s1 = seed(x + seedBase);
+    const s2 = seed(x * 3 + 7 + seedBase);
 
-    if (x % 5 === 0 && s1 > 0.2) {
-      const h = Math.floor(zoom * (5 + s1 * 8));
+    if (x % step === 0 && s1 > 0.2) {
+      const h = Math.floor(zoom * (4 + s1 * 7));
       const w = zoom * (2 + Math.floor(s2 * 2));
-      const sx = x * zt + zt / 2 - w / 2;
+      const sx = Math.floor(x * zt + zt / 2 - w / 2 + offsetX);
 
-      // Body.
-      ctx.fillStyle = P.WALL_EDGE;
+      // Body — slightly darker for background layer to sell the depth.
+      ctx.fillStyle = darken ? P.WALL_DARK : P.WALL_EDGE;
       ctx.fillRect(sx, wallH, w, h);
-      // Tip (narrower).
-      ctx.fillStyle = P.WALL_MID;
+      // Tip.
+      ctx.fillStyle = darken ? "#060810" : P.WALL_MID;
       ctx.fillRect(sx + Math.floor(w / 4), wallH + h, Math.ceil(w / 2), zoom);
-      // Highlight on left edge.
-      ctx.fillStyle = P.WALL_LIGHT;
+      // Highlight.
+      ctx.fillStyle = darken ? P.WALL_EDGE : P.WALL_LIGHT;
       ctx.fillRect(sx, wallH, Math.max(1, Math.floor(zoom / 2)), h);
-      // Shadow on right edge.
-      ctx.fillStyle = P.WALL_DARK;
-      ctx.fillRect(sx + w - Math.max(1, Math.floor(zoom / 2)), wallH, Math.max(1, Math.floor(zoom / 2)), h);
+      // Shadow.
+      ctx.fillStyle = darken ? "#040608" : P.WALL_DARK;
+      ctx.fillRect(
+        sx + w - Math.max(1, Math.floor(zoom / 2)),
+        wallH,
+        Math.max(1, Math.floor(zoom / 2)),
+        h,
+      );
     }
   }
+}
+
+/**
+ * Draws two parallax stalactite layers — background moves slower than foreground,
+ * giving a subtle sense of cave depth without any alpha transparency.
+ * Motion uses Date.now() internally so no extra parameters are needed.
+ */
+function drawStalactites(
+  ctx: CanvasRenderingContext2D,
+  cols: number,
+  zt: number,
+  zoom: number,
+  wallH: number,
+): void {
+  const now = Date.now();
+
+  // Background layer — far wall, slow drift (seed offset 100 to vary shapes).
+  const bgOffset = Math.floor(Math.sin(now / 80000) * 2 * zoom);
+  drawStalactiteLayer(ctx, cols, zt, zoom, wallH, bgOffset, 100, 7, true);
+
+  // Foreground layer — closer ceiling, faster drift.
+  const fgOffset = Math.floor(Math.sin(now / 50000) * 1 * zoom);
+  drawStalactiteLayer(ctx, cols, zt, zoom, wallH, fgOffset, 0, 5, false);
 }
 
 // ── Stalagmites (from floor) ──────────────────────────
 
 function drawStalagmites(
   ctx: CanvasRenderingContext2D,
-  cols: number, zt: number, zoom: number, height: number,
+  cols: number,
+  zt: number,
+  zoom: number,
+  height: number,
 ): void {
   for (let x = 0; x < cols; x++) {
     const s1 = seed(x * 5 + 43);
@@ -128,13 +189,23 @@ function drawStalagmites(
       ctx.fillRect(sx, baseY - h, w, h);
       // Tip (narrower).
       ctx.fillStyle = P.WALL_MID;
-      ctx.fillRect(sx + Math.floor(w / 4), baseY - h - zoom, Math.ceil(w / 2), zoom);
+      ctx.fillRect(
+        sx + Math.floor(w / 4),
+        baseY - h - zoom,
+        Math.ceil(w / 2),
+        zoom,
+      );
       // Highlight on left.
       ctx.fillStyle = P.WALL_LIGHT;
       ctx.fillRect(sx, baseY - h, Math.max(1, Math.floor(zoom / 2)), h);
       // Shadow on right.
       ctx.fillStyle = P.WALL_DARK;
-      ctx.fillRect(sx + w - Math.max(1, Math.floor(zoom / 2)), baseY - h, Math.max(1, Math.floor(zoom / 2)), h);
+      ctx.fillRect(
+        sx + w - Math.max(1, Math.floor(zoom / 2)),
+        baseY - h,
+        Math.max(1, Math.floor(zoom / 2)),
+        h,
+      );
     }
 
     // Smaller rubble between stalagmites.
@@ -150,8 +221,12 @@ function drawStalagmites(
 
 function drawWallDetails(
   ctx: CanvasRenderingContext2D,
-  zt: number, zoom: number, wallH: number,
-  width: number, height: number, now: number,
+  zt: number,
+  zoom: number,
+  wallH: number,
+  width: number,
+  height: number,
+  now: number,
   world: RenderContext["world"],
 ): void {
   // Horizontal pipe running along the wall.
@@ -176,12 +251,18 @@ function drawWallDetails(
   // LED strip along wall bottom — state-reactive + repo-themed.
   const ledY = wallH - zoom;
   const state = world.getAlfredState();
-  const stateColor = state === "thinking" ? "#1e4478"
-    : state === "writing" ? "#1e5432"
-    : "#1a3a5a";
-  const stateDim = state === "thinking" ? "#0e2440"
-    : state === "writing" ? "#0e2a16"
-    : "#0e1e30";
+  const stateColor =
+    state === "thinking"
+      ? "#1e4478"
+      : state === "writing"
+        ? "#1e5432"
+        : "#1a3a5a";
+  const stateDim =
+    state === "thinking"
+      ? "#0e2440"
+      : state === "writing"
+        ? "#0e2a16"
+        : "#0e1e30";
 
   // Speed up pulse when active.
   const ledSpeed = state === "idle" ? 1200 : 600;
@@ -241,17 +322,24 @@ function drawWallDetails(
 
   if (gitLog.length > 0) {
     const lineH = Math.max(zoom * 3, smallFont + zoom);
-    const maxLines = Math.min(gitLog.length, Math.floor((monH - zoom * 5) / lineH));
+    const maxLines = Math.min(
+      gitLog.length,
+      Math.floor((monH - zoom * 5) / lineH),
+    );
     const visible = gitLog.slice(-maxLines);
     for (let g = 0; g < visible.length; g++) {
       const entry = visible[g];
       const gy = monY + zoom * 5 + g * lineH;
       ctx.fillStyle = entry.type === "commit" ? "#2ECC71" : "#F39C12";
       const prefix = entry.type === "commit" ? "\u25CF " : "\u25B2 ";
-      const maxChars = Math.max(6, Math.floor((monW - zoom * 4) / (smallFont * 0.6)));
-      const msg = entry.message.length > maxChars
-        ? entry.message.slice(0, maxChars - 1) + "\u2026"
-        : entry.message;
+      const maxChars = Math.max(
+        6,
+        Math.floor((monW - zoom * 4) / (smallFont * 0.6)),
+      );
+      const msg =
+        entry.message.length > maxChars
+          ? entry.message.slice(0, maxChars - 1) + "\u2026"
+          : entry.message;
       ctx.fillText(prefix + msg, monX + zoom * 2, gy);
     }
   } else {
@@ -261,7 +349,116 @@ function drawWallDetails(
 
   // Mount bracket.
   ctx.fillStyle = "#141428";
-  ctx.fillRect(monX + Math.floor(monW / 2) - zoom, monY + monH, zoom * 2, zoom * 2);
+  ctx.fillRect(
+    monX + Math.floor(monW / 2) - zoom,
+    monY + monH,
+    zoom * 2,
+    zoom * 2,
+  );
+}
+
+// ── Wall torches ───────────────────────────────────────
+
+/**
+ * Torch flame color palette — 3 discrete steps, GBA-style flicker (no interpolation).
+ * Order: bright yellow → orange → dark red, cycled based on frame index.
+ */
+const TORCH_FLAMES = ["#FFD700", "#E67E22", "#C0392B"] as const;
+
+/**
+ * Draws a single wall-mounted torch sprite with flickering flame and a floor light pool.
+ *
+ * @param x - Pixel X of the torch bracket center.
+ * @param wallY - Y coordinate of the wall/floor boundary (torch mounts here).
+ * @param flameFrame - 0-2 discrete frame index, advanced by caller based on state speed.
+ * @param floorY - Bottom of the canvas — where the light pool is drawn.
+ */
+function drawTorch(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  wallY: number,
+  zoom: number,
+  flameFrame: number,
+  floorY: number,
+): void {
+  const tx = Math.floor(x);
+  const ty = Math.floor(wallY);
+
+  // Floor light pool — 8x3 opaque rectangle, slightly lighter than FLOOR_A.
+  // Positioned centered under the torch, sitting just above the floor.
+  const poolW = Math.floor(zoom * 8);
+  const poolH = Math.floor(zoom * 3);
+  const poolX = tx - Math.floor(poolW / 2);
+  const poolY = floorY - poolH;
+  ctx.fillStyle = "#1a1a22";
+  ctx.fillRect(poolX, poolY, poolW, poolH);
+
+  // Bracket — 2px wide dark base (wall mount).
+  ctx.fillStyle = "#5a3a1a";
+  ctx.fillRect(tx - zoom, ty - zoom * 2, zoom * 2, zoom * 2);
+
+  // Bowl — 3px wide holder.
+  ctx.fillStyle = "#6b4520";
+  ctx.fillRect(tx - zoom, ty - zoom * 3, zoom * 3, zoom);
+
+  // Flame — 3 discrete frames, each a small pixel cluster.
+  const flameColor = TORCH_FLAMES[flameFrame % 3];
+  ctx.fillStyle = flameColor;
+  if (flameFrame === 0) {
+    // Tall, narrow flame.
+    ctx.fillRect(tx, ty - zoom * 7, zoom, zoom * 4);
+    ctx.fillRect(tx - zoom, ty - zoom * 5, zoom, zoom * 2);
+    ctx.fillRect(tx + zoom, ty - zoom * 5, zoom, zoom);
+  } else if (flameFrame === 1) {
+    // Wide, mid flame.
+    ctx.fillRect(tx - zoom, ty - zoom * 6, zoom * 3, zoom * 3);
+    ctx.fillRect(tx, ty - zoom * 7, zoom, zoom);
+  } else {
+    // Low, flickering ember.
+    ctx.fillRect(tx, ty - zoom * 5, zoom * 2, zoom * 2);
+    ctx.fillRect(tx - zoom, ty - zoom * 4, zoom, zoom * 2);
+    // Ember tip.
+    ctx.fillStyle = "#FFD700";
+    ctx.fillRect(tx, ty - zoom * 6, zoom, zoom);
+  }
+}
+
+/**
+ * Draws 3 wall torches at fixed positions along the cave wall.
+ * Flicker speed scales with Alfred's state — faster when Claude is active.
+ * Uses Date.now() for frame advancement so no extra state is needed.
+ *
+ * @param alfredState - Current Claude state, controls flicker interval.
+ * @param floorY - Canvas bottom (used to position the light pool).
+ */
+function drawTorches(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  wallH: number,
+  zoom: number,
+  alfredState: "idle" | "thinking" | "writing",
+  floorY: number,
+): void {
+  // Flicker interval per state (ms per flame frame step).
+  const flickerMs =
+    alfredState === "writing" ? 150 : alfredState === "thinking" ? 250 : 400;
+
+  const now = Date.now();
+  // Discrete frame: integer division gives a step that advances every flickerMs.
+  // Each torch gets a phase offset so they don't all flicker in sync.
+  const baseFrame = Math.floor(now / flickerMs);
+
+  // Three torches — left wall, center-left, right wall.
+  const torchXPositions = [
+    Math.floor(width * 0.12),
+    Math.floor(width * 0.45),
+    Math.floor(width * 0.82),
+  ];
+
+  for (let i = 0; i < torchXPositions.length; i++) {
+    const frame = (baseFrame + i * 7) % 3; // offset each torch by 7 frames
+    drawTorch(ctx, torchXPositions[i], wallH, zoom, frame, floorY);
+  }
 }
 
 // ── Main orchestrator ──────────────────────────────────
@@ -272,13 +469,21 @@ export function drawCaveEnvironment(rc: RenderContext): void {
   // ── Floor tiles (textured) ──
   for (let y = wallRows; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
-      drawFloorTile(ctx, x * zt, y * zt, zt, zoom, (x + y) % 2 === 0, x * 17 + y * 31);
+      drawFloorTile(
+        ctx,
+        x * zt,
+        y * zt,
+        zt,
+        zoom,
+        (x + y) % 2 === 0,
+        x * 17 + y * 31,
+      );
     }
   }
 
   // ── Screen glow on floor (static lightened tiles near Batcomputer) ──
   const bcTilesW = Math.min(5, Math.ceil(width / zt) - 1);
-  const bcCenterTile = Math.floor((width / zt) / 2);
+  const bcCenterTile = Math.floor(width / zt / 2);
   const bcStartTile = bcCenterTile - Math.floor(bcTilesW / 2);
   const bcEndTile = bcStartTile + bcTilesW;
   const bcRowTile = wallRows; // row just below wall
@@ -311,6 +516,9 @@ export function drawCaveEnvironment(rc: RenderContext): void {
   // ── Wall details (pipes, LED strip, panels) ──
   drawWallDetails(ctx, zt, zoom, wallH, width, height, rc.now, rc.world);
 
+  // ── Wall torches (state-reactive flicker) ──
+  drawTorches(ctx, width, wallH, zoom, rc.alfredState, height);
+
   // ── Time-of-day tint ──
   const hour = new Date().getHours();
   // Night (21-5): blue tint. Day (10-16): warm tint. Dawn/dusk: neutral.
@@ -336,7 +544,9 @@ export function drawCaveEnvironment(rc: RenderContext): void {
 
 function drawBatSignal(
   ctx: CanvasRenderingContext2D,
-  width: number, wallH: number, zoom: number,
+  width: number,
+  wallH: number,
+  zoom: number,
 ): void {
   // Light circle on ceiling.
   const cx = Math.floor(width / 2);

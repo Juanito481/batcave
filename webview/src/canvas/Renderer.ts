@@ -24,7 +24,11 @@ export class Renderer {
 
   private static readonly TILE = 16;
 
-  constructor(ctx: CanvasRenderingContext2D, world: BatCaveWorld, replay: ReplayEngine) {
+  constructor(
+    ctx: CanvasRenderingContext2D,
+    world: BatCaveWorld,
+    replay: ReplayEngine,
+  ) {
     this.ctx = ctx;
     this.world = world;
     this.replay = replay;
@@ -35,17 +39,21 @@ export class Renderer {
     this.sound.start();
   }
 
-  getReplayEngine(): ReplayEngine { return this.replay; }
-  getDirector(): Director { return this.director; }
+  getReplayEngine(): ReplayEngine {
+    return this.replay;
+  }
+  getDirector(): Director {
+    return this.director;
+  }
 
   resize(width: number, height: number): void {
     this.width = width;
     this.height = height;
     const T = Renderer.TILE;
-    const zoom = Math.max(2, Math.min(
-      Math.floor(width / (16 * T)),
-      Math.floor(height / (8 * T))
-    ));
+    const zoom = Math.max(
+      2,
+      Math.min(Math.floor(width / (16 * T)), Math.floor(height / (8 * T))),
+    );
     const zt = T * zoom;
     const wallRows = height > zt * 10 ? 3 : 2;
     this.world.setDimensions(width, height, wallRows * zt);
@@ -118,6 +126,7 @@ export class Renderer {
       wallRows,
       theme: this.world.getRepoTheme(),
       now: Date.now(),
+      alfredState: this.world.getAlfredState(),
     };
 
     // Clear.
@@ -135,8 +144,10 @@ export class Renderer {
     const companions = this.world.getVisibleCompanions();
     const francesco = this.world.getFrancesco();
     const allChars = [
-      this.world.alfred, this.world.giovanni,
-      ...companions, ...agents,
+      this.world.alfred,
+      this.world.giovanni,
+      ...companions,
+      ...agents,
       ...(francesco ? [francesco] : []),
     ].sort((a, b) => a.y - b.y);
 

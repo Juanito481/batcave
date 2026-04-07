@@ -52,7 +52,7 @@ interface GlowPulse {
 interface Spider {
   x: number;
   baseY: number; // anchor point on ceiling
-  y: number;     // current position (descends on silk)
+  y: number; // current position (descends on silk)
   targetY: number;
   state: "hanging" | "descending" | "ascending" | "waiting";
   waitTimer: number;
@@ -83,13 +83,32 @@ interface Firefly {
   brightness: number; // 0-1
 }
 
-// --- Weather (rain) ---
+// --- Weather (rain + fog + sparks) ---
 
 interface RainDrop {
   x: number;
   y: number;
   speed: number;
   length: number;
+}
+
+interface FogPatch {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  speed: number;
+  color: string;
+}
+
+interface Spark {
+  x: number;
+  y: number;
+  speedY: number;
+  speedX: number;
+  life: number;
+  maxLife: number;
+  color: string;
 }
 
 export class Ambient {
@@ -101,12 +120,18 @@ export class Ambient {
   private rats: Rat[] = [];
   private fireflies: Firefly[] = [];
   private rain: RainDrop[] = [];
+  private fog: FogPatch[] = [];
+  private sparks: Spark[] = [];
 
   // Timers.
   private dripTimer = 0;
   private ratSpawnTimer = 0;
   private ratSpawnThreshold = 20000 + Math.random() * 20000;
   private rainIntensity = 0.3 + Math.random() * 0.4; // 0.3-0.7
+
+  // Weather system.
+  private weatherMode: "clear" | "fog" | "sparks" = "clear";
+  private weatherTimer = 0;
 
   // Cached world dimensions.
   private wW = 400;
@@ -132,6 +157,19 @@ export class Ambient {
     this.stateBoost = multiplier;
   }
 
+  /** Set weather mode — fog when context is high, sparks after deploy. */
+  setWeather(mode: "clear" | "fog" | "sparks"): void {
+    if (mode === this.weatherMode) return;
+    this.weatherMode = mode;
+    this.weatherTimer = 0;
+    if (mode === "fog" && this.fog.length === 0) {
+      this.initFog();
+    }
+    if (mode === "sparks") {
+      this.initSparks();
+    }
+  }
+
   /** Compute drip interval from pressure + state boost. */
   private getDripInterval(): number {
     const base = Math.max(8000, 25000 - this.contextPressure * 170);
@@ -140,7 +178,12 @@ export class Ambient {
 
   // --- Public API ---
 
-  update(deltaMs: number, worldWidth: number, worldHeight: number, wallH: number): void {
+  update(
+    deltaMs: number,
+    worldWidth: number,
+    worldHeight: number,
+    wallH: number,
+  ): void {
     this.wW = worldWidth;
     this.wH = worldHeight;
     this.wallH = wallH;
@@ -184,11 +227,13 @@ export class Ambient {
     this.updateRats(deltaMs);
     this.updateFireflies(deltaMs);
     this.updateWeather(deltaMs);
+    this.updateFogAndSparks(deltaMs);
     this.glow.phase += deltaMs * 0.001;
   }
 
   draw(ctx: CanvasRenderingContext2D, zoom: number): void {
     this.drawGlow(ctx, zoom);
+    this.drawFog(ctx, zoom);
     this.drawRain(ctx, zoom);
     this.drawFireflies(ctx, zoom);
     this.drawMotes(ctx, zoom);
@@ -196,6 +241,7 @@ export class Ambient {
     this.drawSpiders(ctx, zoom);
     this.drawRats(ctx, zoom);
     this.drawBats(ctx, zoom);
+    this.drawSparks(ctx, zoom);
   }
 
   // --- Bats ---
@@ -365,11 +411,25 @@ export class Ambient {
         ctx.fillStyle = DRIP_BRIGHT;
         ctx.fillRect(Math.round(drip.x), Math.round(drip.y), px, px * 2);
       } else {
-        // Splash — expanding, fading through palette steps.
-        const spread = Math.floor((drip.splashTimer / 300) * 3) + 1;
-        const progress = drip.splashTimer / 300;
-        ctx.fillStyle = progress < 0.33 ? DRIP_BRIGHT : progress < 0.66 ? DRIP_MID : DRIP_DIM;
-        ctx.fillRect(Math.round(drip.x) - spread * px, Math.round(drip.y), px * (spread * 2 + 1), px);
+        // 3-frame ripple splash — concentric expanding rings.
+        const frame = Math.min(2, Math.floor(drip.splashTimer / 100));
+        const dx = Math.round(drip.x);
+        const dy = Math.round(drip.y);
+        // Frame 0: tight center splash.
+        if (frame >= 0) {
+          ctx.fillStyle = DRIP_BRIGHT;
+          ctx.fillRect(dx - px, dy, px * 3, px);
+        }
+        // Frame 1: expanding ring.
+        if (frame >= 1) {
+          ctx.fillStyle = DRIP_MID;
+          ctx.fillRect(dx - px * 2, dy + px, px * 5, px);
+        }
+        // Frame 2: wide fading ring.
+        if (frame >= 2) {
+          ctx.fillStyle = DRIP_DIM;
+          ctx.fillRect(dx - px * 3, dy + px * 2, px * 7, px);
+        }
       }
     }
   }
@@ -404,13 +464,15 @@ export class Ambient {
   private drawMotes(ctx: CanvasRenderingContext2D, zoom: number): void {
     const px = Math.max(1, Math.floor(zoom * 0.25));
 
-    // Opaque dust mote colors (no rgba). Different brightness levels.
-    const MOTE_COLORS = ["#2a2a3a", "#2e2e40", "#323248", "#363650"];
+    // Brighter dust mote colors for visibility (was too dark).
+    const MOTE_COLORS = ["#404060", "#484870", "#505080", "#585890"];
 
     for (let i = 0; i < this.motes.length; i++) {
       const m = this.motes[i];
       ctx.fillStyle = MOTE_COLORS[i % MOTE_COLORS.length];
-      ctx.fillRect(Math.round(m.x), Math.round(m.y), px, px);
+      // Vary size: 50% are 2px, 50% are 1px.
+      const size = i % 2 === 0 ? px * 2 : px;
+      ctx.fillRect(Math.round(m.x), Math.round(m.y), size, size);
     }
   }
 
@@ -493,7 +555,12 @@ export class Ambient {
       if (spider.y > spider.baseY + 2) {
         ctx.fillStyle = "#1a1a30";
         const silkW = Math.max(1, Math.floor(zoom / 2));
-        ctx.fillRect(sx + s, Math.round(spider.baseY), silkW, sy - Math.round(spider.baseY));
+        ctx.fillRect(
+          sx + s,
+          Math.round(spider.baseY),
+          silkW,
+          sy - Math.round(spider.baseY),
+        );
       }
 
       // Body (dark, 3x2).
@@ -518,10 +585,16 @@ export class Ambient {
         ctx.fillRect(sx + s * 3, sy + s, s, s);
       }
 
-      // Eyes (tiny red dots).
+      // Eyes (tiny red dots — scaled with zoom so visible at all sizes).
+      const eyeSize = Math.max(1, Math.floor(zoom * 0.15));
       ctx.fillStyle = "#4a1a1a";
-      ctx.fillRect(sx + s, sy - s, 1, 1);
-      ctx.fillRect(sx + s + Math.max(1, Math.floor(s / 2)), sy - s, 1, 1);
+      ctx.fillRect(sx + s, sy - s, eyeSize, eyeSize);
+      ctx.fillRect(
+        sx + s + Math.max(1, Math.floor(s / 2)),
+        sy - s,
+        eyeSize,
+        eyeSize,
+      );
     }
   }
 
@@ -530,7 +603,10 @@ export class Ambient {
   private updateRats(dt: number): void {
     // Spawn timer.
     this.ratSpawnTimer += dt;
-    if (this.ratSpawnTimer >= this.ratSpawnThreshold && this.rats.filter(r => r.active).length < 2) {
+    if (
+      this.ratSpawnTimer >= this.ratSpawnThreshold &&
+      this.rats.filter((r) => r.active).length < 2
+    ) {
       this.ratSpawnTimer = 0;
       this.ratSpawnThreshold = 20000 + Math.random() * 25000;
 
@@ -558,8 +634,10 @@ export class Ambient {
       }
 
       // Remove when off-screen.
-      if ((rat.speedX > 0 && rat.x > this.wW + 20) ||
-          (rat.speedX < 0 && rat.x < -20)) {
+      if (
+        (rat.speedX > 0 && rat.x > this.wW + 20) ||
+        (rat.speedX < 0 && rat.x < -20)
+      ) {
         rat.active = false;
         this.rats.splice(i, 1);
       }
@@ -596,7 +674,12 @@ export class Ambient {
       const tx = dir > 0 ? rx - s * 2 : rx + s * 4 + s;
       ctx.fillRect(tx, ry + s, s * 2, Math.max(1, Math.floor(zoom / 2)));
       // Tail curve.
-      ctx.fillRect(dir > 0 ? tx - s : tx + s * 2, ry, s, Math.max(1, Math.floor(zoom / 2)));
+      ctx.fillRect(
+        dir > 0 ? tx - s : tx + s * 2,
+        ry,
+        s,
+        Math.max(1, Math.floor(zoom / 2)),
+      );
 
       // Legs (alternating).
       ctx.fillStyle = "#322838";
@@ -752,6 +835,92 @@ export class Ambient {
       const s = layer.size;
       ctx.fillStyle = layer.color;
       ctx.fillRect(cx - s, cy - s * 0.6, s * 2, s * 1.2);
+    }
+  }
+
+  // --- Fog & Sparks weather ---
+
+  private initFog(): void {
+    const FOG_COLORS = ["#121820", "#161e28", "#1a2230"];
+    this.fog = [];
+    for (let i = 0; i < 14; i++) {
+      this.fog.push({
+        x: Math.random() * this.wW,
+        y: this.wallH + Math.random() * (this.wH - this.wallH),
+        w: 30 + Math.random() * 40,
+        h: 2 + Math.random() * 3,
+        speed: 5 + Math.random() * 10,
+        color: FOG_COLORS[i % FOG_COLORS.length],
+      });
+    }
+  }
+
+  private initSparks(): void {
+    const SPARK_COLORS = ["#FFD700", "#E67E22", "#FFFFFF"];
+    for (let i = 0; i < 18; i++) {
+      this.sparks.push({
+        x: this.wW * 0.3 + Math.random() * this.wW * 0.4,
+        y: this.wH * 0.5 + Math.random() * this.wH * 0.3,
+        speedY: -(100 + Math.random() * 100),
+        speedX: (Math.random() - 0.5) * 40,
+        life: 0,
+        maxLife: 2000 + Math.random() * 1000,
+        color: SPARK_COLORS[i % SPARK_COLORS.length],
+      });
+    }
+  }
+
+  private updateFogAndSparks(dt: number): void {
+    // Fog movement.
+    if (this.weatherMode === "fog") {
+      for (const f of this.fog) {
+        f.x += f.speed * (dt / 1000);
+        if (f.x > this.wW + f.w) {
+          f.x = -f.w;
+          f.y = this.wallH + Math.random() * (this.wH - this.wallH);
+        }
+      }
+    }
+
+    // Sparks — auto-expire after 3s.
+    if (this.sparks.length > 0) {
+      for (let i = this.sparks.length - 1; i >= 0; i--) {
+        const s = this.sparks[i];
+        s.life += dt;
+        s.x += s.speedX * (dt / 1000);
+        s.y += s.speedY * (dt / 1000);
+        if (s.life >= s.maxLife) {
+          this.sparks.splice(i, 1);
+        }
+      }
+      if (this.sparks.length === 0 && this.weatherMode === "sparks") {
+        this.weatherMode = "clear";
+      }
+    }
+  }
+
+  private drawFog(ctx: CanvasRenderingContext2D, _zoom: number): void {
+    if (this.weatherMode !== "fog") return;
+    for (const f of this.fog) {
+      ctx.fillStyle = f.color;
+      ctx.fillRect(
+        Math.floor(f.x),
+        Math.floor(f.y),
+        Math.floor(f.w),
+        Math.floor(f.h),
+      );
+    }
+  }
+
+  private drawSparks(ctx: CanvasRenderingContext2D, zoom: number): void {
+    if (this.sparks.length === 0) return;
+    const px = Math.max(1, Math.floor(zoom * 0.3));
+    for (const s of this.sparks) {
+      // Flicker fade: visible with decreasing probability as life progresses.
+      const ratio = s.life / s.maxLife;
+      if (ratio > 0.7 && Math.random() > (1 - ratio) / 0.3) continue;
+      ctx.fillStyle = s.color;
+      ctx.fillRect(Math.floor(s.x), Math.floor(s.y), px, px);
     }
   }
 }

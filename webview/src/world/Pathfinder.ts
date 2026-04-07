@@ -22,7 +22,12 @@ export class Pathfinder {
   private cellSize = 32;
 
   /** Rebuild the walkability grid from obstacle rects. */
-  buildGrid(worldWidth: number, worldHeight: number, cellSize: number, obstacles: Rect[]): void {
+  buildGrid(
+    worldWidth: number,
+    worldHeight: number,
+    cellSize: number,
+    obstacles: Rect[],
+  ): void {
     this.cellSize = cellSize;
     this.gridCols = Math.ceil(worldWidth / cellSize);
     this.gridRows = Math.ceil(worldHeight / cellSize);
@@ -49,10 +54,17 @@ export class Pathfinder {
   }
 
   /** BFS from (startX,startY) to (endX,endY). Returns pixel-coordinate waypoints. */
-  findPath(startX: number, startY: number, endX: number, endY: number): Point[] {
+  findPath(
+    startX: number,
+    startY: number,
+    endX: number,
+    endY: number,
+  ): Point[] {
     const cs = this.cellSize;
-    const clampC = (v: number) => Math.max(0, Math.min(this.gridCols - 1, Math.floor(v / cs)));
-    const clampR = (v: number) => Math.max(0, Math.min(this.gridRows - 1, Math.floor(v / cs)));
+    const clampC = (v: number) =>
+      Math.max(0, Math.min(this.gridCols - 1, Math.floor(v / cs)));
+    const clampR = (v: number) =>
+      Math.max(0, Math.min(this.gridRows - 1, Math.floor(v / cs)));
 
     const sc = clampC(startX);
     const sr = clampR(startY);
@@ -86,22 +98,29 @@ export class Pathfinder {
       return [{ x: endX, y: endY }];
     }
 
-    // BFS.
+    // BFS with index-based queue (O(n) instead of O(n²) with shift).
     const key = (r: number, c: number) => r * this.gridCols + c;
     const visited = new Set<number>();
     const parent = new Map<number, number>();
     const queue: [number, number][] = [[startRow, startCol]];
+    let head = 0;
     visited.add(key(startRow, startCol));
 
     // 8-directional movement.
     const dirs = [
-      [0, 1], [0, -1], [1, 0], [-1, 0],
-      [1, 1], [1, -1], [-1, 1], [-1, -1],
+      [0, 1],
+      [0, -1],
+      [1, 0],
+      [-1, 0],
+      [1, 1],
+      [1, -1],
+      [-1, 1],
+      [-1, -1],
     ];
 
     let found = false;
-    while (queue.length > 0) {
-      const [r, c] = queue.shift()!;
+    while (head < queue.length) {
+      const [r, c] = queue[head++];
       if (r === er && c === ec) {
         found = true;
         break;
@@ -110,7 +129,8 @@ export class Pathfinder {
       for (const [dr, dc] of dirs) {
         const nr = r + dr;
         const nc = c + dc;
-        if (nr < 0 || nr >= this.gridRows || nc < 0 || nc >= this.gridCols) continue;
+        if (nr < 0 || nr >= this.gridRows || nc < 0 || nc >= this.gridCols)
+          continue;
         if (!this.grid[nr][nc]) continue;
         const k = key(nr, nc);
         if (visited.has(k)) continue;
@@ -151,19 +171,29 @@ export class Pathfinder {
     return this.simplify(cells);
   }
 
-  private nearestWalkable(col: number, row: number): { c: number; r: number } | null {
+  private nearestWalkable(
+    col: number,
+    row: number,
+  ): { c: number; r: number } | null {
     const queue: [number, number][] = [[row, col]];
+    let head = 0;
     const visited = new Set<number>();
     visited.add(row * this.gridCols + col);
 
-    while (queue.length > 0) {
-      const [r, c] = queue.shift()!;
+    while (head < queue.length) {
+      const [r, c] = queue[head++];
       if (this.grid[r]?.[c]) return { r, c };
 
-      for (const [dr, dc] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
+      for (const [dr, dc] of [
+        [0, 1],
+        [0, -1],
+        [1, 0],
+        [-1, 0],
+      ]) {
         const nr = r + dr;
         const nc = c + dc;
-        if (nr < 0 || nr >= this.gridRows || nc < 0 || nc >= this.gridCols) continue;
+        if (nr < 0 || nr >= this.gridRows || nc < 0 || nc >= this.gridCols)
+          continue;
         const k = nr * this.gridCols + nc;
         if (visited.has(k)) continue;
         visited.add(k);

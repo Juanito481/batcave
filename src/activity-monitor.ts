@@ -15,7 +15,7 @@ import * as os from "os";
 import { BatCaveEvent, AGENTS } from "./types";
 
 const POLL_INTERVAL_MS = 500;
-const MAX_READ_BYTES = 64 * 1024; // 64KB per poll cycle
+const MAX_READ_BYTES = 256 * 1024; // 256KB per poll cycle — large enough to avoid mid-line splits
 
 export class ActivityMonitor {
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -32,11 +32,18 @@ export class ActivityMonitor {
   private toolToAgent = new Map<string, string>(); // tool_use_id → agentId
   private toolIdToName = new Map<string, string>(); // tool_use_id → toolName
   private lastState: "idle" | "thinking" | "writing" = "idle";
+  private activeModel = "claude-code"; // detected from JSONL records
+  private lineBuffer = ""; // partial line from previous poll
   private rescanTimer = 0;
   private static readonly RESCAN_INTERVAL_MS = 5000;
   // Multi-session tracking.
   private static readonly SESSION_ACTIVE_THRESHOLD_MS = 5 * 60 * 1000; // 5 min
-  private knownSessions: { projectHash: string; label: string; filePath: string; lastActive: number }[] = [];
+  private knownSessions: {
+    projectHash: string;
+    label: string;
+    filePath: string;
+    lastActive: number;
+  }[] = [];
   // 1M context ≈ 250 assistant messages + tool overhead.
   // Each assistant msg ≈ 2k tokens avg; each tool call ≈ 1.5k tokens avg.
   // Budget: ~500k tokens effective (system prompt + memory eats ~50%).
@@ -79,7 +86,9 @@ export class ActivityMonitor {
       for (const dir of projectDirs) {
         if (!dir.isDirectory()) continue;
         const projectPath = path.join(claudeDir, dir.name);
-        const files = fs.readdirSync(projectPath).filter((f) => f.endsWith(".jsonl"));
+        const files = fs
+          .readdirSync(projectPath)
+          .filter((f) => f.endsWith(".jsonl"));
 
         let dirNewest: string | null = null;
         let dirNewestMtime = 0;
@@ -102,7 +111,10 @@ export class ActivityMonitor {
         }
 
         // Track session if recently active.
-        if (dirNewest && (now - dirNewestMtime) < ActivityMonitor.SESSION_ACTIVE_THRESHOLD_MS) {
+        if (
+          dirNewest &&
+          now - dirNewestMtime < ActivityMonitor.SESSION_ACTIVE_THRESHOLD_MS
+        ) {
           // Derive readable label from project hash directory name.
           const label = this.projectHashToLabel(dir.name);
           sessions.push({
@@ -125,7 +137,7 @@ export class ActivityMonitor {
         : "";
       this.onEvent({
         type: "sessions_list",
-        sessions: sessions.map(s => ({
+        sessions: sessions.map((s) => ({
           projectHash: s.projectHash,
           label: s.label,
           lastActive: s.lastActive,
@@ -149,6 +161,8 @@ export class ActivityMonitor {
       this.agentsSpawnedCount = 0;
       this.sessionStartedAt = Date.now();
       this.lastState = "idle";
+      this.activeModel = "claude-code";
+      this.lineBuffer = "";
       // Emit exit for any lingering agents from previous session.
       for (const agentId of this.activeAgents) {
         this.onEvent({
@@ -171,7 +185,7 @@ export class ActivityMonitor {
     const parts = dirName.split("-").filter(Boolean);
     if (parts.length === 0) return dirName;
     // Skip "Users" and username, take the last 1-2 segments.
-    const meaningful = parts.filter(p => p !== "Users" && p.length > 1);
+    const meaningful = parts.filter((p) => p !== "Users" && p.length > 1);
     if (meaningful.length >= 2) {
       return meaningful.slice(-2).join("/");
     }
@@ -204,29 +218,44 @@ export class ActivityMonitor {
     try {
       fd = fs.openSync(this.currentFile, "r");
     } catch (err) {
-      console.warn("[BatCave] Failed to open transcript:", (err as Error).message);
+      console.warn(
+        "[BatCave] Failed to open transcript:",
+        (err as Error).message,
+      );
       return;
     }
     try {
       fs.readSync(fd, buffer, 0, bytesToRead, this.lastFileSize);
     } catch (err) {
-      console.warn("[BatCave] Failed to read transcript:", (err as Error).message);
+      console.warn(
+        "[BatCave] Failed to read transcript:",
+        (err as Error).message,
+      );
       fs.closeSync(fd);
       return;
     }
     fs.closeSync(fd);
 
-    this.lastFileSize = stat.size;
+    // Only advance file pointer by what we actually read successfully.
+    this.lastFileSize += bytesToRead;
 
-    const chunk = buffer.toString("utf-8");
-    const lines = chunk.split("\n").filter((l) => l.trim());
+    // Prepend any incomplete line from previous poll, then split.
+    const chunk = this.lineBuffer + buffer.toString("utf-8");
+    const lines = chunk.split("\n");
+
+    // Last element may be incomplete if chunk didn't end on newline — buffer it.
+    this.lineBuffer = chunk.endsWith("\n") ? "" : (lines.pop() ?? "");
 
     for (const line of lines) {
+      if (!line.trim()) continue;
       try {
         const record = JSON.parse(line);
         this.processRecord(record);
       } catch (err) {
-        console.warn("[BatCave] Malformed JSONL line, skipping:", (err as Error).message);
+        console.warn(
+          "[BatCave] Malformed JSONL line, skipping:",
+          (err as Error).message,
+        );
       }
     }
   }
@@ -239,6 +268,9 @@ export class ActivityMonitor {
       // Assistant message — may contain tool_use blocks.
       this.messagesCount++;
       const content = record.message as Record<string, unknown> | undefined;
+      // Detect model from JSONL record (Claude Code includes it).
+      const model = (content?.model as string) || (record.model as string);
+      if (model) this.activeModel = model;
       const contentBlocks = (content?.content as unknown[]) || [];
 
       for (const block of contentBlocks) {
@@ -294,7 +326,10 @@ export class ActivityMonitor {
           }
 
           // Extract file path from tool input when available.
-          const filePath = this.extractFilePath(toolName, b.input as Record<string, unknown> | undefined);
+          const filePath = this.extractFilePath(
+            toolName,
+            b.input as Record<string, unknown> | undefined,
+          );
 
           this.onEvent({
             type: "tool_start",
@@ -305,7 +340,8 @@ export class ActivityMonitor {
 
           // Detect git operations from Bash commands.
           if (toolName === "Bash") {
-            const cmd = (b.input as Record<string, unknown> | undefined)?.command as string | undefined;
+            const cmd = (b.input as Record<string, unknown> | undefined)
+              ?.command as string | undefined;
             if (cmd) {
               this.detectGitActivity(cmd, now);
             }
@@ -331,13 +367,15 @@ export class ActivityMonitor {
 
     if (type === "user") {
       // Tool results come as user messages.
-      const content = (record.message as Record<string, unknown>)?.content as unknown[];
+      const content = (record.message as Record<string, unknown>)
+        ?.content as unknown[];
       if (Array.isArray(content)) {
         for (const block of content) {
           const b = block as Record<string, unknown>;
           if (b.type === "tool_result") {
             const toolUseId = b.tool_use_id as string;
-            const resolvedToolName = this.toolIdToName.get(toolUseId) || "unknown";
+            const resolvedToolName =
+              this.toolIdToName.get(toolUseId) || "unknown";
             this.toolIdToName.delete(toolUseId);
             this.onEvent({
               type: "tool_end",
@@ -364,7 +402,9 @@ export class ActivityMonitor {
   }
 
   /** Try to identify a chess-piece agent from Agent tool input fields. */
-  private identifyAgentFromInput(input: Record<string, unknown> | undefined): string | null {
+  private identifyAgentFromInput(
+    input: Record<string, unknown> | undefined,
+  ): string | null {
     if (!input) return null;
     const desc = ((input.description as string) || "").toLowerCase();
     const prompt = ((input.prompt as string) || "").toLowerCase();
@@ -383,19 +423,19 @@ export class ActivityMonitor {
 
     // Also check Italian names with word-boundary regex.
     const italianMap: Record<string, string> = {
-      "sovrano": "king",
-      "stratega": "queen",
-      "fortezza": "white-rook",
-      "architetto": "knight",
-      "ossessivo": "bishop",
-      "segretario": "pawn",
-      "scassinatore": "black-rook",
-      "demolitore": "black-bishop",
-      "sabotatore": "black-knight",
-      "cancelliere": "chancellor",
-      "cardinale": "cardinal",
-      "esploratore": "scout",
-      "nave": "ship",
+      sovrano: "king",
+      stratega: "queen",
+      fortezza: "white-rook",
+      architetto: "knight",
+      ossessivo: "bishop",
+      segretario: "pawn",
+      scassinatore: "black-rook",
+      demolitore: "black-bishop",
+      sabotatore: "black-knight",
+      cancelliere: "chancellor",
+      cardinale: "cardinal",
+      esploratore: "scout",
+      nave: "ship",
     };
     for (const [name, id] of Object.entries(italianMap)) {
       if (new RegExp(`\\b${name}\\b`).test(text)) return id;
@@ -409,7 +449,11 @@ export class ActivityMonitor {
     // git commit -m "message" or git commit -m "$(cat <<'EOF' ... EOF)"
     const commitMatch = cmd.match(/git\s+commit\s+.*-m\s+["']([^"'\n]{1,80})/);
     if (commitMatch) {
-      this.onEvent({ type: "git_commit", message: commitMatch[1], timestamp: now });
+      this.onEvent({
+        type: "git_commit",
+        message: commitMatch[1],
+        timestamp: now,
+      });
     }
     if (/git\s+push\b/.test(cmd)) {
       this.onEvent({ type: "git_push", message: "push", timestamp: now });
@@ -417,9 +461,14 @@ export class ActivityMonitor {
   }
 
   /** Detect todo list updates from TodoWrite tool. */
-  private detectTodoUpdate(input: Record<string, unknown> | undefined, now: number): void {
+  private detectTodoUpdate(
+    input: Record<string, unknown> | undefined,
+    now: number,
+  ): void {
     if (!input) return;
-    const todos = input.todos as { content?: string; status?: string }[] | undefined;
+    const todos = input.todos as
+      | { content?: string; status?: string }[]
+      | undefined;
     if (!Array.isArray(todos)) return;
     this.onEvent({
       type: "todo_update",
@@ -434,10 +483,14 @@ export class ActivityMonitor {
   }
 
   /** Extract file path from tool input fields. */
-  private extractFilePath(toolName: string, input: Record<string, unknown> | undefined): string | null {
+  private extractFilePath(
+    toolName: string,
+    input: Record<string, unknown> | undefined,
+  ): string | null {
     if (!input) return null;
     // Read, Edit, Write, Grep, Glob all use file_path or path.
-    const filePath = (input.file_path as string) || (input.path as string) || null;
+    const filePath =
+      (input.file_path as string) || (input.path as string) || null;
     if (filePath) return filePath;
     // Bash: extract from command if it references a file.
     if (toolName === "Bash") {
@@ -449,7 +502,15 @@ export class ActivityMonitor {
 
   private inferState(toolName: string): "thinking" | "writing" | "idle" {
     const writingTools = ["Edit", "Write", "NotebookEdit"];
-    const thinkingTools = ["Read", "Grep", "Glob", "Bash", "Agent", "WebSearch", "WebFetch"];
+    const thinkingTools = [
+      "Read",
+      "Grep",
+      "Glob",
+      "Bash",
+      "Agent",
+      "WebSearch",
+      "WebFetch",
+    ];
 
     if (writingTools.includes(toolName)) return "writing";
     if (thinkingTools.includes(toolName)) return "thinking";
@@ -462,14 +523,18 @@ export class ActivityMonitor {
       messagesThisSession: this.messagesCount,
       toolCallsThisSession: this.toolCallsCount,
       agentsSpawnedThisSession: this.agentsSpawnedCount,
-      activeModel: "claude-opus-4-6",
+      activeModel: this.activeModel,
       sessionStartedAt: this.sessionStartedAt,
       // Weighted estimate: messages + tool calls against 1M context budget.
-      contextFillPct: Math.min(100, Math.round(
-        ((this.messagesCount * ActivityMonitor.TOKENS_PER_MSG +
-          this.toolCallsCount * ActivityMonitor.TOKENS_PER_TOOL) /
-          ActivityMonitor.CONTEXT_BUDGET_TOKENS) * 100
-      )),
+      contextFillPct: Math.min(
+        100,
+        Math.round(
+          ((this.messagesCount * ActivityMonitor.TOKENS_PER_MSG +
+            this.toolCallsCount * ActivityMonitor.TOKENS_PER_TOOL) /
+            ActivityMonitor.CONTEXT_BUDGET_TOKENS) *
+            100,
+        ),
+      ),
     });
   }
 }

@@ -10,7 +10,7 @@
     "url": "https://github.com/Juanito481/batcave"
   },
   "engines": {
-    "vscode": "^1.100.0"
+    "vscode": "^1.95.0"
   },
   "categories": [
     "Visualization",
@@ -71,36 +71,6 @@
           "minimum": 0,
           "maximum": 100,
           "description": "Sound volume (0-100)"
-        },
-        "batcave.costBudget": {
-          "type": "number",
-          "default": 0,
-          "minimum": 0,
-          "description": "Session cost budget in USD (0 = no limit). Shows alert when exceeded."
-        },
-        "batcave.role": {
-          "type": "string",
-          "enum": [
-            "master",
-            "member"
-          ],
-          "default": "member",
-          "description": "Team role: master can assign agents and manage schedules."
-        },
-        "batcave.teamServer": {
-          "type": "string",
-          "default": "",
-          "description": "BatCave Command Server URL (e.g. ws://localhost:7777). Leave empty for solo mode."
-        },
-        "batcave.memberName": {
-          "type": "string",
-          "default": "",
-          "description": "Your display name in the team cave. Defaults to OS username."
-        },
-        "batcave.teamToken": {
-          "type": "string",
-          "default": "",
-          "description": "Shared secret token for team server authentication."
         }
       }
     }
@@ -120,7 +90,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "@types/vscode": "^1.100.0",
+    "@types/vscode": "^1.95.0",
     "@types/ws": "^8.18.1",
     "concurrently": "^9.1.0",
     "esbuild": "^0.25.0",

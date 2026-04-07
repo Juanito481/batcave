@@ -18,6 +18,8 @@ export interface RenderContext {
   wallRows: number;
   theme: RepoTheme;
   now: number;
+  /** Claude's current activity state — drives torch flicker speed. */
+  alfredState: "idle" | "thinking" | "writing";
 }
 
 // ── Shared palette (opaque, no transparency) ─────────────
@@ -56,7 +58,11 @@ export function seed(i: number): number {
 
 export function outlineRect(
   ctx: CanvasRenderingContext2D,
-  x: number, y: number, w: number, h: number, zoom: number,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  zoom: number,
 ): void {
   ctx.fillStyle = P.OUTLINE;
   ctx.fillRect(x, y, w, zoom);
@@ -69,7 +75,10 @@ export function outlineRect(
 
 export function contactShadow(
   ctx: CanvasRenderingContext2D,
-  x: number, baseY: number, w: number, zoom: number,
+  x: number,
+  baseY: number,
+  w: number,
+  zoom: number,
 ): void {
   const brd = Math.max(1, Math.round(zoom * 0.5));
   // Primary dark strip.
@@ -77,14 +86,23 @@ export function contactShadow(
   ctx.fillRect(x, baseY, w, brd);
   // Softer secondary strip below.
   ctx.fillStyle = "#0a1018";
-  ctx.fillRect(x + brd, baseY + brd, w - brd * 2, Math.max(1, Math.round(zoom * 0.3)));
+  ctx.fillRect(
+    x + brd,
+    baseY + brd,
+    w - brd * 2,
+    Math.max(1, Math.round(zoom * 0.3)),
+  );
 }
 
 // ── Cast shadow — offset dark projection to the right (light from top-left) ──
 
 export function castShadow(
   ctx: CanvasRenderingContext2D,
-  x: number, baseY: number, w: number, h: number, zoom: number,
+  x: number,
+  baseY: number,
+  w: number,
+  h: number,
+  zoom: number,
 ): void {
   const shadowW = Math.round(w * 0.8);
   const shadowH = Math.round(h * 0.15);
@@ -95,5 +113,10 @@ export function castShadow(
   ctx.fillRect(x + offX, baseY - brd, shadowW, shadowH + brd);
   // Inner shadow (darker core).
   ctx.fillStyle = "#060a10";
-  ctx.fillRect(x + offX + brd, baseY, shadowW - brd * 2, Math.max(1, Math.round(shadowH * 0.6)));
+  ctx.fillRect(
+    x + offX + brd,
+    baseY,
+    shadowW - brd * 2,
+    Math.max(1, Math.round(shadowH * 0.6)),
+  );
 }

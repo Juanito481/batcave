@@ -55,11 +55,23 @@ export interface TodoEvent {
 
 export interface SessionsListEvent {
   type: "sessions_list";
-  sessions: { projectHash: string; label: string; lastActive: number; isCurrent: boolean }[];
+  sessions: {
+    projectHash: string;
+    label: string;
+    lastActive: number;
+    isCurrent: boolean;
+  }[];
   timestamp: number;
 }
 
-export type BatCaveEvent = AgentEvent | ToolEvent | SessionEvent | UsageStats | GitEvent | TodoEvent | SessionsListEvent;
+export type BatCaveEvent =
+  | AgentEvent
+  | ToolEvent
+  | SessionEvent
+  | UsageStats
+  | GitEvent
+  | TodoEvent
+  | SessionsListEvent;
 
 export interface BatCaveConfig {
   activeRepo: string;
@@ -68,18 +80,25 @@ export interface BatCaveConfig {
 
 /** Persisted session summary — saved to VSCode globalState after each session. */
 export interface SessionSummary {
-  id: string;                    // unique session ID
-  repo: string;                  // workspace/repo name
-  startedAt: number;             // epoch ms
-  endedAt: number;               // epoch ms
+  id: string; // unique session ID
+  repo: string; // workspace/repo name
+  startedAt: number; // epoch ms
+  endedAt: number; // epoch ms
   durationMs: number;
   messages: number;
   toolCalls: number;
   agentsSpawned: number;
-  contextPeakPct: number;        // highest context fill seen
+  contextPeakPct: number; // highest context fill seen
   estimatedTokens: number;
   estimatedCostUsd: number;
-  toolBreakdown: { read: number; write: number; bash: number; web: number; agent: number; other: number };
+  toolBreakdown: {
+    read: number;
+    write: number;
+    bash: number;
+    web: number;
+    agent: number;
+    other: number;
+  };
   agentSummaries: AgentSummary[];
   model: string;
 }
@@ -106,15 +125,15 @@ export interface SessionHistoryPayload {
   sessions: SessionSummary[];
 }
 
-/** Cost budget settings payload from extension to webview. */
-export interface CostBudgetPayload {
-  budgetUsd: number;  // 0 = no budget
-}
-
 /** Message from extension host to webview. */
 export interface ExtToWebviewMessage {
-  command: "event" | "reset" | "config" | "sound-settings" | "session-history" | "cost-budget" | "workflows" | "team-stats";
-  payload: BatCaveEvent | BatCaveConfig | SoundSettingsPayload | SessionHistoryPayload | CostBudgetPayload | Record<string, unknown>;
+  command: "event" | "reset" | "config" | "sound-settings" | "session-history";
+  payload:
+    | BatCaveEvent
+    | BatCaveConfig
+    | SoundSettingsPayload
+    | SessionHistoryPayload
+    | Record<string, unknown>;
 }
 
 /** Message from webview to extension host. */
@@ -124,25 +143,86 @@ export type WebviewToExtMessage =
   | { command: "toggleSound" }
   | { command: "launchAgent"; agentId: string }
   | { command: "saveSession"; payload: SessionSummary }
-  | { command: "exportSession" }
-  | { command: "runWorkflow"; workflowId: string }
-  | { command: "pushTeamStats"; payload: unknown }
-  | { command: "requestWorkflows" }
-  | { command: "requestTeamStats" };
+  | { command: "exportSession" };
 
 /** Known Alfred chess-piece agents. */
 export const AGENTS: Record<string, AgentMeta> = {
-  king: { name: "Il Sovrano", emoji: "\u2654", role: "Vision & coherence", color: "white" },
-  queen: { name: "La Stratega", emoji: "\uD83D\uDC51", role: "Business analysis", color: "white" },
-  "white-rook": { name: "La Fortezza", emoji: "\u2656", role: "Security defense", color: "white" },
-  bishop: { name: "Bishop", emoji: "\uD83D\uDD0E", role: "Code review", color: "white" },
-  knight: { name: "L'Architetto", emoji: "\uD83D\uDC34", role: "Architecture & build", color: "white" },
-  pawn: { name: "Il Segretario", emoji: "\u265F\uFE0F", role: "Briefing & status", color: "white" },
-  "black-rook": { name: "Lo Scassinatore", emoji: "\u265C", role: "Red team & pentest", color: "black" },
-  "black-bishop": { name: "Il Demolitore", emoji: "\u265D", role: "Tech debt hunter", color: "black" },
-  "black-knight": { name: "Il Sabotatore", emoji: "\u265E", role: "Chaos & edge cases", color: "black" },
-  chancellor: { name: "Il Cancelliere", emoji: "\u2699\uFE0F", role: "DevOps & infra", color: "variant" },
-  cardinal: { name: "Il Cardinale", emoji: "\uD83E\uDDEA", role: "Testing & QA", color: "variant" },
-  scout: { name: "L'Esploratore", emoji: "\uD83D\uDC41\uFE0F", role: "Browser & visual", color: "specialist" },
-  ship: { name: "La Nave", emoji: "\uD83D\uDEA2", role: "Git commit & push", color: "utility" },
+  king: {
+    name: "Il Sovrano",
+    emoji: "\u2654",
+    role: "Vision & coherence",
+    color: "white",
+  },
+  queen: {
+    name: "La Stratega",
+    emoji: "\uD83D\uDC51",
+    role: "Business analysis",
+    color: "white",
+  },
+  "white-rook": {
+    name: "La Fortezza",
+    emoji: "\u2656",
+    role: "Security defense",
+    color: "white",
+  },
+  bishop: {
+    name: "Bishop",
+    emoji: "\uD83D\uDD0E",
+    role: "Code review",
+    color: "white",
+  },
+  knight: {
+    name: "L'Architetto",
+    emoji: "\uD83D\uDC34",
+    role: "Architecture & build",
+    color: "white",
+  },
+  pawn: {
+    name: "Il Segretario",
+    emoji: "\u265F\uFE0F",
+    role: "Briefing & status",
+    color: "white",
+  },
+  "black-rook": {
+    name: "Lo Scassinatore",
+    emoji: "\u265C",
+    role: "Red team & pentest",
+    color: "black",
+  },
+  "black-bishop": {
+    name: "Il Demolitore",
+    emoji: "\u265D",
+    role: "Tech debt hunter",
+    color: "black",
+  },
+  "black-knight": {
+    name: "Il Sabotatore",
+    emoji: "\u265E",
+    role: "Chaos & edge cases",
+    color: "black",
+  },
+  chancellor: {
+    name: "Il Cancelliere",
+    emoji: "\u2699\uFE0F",
+    role: "DevOps & infra",
+    color: "variant",
+  },
+  cardinal: {
+    name: "Il Cardinale",
+    emoji: "\uD83E\uDDEA",
+    role: "Testing & QA",
+    color: "variant",
+  },
+  scout: {
+    name: "L'Esploratore",
+    emoji: "\uD83D\uDC41\uFE0F",
+    role: "Browser & visual",
+    color: "specialist",
+  },
+  ship: {
+    name: "La Nave",
+    emoji: "\uD83D\uDEA2",
+    role: "Git commit & push",
+    color: "utility",
+  },
 };
