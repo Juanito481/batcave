@@ -284,6 +284,9 @@ function drawOverlayHud(rc: RenderContext): void {
   const chipPillH = dotSize + zoom * 2;
   ctx.fillStyle = "#080c12";
   ctx.fillRect(chipX - zoom, chipY - zoom, chipPillW, chipPillH);
+  // Top accent line — matches bottom-left achievement chip for visual consistency.
+  ctx.fillStyle = theme.accent;
+  ctx.fillRect(chipX - zoom, chipY - zoom, chipPillW, brd);
 
   // State dot.
   ctx.fillStyle = stateColor[state] || "#555566";
@@ -379,6 +382,9 @@ function drawOverlayHud(rc: RenderContext): void {
     chipPillH,
   );
   ctx.restore();
+  // Top accent line — matches TL chip + BL achievement chip.
+  ctx.fillStyle = theme.accent;
+  ctx.fillRect(rightX - rightTotalW, chipY - zoom, rightTotalW + zoom, brd);
 
   // Compose right chip: "HARRIET  opus-4-6  5m 42s" (fields omitted by mode).
   ctx.font = `${smallFont}px ${font}`;
@@ -534,7 +540,93 @@ function drawOverlayHud(rc: RenderContext): void {
     }
   }
 
-  // (Cave depth + achievements removed — decorative, low value)
+  // ── 8. Achievement chip (bottom-left): counter + next-up teaser ──
+  // Placed bottom-left so it doesn't collide with the TL state/streak stack.
+  // Gives late-game players a visible "closest unlock" target — fixes the
+  // flatness felt at high levels where popups stop firing for days.
+  {
+    const total = world.getAchievementTotal();
+    const unlocked = world.getUnlockedAchievements().length;
+    const next = world.getNextAchievement();
+
+    const tierColors: Record<string, string> = {
+      bronze: "#CD7F32",
+      silver: "#C0C0C0",
+      gold: "#FFD700",
+      legendary: "#E74C3C",
+    };
+
+    const chipFont = Math.max(9, zoom * 2.8);
+    const miniFont = Math.max(8, zoom * 2.3);
+    const chipPad = zoom * 2;
+    const baseX = pad;
+    // Height: counter line + (optional next line + progress bar).
+    const lineH = chipFont + zoom * 2;
+    const chipH = next ? lineH * 2 + chipPad * 2 + zoom : lineH + chipPad * 2;
+    const chipW = Math.min(width * 0.38, zoom * 54);
+    const baseY = height - chipH - pad;
+
+    // Background pill.
+    ctx.save();
+    ctx.fillStyle = "#06060c";
+    ctx.globalAlpha = 0.82;
+    ctx.fillRect(baseX, baseY, chipW, chipH);
+    ctx.restore();
+
+    // Top accent line (theme color).
+    ctx.fillStyle = theme.accent;
+    ctx.fillRect(baseX, baseY, chipW, brd);
+
+    // Counter: "★ 9/14"
+    ctx.font = `bold ${chipFont}px ${font}`;
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#FFD700";
+    ctx.fillText("\u2605", baseX + chipPad, baseY + chipPad + chipFont);
+    ctx.fillStyle = "#CCCCDD";
+    const starW = ctx.measureText("\u2605").width;
+    ctx.fillText(
+      `${unlocked}/${total}`,
+      baseX + chipPad + starW + zoom,
+      baseY + chipPad + chipFont,
+    );
+
+    // Next achievement line + progress bar.
+    if (next) {
+      const nextY = baseY + chipPad + lineH + zoom;
+      ctx.font = `${miniFont}px ${font}`;
+      ctx.fillStyle = tierColors[next.tier] || "#888899";
+      ctx.fillText("NEXT", baseX + chipPad, nextY + miniFont);
+      const nextLabelW = ctx.measureText("NEXT").width;
+      ctx.fillStyle = "#CCCCDD";
+      // Truncate name if needed.
+      const maxNameW = chipW - chipPad * 2 - nextLabelW - zoom * 3;
+      let nameText = next.name;
+      while (ctx.measureText(nameText).width > maxNameW && nameText.length > 3) {
+        nameText = nameText.slice(0, -1);
+      }
+      if (nameText !== next.name)
+        nameText = nameText.slice(0, -1) + "\u2026";
+      ctx.fillText(
+        nameText,
+        baseX + chipPad + nextLabelW + zoom * 2,
+        nextY + miniFont,
+      );
+
+      // Progress bar beneath.
+      const barY = nextY + miniFont + zoom;
+      const barW = chipW - chipPad * 2;
+      const barH = Math.max(2, Math.floor(zoom * 0.9));
+      ctx.fillStyle = "#12121e";
+      ctx.fillRect(baseX + chipPad, barY, barW, barH);
+      ctx.fillStyle = tierColors[next.tier] || theme.accent;
+      ctx.fillRect(
+        baseX + chipPad,
+        barY,
+        Math.floor(barW * next.progress),
+        barH,
+      );
+    }
+  }
 
   ctx.textAlign = "left";
 }

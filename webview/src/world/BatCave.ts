@@ -7,7 +7,7 @@ import { Character, IdleStyle } from "../entities/Character";
 import { Ambient } from "../entities/Ambient";
 import { generateAllSprites, SpriteSheet } from "../canvas/SpriteGenerator";
 import { Pathfinder, Rect } from "./Pathfinder";
-import { AgentMeta, UsageStats } from "../../../shared/types";
+import { AgentMeta, UsageStats, AGENTS } from "../../../shared/types";
 import { bus } from "../systems/EventBus";
 import {
   AGENT_PERSONALITIES,
@@ -156,6 +156,20 @@ export class BatCaveWorld {
   alfred: Character;
   giovanni: Character;
   private agents: Map<string, Character> = new Map();
+  /**
+   * Resident roster — always present in the cave.
+   * Spawned on first setDimensions. Never exit on agent_exit events.
+   * Gives the cave life even when no Scacchiera slash commands run.
+   */
+  private readonly RESIDENT_IDS = [
+    "knight",
+    "bishop",
+    "pawn",
+    "oracle",
+    "marshal",
+    "ship",
+  ];
+  private residentsSpawned = false;
 
   // Companion NPC system (Ab, Andrea, Arturo + Francesco).
   private companionSystem!: CompanionSystem;
@@ -530,6 +544,39 @@ export class BatCaveWorld {
     // Propagate new dimensions to subsystems.
     this.behaviorSystem.updateDimensions(w, h, wallH, this._zoom, this._zt);
     this.companionSystem.updateDimensions(w, h, wallH, this._zoom, this._zt);
+
+    // Spawn permanent residents on first layout (requires behaviorSystem zones).
+    if (!this.residentsSpawned) {
+      this.spawnResidents();
+      this.residentsSpawned = true;
+    }
+  }
+
+  /**
+   * Spawn the always-present resident agents. Called once, after layout is known.
+   * Residents share the same Character/behavior pipeline as invoked agents but
+   * are excluded from agent_exit handling so they stay forever.
+   */
+  private spawnResidents(): void {
+    for (const agentId of this.RESIDENT_IDS) {
+      if (this.agents.has(agentId)) continue;
+      const sprite = this.sprites.get(agentId);
+      if (!sprite) continue;
+      const meta = AGENTS[agentId];
+      const slot = this.nextAgentSlot++;
+      const { x, y } = this.getAgentSlotPosition(slot, agentId);
+      const char = new Character(
+        agentId,
+        meta?.name || agentId,
+        meta?.emoji || "?",
+        sprite,
+        x,
+        y,
+      );
+      char.setIdleStyle(this.getIdleStyleForAgent(agentId));
+      this.agents.set(agentId, char);
+      this.behaviorSystem.queueWalkToZone(agentId, { x, y });
+    }
   }
 
   /** Get centralized layout (null before first setDimensions call). */
@@ -703,6 +750,8 @@ export class BatCaveWorld {
 
       case "agent_exit": {
         const agentId = event.agentId as string;
+        // Residents never exit — they're permanent cave life.
+        if (this.RESIDENT_IDS.includes(agentId)) break;
         const char = this.agents.get(agentId);
         if (char) {
           this.logEvent("agent_exit", char.name);
@@ -2133,6 +2182,47 @@ export class BatCaveWorld {
 
   getUnlockedAchievements(): UnlockedAchievement[] {
     return this.unlockedAchievements;
+  }
+
+  /** Total achievements (locked + unlocked) in the public catalog. */
+  getAchievementTotal(): number {
+    return ACHIEVEMENTS.length;
+  }
+
+  /**
+   * Closest-to-unlock achievement for HUD teaser.
+   * Picks the locked achievement with highest current progress (excluding 0).
+   */
+  getNextAchievement(): {
+    id: string;
+    name: string;
+    hint: string;
+    progress: number;
+    tier: string;
+  } | null {
+    const ctx = this.buildAchievementContext();
+    let best: {
+      id: string;
+      name: string;
+      hint: string;
+      progress: number;
+      tier: string;
+    } | null = null;
+    for (const a of ACHIEVEMENTS) {
+      if (this.unlockedAchievements.some((u) => u.id === a.id)) continue;
+      const p = a.progress ? a.progress(ctx) : 0;
+      if (p <= 0) continue;
+      if (!best || p > best.progress) {
+        best = {
+          id: a.id,
+          name: a.name,
+          hint: a.hint ?? a.description,
+          progress: p,
+          tier: a.tier,
+        };
+      }
+    }
+    return best;
   }
 
   setUnlockedAchievements(list: UnlockedAchievement[]): void {

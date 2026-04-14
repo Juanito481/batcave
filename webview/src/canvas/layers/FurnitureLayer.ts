@@ -1026,11 +1026,18 @@ function drawWhiteboard(
   const font = `"DM Mono", monospace`;
   const smallFont = Math.max(8, zoom * 2);
 
-  // Board surface.
-  ctx.fillStyle = "#1e1e30";
+  // Board surface — LED task panel (CRT phosphor, matches Batcomputer aesthetic).
+  // Was cream whiteboard (#e8e4da) but dominated the scene visually; switched to
+  // dark slate + amber text to unify with the other diegetic displays.
+  ctx.fillStyle = "#0a0a14";
   ctx.fillRect(bx, by, bw, bh);
-  ctx.fillStyle = "#e8e4da";
+  ctx.fillStyle = "#12161c";
   ctx.fillRect(bx + zoom, by + zoom, bw - zoom * 2, bh - zoom * 2);
+  // Subtle scanlines.
+  ctx.fillStyle = "#090910";
+  for (let sl = zoom * 2; sl < bh - zoom; sl += zoom * 2) {
+    ctx.fillRect(bx + zoom, by + sl, bw - zoom * 2, Math.max(1, Math.floor(zoom / 2)));
+  }
   outlineRect(ctx, bx, by, bw, bh, zoom);
   // Marker tray.
   ctx.fillStyle = "#1a1a2e";
@@ -1075,7 +1082,7 @@ function drawWhiteboard(
     }
     if (current && lines.length < maxLines) lines.push(current);
 
-    ctx.fillStyle = "#1a1a30";
+    ctx.fillStyle = "#F39C12"; // amber phosphor for priority messages
     for (let l = 0; l < lines.length; l++) {
       ctx.fillText(lines[l], bx + zoom * 2, by + zoom * 3 + l * lineH);
     }
@@ -1115,9 +1122,9 @@ function drawWhiteboard(
         ctx.fillText(`${statusChar} ${label}`, bx + zoom * 2, ty);
       }
     } else {
-      // Fallback: "click to write" hint.
-      ctx.fillStyle = "#999990";
-      ctx.fillText("click to write", bx + zoom * 2, by + Math.floor(bh / 2));
+      // Fallback: "click to write" hint — dim phosphor.
+      ctx.fillStyle = "#2a6a4a";
+      ctx.fillText("> click to write", bx + zoom * 2, by + Math.floor(bh / 2));
     }
   }
 
@@ -1619,12 +1626,97 @@ function drawEvolutionDecorations(
     }
   }
 
+  // Lv25: Lava cracks on the floor.
+  if (prog.hasUpgrade("lava-cracks")) {
+    const crackPulse = Math.sin(now / 600) * 0.5 + 0.5;
+    const core = crackPulse > 0.5 ? "#E74C3C" : "#A43020";
+    const glow = "#F39C12";
+    const baseY = height - zoom * 4;
+    // Three jagged cracks across floor.
+    const segs = [
+      { x: Math.floor(width * 0.18), y: baseY, len: 14 },
+      { x: Math.floor(width * 0.52), y: baseY + zoom * 2, len: 10 },
+      { x: Math.floor(width * 0.78), y: baseY - zoom, len: 12 },
+    ];
+    for (const s of segs) {
+      for (let i = 0; i < s.len; i++) {
+        const jitter = (i % 2 === 0 ? 0 : zoom);
+        ctx.fillStyle = core;
+        ctx.fillRect(s.x + i * zoom, s.y + jitter, zoom, zoom);
+      }
+      // Outer glow dots.
+      ctx.fillStyle = glow;
+      ctx.fillRect(s.x - zoom, s.y, zoom, zoom);
+      ctx.fillRect(s.x + s.len * zoom, s.y + zoom, zoom, zoom);
+    }
+  }
+
+  // Lv30: Bat flock — extra swoop path, purely decorative.
+  // Handled by Ambient spawn boost elsewhere; leave visual hook here for future.
+
   // Lv35: Gold trim on all furniture.
   if (prog.hasUpgrade("gold-trim")) {
     ctx.fillStyle = "#FFD700";
     ctx.fillRect(L.bcX, L.bcY, L.bcW, zoom);
     ctx.fillRect(L.serverX, L.serverY, L.serverW, zoom);
     ctx.fillRect(L.workbenchX, L.workbenchY, L.workbenchW, zoom);
+  }
+
+  // Lv40: Rune floor — ancient glyphs around the Batcomputer, pulsing cyan.
+  if (prog.hasUpgrade("rune-floor")) {
+    const runePulse = Math.sin(now / 900) * 0.5 + 0.5;
+    const rc1 = runePulse > 0.5 ? "#3DD6E8" : "#1E7FD8";
+    const rbaseY = L.bcY + L.bcH + zoom * 4;
+    const runes = [
+      [0, 0], [2, 0], [0, 2], [2, 2], [1, 1], // plus-like
+    ];
+    const anchors = [
+      { x: L.bcX - zoom * 6, y: rbaseY },
+      { x: L.bcX + L.bcW + zoom * 4, y: rbaseY },
+      { x: L.bcX + Math.floor(L.bcW / 2) - zoom * 2, y: rbaseY + zoom * 3 },
+    ];
+    ctx.fillStyle = rc1;
+    for (const a of anchors) {
+      for (const [dx, dy] of runes) {
+        ctx.fillRect(a.x + dx * zoom, a.y + dy * zoom, zoom, zoom);
+      }
+    }
+  }
+
+  // Lv45: Shadow Throne — dark throne in the back-left of the cave.
+  if (prog.hasUpgrade("shadow-throne")) {
+    const tx = Math.floor(width * 0.08);
+    const ty = L.wallH + zoom * 2;
+    const tw = zoom * 8;
+    const th = zoom * 10;
+    // Base.
+    ctx.fillStyle = "#0a0a14";
+    ctx.fillRect(tx, ty, tw, th);
+    // Seat.
+    ctx.fillStyle = "#18182a";
+    ctx.fillRect(tx + zoom, ty + zoom * 5, tw - zoom * 2, zoom * 2);
+    // Back spikes (3 tall pillars).
+    ctx.fillStyle = "#1e1e32";
+    ctx.fillRect(tx, ty, zoom * 2, zoom * 6);
+    ctx.fillRect(tx + Math.floor(tw / 2) - zoom, ty - zoom * 2, zoom * 2, zoom * 8);
+    ctx.fillRect(tx + tw - zoom * 2, ty, zoom * 2, zoom * 6);
+    // Accent glow under seat.
+    const tpulse = Math.sin(now / 700) * 0.5 + 0.5;
+    ctx.fillStyle = tpulse > 0.5 ? "#9B59B6" : "#5a1e80";
+    ctx.fillRect(tx + zoom * 2, ty + th - zoom, tw - zoom * 4, zoom);
+  }
+
+  // Lv50: Legendary cave — golden particle accents near ceiling.
+  if (prog.hasUpgrade("legendary-cave")) {
+    const gpulse = Math.sin(now / 400) * 0.5 + 0.5;
+    ctx.fillStyle = gpulse > 0.5 ? "#FFD700" : "#C89010";
+    const motes = [
+      { x: 0.12, y: 0.08 }, { x: 0.28, y: 0.12 }, { x: 0.46, y: 0.06 },
+      { x: 0.64, y: 0.1 }, { x: 0.82, y: 0.07 }, { x: 0.92, y: 0.14 },
+    ];
+    for (const m of motes) {
+      ctx.fillRect(Math.floor(width * m.x), Math.floor(height * m.y), zoom, zoom);
+    }
   }
 
   // Cave level label (bottom-left).

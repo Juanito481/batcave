@@ -34,8 +34,9 @@ const MAX_LEVEL = 50;
 
 /** XP required to reach each level (index = level, value = cumulative XP). */
 function xpForLevel(level: number): number {
-  // Curve: 20 * level^1.8 — fast early, slow late.
-  return Math.floor(20 * Math.pow(level, 1.8));
+  // Curve: 20 * level^1.55 — fast early, moderate late. Softened from 1.8 after
+  // late-game plateau feedback (level 35+ was 700+ XP per level, felt flat).
+  return Math.floor(20 * Math.pow(level, 1.55));
 }
 
 // ── Cave Upgrades ──────────────────────────────────────
@@ -89,10 +90,28 @@ export const CAVE_UPGRADES: CaveUpgrade[] = [
     description: "Glowing cracks in the floor reveal magma below",
   },
   {
+    level: 30,
+    id: "bat-flock",
+    name: "Bat Flock",
+    description: "A second flock of bats swoops across the cave",
+  },
+  {
     level: 35,
     id: "gold-trim",
     name: "Golden Trim",
     description: "All furniture gets a golden accent border",
+  },
+  {
+    level: 40,
+    id: "rune-floor",
+    name: "Rune Floor",
+    description: "Ancient glyphs glow faintly around the Batcomputer",
+  },
+  {
+    level: 45,
+    id: "shadow-throne",
+    name: "Shadow Throne",
+    description: "A dark throne materializes in the back of the cave",
   },
   {
     level: 50,
