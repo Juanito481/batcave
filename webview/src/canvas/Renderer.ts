@@ -185,6 +185,7 @@ export class Renderer {
       layout: this.layout,
       layoutMode: this.layoutMode,
       verticalMode: this.verticalMode,
+      modelSwitchPulse: this.world.getModelSwitchPulse(),
     };
 
     // Cave shake from CaveReactionSystem (achievement unlock, etc).

@@ -86,6 +86,27 @@ export class CaveReactionSystem {
     this.torchBoostTimer = 3000;
   }
 
+  /**
+   * API error (v5.1+, OTel api_error event) → red wall flash + longer shake.
+   * Severity scales with `isFatal`: true = longer shake (rate limit / fatal),
+   * false = short acknowledgment.
+   */
+  triggerApiError(isFatal: boolean): void {
+    this.state.wallFlashColor = "#E74C3C";
+    this.state.wallFlashTimer = isFatal ? 4000 : 1500;
+    this.shakeTimer = isFatal ? 1200 : 400;
+  }
+
+  /**
+   * Prompt start (v5.1+, OTel user_prompt event) → short torch pulse that
+   * anticipates the incoming work. Lighter than triggerTorchBoost to avoid
+   * competing with agent_enter.
+   */
+  triggerPromptStart(): void {
+    this.state.torchBoost = Math.max(this.state.torchBoost, 1.3);
+    this.torchBoostTimer = Math.max(this.torchBoostTimer, 800);
+  }
+
   // ── Update ──────────────────────────────────────────
 
   /**

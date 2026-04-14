@@ -225,6 +225,9 @@ export class BatCaveWorld {
   private toolResultWindow: boolean[] = []; // true = success, false = failure
   private static readonly TOOL_WINDOW_SIZE = 20; // rolling window size
 
+  // Model switch indicator (Sprint 2.3 Track B). Pulse decays in update().
+  private modelSwitchTimer = 0;
+
   // Git activity — for wall monitor.
   private gitLog: {
     type: "commit" | "push";
@@ -837,7 +840,8 @@ export class BatCaveWorld {
         }
         break;
 
-      case "usage_update":
+      case "usage_update": {
+        const previousModel = this.usageStats?.activeModel;
         this.usageStats = {
           type: "usage_update",
           messagesThisSession: event.messagesThisSession as number,
@@ -850,9 +854,24 @@ export class BatCaveWorld {
         if (this.usageStats.contextFillPct > this.contextPeakPct) {
           this.contextPeakPct = this.usageStats.contextFillPct;
         }
+        // Model switch (Sprint 2.3 Track B): subtle HUD tint pulse
+        // when the active model name changes mid-session.
+        if (
+          previousModel &&
+          previousModel !== this.usageStats.activeModel &&
+          this.usageStats.activeModel
+        ) {
+          this.modelSwitchTimer = 1500;
+          bus.emit("sound:play", { id: "agent-chime" });
+          this.logEvent(
+            "model_switch",
+            `${previousModel} → ${this.usageStats.activeModel}`,
+          );
+        }
         this.checkBatSignal();
         this.ambient.setContextPressure(this.usageStats.contextFillPct);
         break;
+      }
 
       case "git_commit": {
         const msg = (event as Record<string, unknown>).message as string;
@@ -947,6 +966,62 @@ export class BatCaveWorld {
         }
         break;
       }
+
+      // ── v5.1+ OTel-only events (Sprint 2.3 Track B) ─────────
+
+      case "api_error": {
+        const statusCode = String(
+          (event as Record<string, unknown>).statusCode ?? "",
+        );
+        const attempt = Number((event as Record<string, unknown>).attempt ?? 1);
+        // 429 rate limit or after retry exhaustion counts as fatal.
+        const isFatal = statusCode === "429" || attempt > 3;
+        this.caveReactions.triggerApiError(isFatal);
+        if (isFatal) {
+          this.triggerBatSignal(8000);
+          bus.emit("sound:play", { id: "rate-limit" });
+        } else {
+          bus.emit("sound:play", { id: "api-error" });
+        }
+        this.logEvent("api_error", `${statusCode}/attempt${attempt}`);
+        break;
+      }
+
+      case "tool_rejected": {
+        const toolName = String(
+          (event as Record<string, unknown>).toolName ?? "",
+        );
+        this.caveReactions.triggerApiError(false); // re-use short red flash
+        bus.emit("sound:play", { id: "tool-reject" });
+        this.logEvent("tool_rejected", toolName);
+        break;
+      }
+
+      case "prompt_start": {
+        this.caveReactions.triggerPromptStart();
+        // Anticipatory bat swoop on a real OTel signal (the user just
+        // typed something, work is incoming).
+        this.ambient.forceBatSwoop();
+        bus.emit("sound:play", { id: "prompt-start" });
+        break;
+      }
+
+      case "plugin_installed": {
+        const pluginName = String(
+          (event as Record<string, unknown>).pluginName ?? "",
+        );
+        this.caveReactions.triggerShake(); // celebratory shake
+        this.caveReactions.triggerTorchBoost();
+        bus.emit("particle:spawn", {
+          preset: "agent-enter",
+          x: 0.5,
+          y: 0.3,
+          count: 18,
+        });
+        bus.emit("sound:play", { id: "milestone" }); // reuses achievement chime
+        this.logEvent("plugin_installed", pluginName);
+        break;
+      }
     }
   }
 
@@ -970,6 +1045,10 @@ export class BatCaveWorld {
   }
 
   update(deltaMs: number): void {
+    // Model switch indicator decay.
+    if (this.modelSwitchTimer > 0) {
+      this.modelSwitchTimer = Math.max(0, this.modelSwitchTimer - deltaMs);
+    }
     // Cave breathing: thinking doubles drip frequency, writing is normal, idle is calm.
     this.ambient.setStateBoost(this.alfredState === "thinking" ? 0.5 : 1);
     // Fog when context pressure is high (>80%).
@@ -1733,6 +1812,11 @@ export class BatCaveWorld {
   /** Number of tool results currently in the rolling window. */
   getToolSampleSize(): number {
     return this.toolResultWindow.length;
+  }
+
+  /** Model switch pulse strength (0-1, 0 when no recent switch). */
+  getModelSwitchPulse(): number {
+    return this.modelSwitchTimer > 0 ? this.modelSwitchTimer / 1500 : 0;
   }
 
   /** Set session history from extension host. */
@@ -2593,6 +2677,15 @@ export class BatCaveWorld {
     if (pct < 100) {
       this.batSignalShown = false;
     }
+  }
+
+  /**
+   * Force Bat Signal on — used for API rate limit (HTTP 429) and other
+   * fatal error states where context pressure isn't the trigger.
+   */
+  triggerBatSignal(durationMs = 6000): void {
+    this.batSignalShown = true;
+    this.batSignalTimer = Math.max(this.batSignalTimer, durationMs);
   }
 
   // ── Companions + Francesco (delegated to CompanionSystem) ───────────────
