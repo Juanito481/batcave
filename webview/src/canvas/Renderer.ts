@@ -23,6 +23,8 @@ export class Renderer {
   private width = 0;
   private height = 0;
   private layout: CaveLayout | null = null;
+  private layoutMode: "placeholder" | "compact" | "narrow" | "normal" | "wide" = "normal";
+  private verticalMode = false;
 
   private static readonly TILE = 16;
 
@@ -52,16 +54,36 @@ export class Renderer {
     this.width = width;
     this.height = height;
     const T = Renderer.TILE;
-    const zoom = Math.max(
-      2,
-      Math.min(Math.floor(width / (16 * T)), Math.floor(height / (8 * T))),
-    );
+
+    // Responsive layout mode — drives bcTilesW cap and HUD compaction.
+    const layoutMode =
+      width < 300
+        ? "placeholder"
+        : width < 420
+          ? "compact"
+          : width < 700
+            ? "narrow"
+            : width < 1200
+              ? "normal"
+              : "wide";
+
+    // True when canvas is significantly taller than wide (portrait VSCode panel).
+    const verticalMode = height > width * 1.5;
+
+    // Zoom: fit both width (16 cols) and height (8 rows), then allow one extra
+    // step on width to give more horizontal real estate when available.
+    const zoomByWidth = Math.floor(width / (16 * T));
+    const zoomByHeight = Math.floor(height / (8 * T));
+    const zoom = Math.max(2, Math.min(zoomByHeight, zoomByWidth + 1));
+
     const zt = T * zoom;
     const wallRows = height > zt * 10 ? 3 : 2;
     const wallH = wallRows * zt;
     const upgrades = new Set(this.world.getProgression().getUnlockedUpgrades());
-    this.layout = getLayout(width, height, zoom, zt, wallH, upgrades);
-    this.world.setDimensions(width, height, wallH);
+    this.layout = getLayout(width, height, zoom, zt, wallH, upgrades, layoutMode, verticalMode);
+    this.layoutMode = layoutMode;
+    this.verticalMode = verticalMode;
+    this.world.setDimensions(width, height, wallH, verticalMode, layoutMode);
   }
 
   update(deltaMs: number): void {
@@ -110,6 +132,9 @@ export class Renderer {
   }
 
   render(): void {
+    // Placeholder mode: canvas too narrow to render the full cave.
+    if (this.layoutMode === "placeholder") return;
+
     const zoom = this.world.getZoom();
     const zt = this.world.getZt();
     const cols = Math.ceil(this.width / zt) + 1;
@@ -118,7 +143,16 @@ export class Renderer {
     // Recompute layout if not yet initialized (shouldn't happen, but safe fallback).
     if (!this.layout) {
       const upgrades = new Set(this.world.getProgression().getUnlockedUpgrades());
-      this.layout = getLayout(this.width, this.height, zoom, zt, wallRows * zt, upgrades);
+      this.layout = getLayout(
+        this.width,
+        this.height,
+        zoom,
+        zt,
+        wallRows * zt,
+        upgrades,
+        this.layoutMode,
+        this.verticalMode,
+      );
     }
 
     const rc: RenderContext = {
@@ -138,6 +172,8 @@ export class Renderer {
       now: Date.now(),
       alfredState: this.world.getAlfredState(),
       layout: this.layout,
+      layoutMode: this.layoutMode,
+      verticalMode: this.verticalMode,
     };
 
     // Cave shake from CaveReactionSystem (achievement unlock, etc).

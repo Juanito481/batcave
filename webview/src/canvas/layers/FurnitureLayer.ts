@@ -1268,7 +1268,9 @@ export function drawAllFurniture(rc: RenderContext): void {
     }
   }
 
-  drawDisplayPanel(ctx, bcX + bcW + zt, bcY - zt, zt, zoom, now, world);
+  // Use L.displayX (already clamped in layout.ts) — avoids the panel clipping
+  // ~10px past the canvas right edge at wide viewports (1400×900).
+  drawDisplayPanel(ctx, L.displayX, L.displayY, zt, zoom, now, world);
   drawBatcomputer(ctx, bcX, bcY, zt, zoom, bcTilesW, now, world);
 
   // Scala / Exit — bottom-left, 2x2 tile.

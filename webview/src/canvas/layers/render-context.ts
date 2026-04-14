@@ -23,6 +23,10 @@ export interface RenderContext {
   alfredState: "idle" | "thinking" | "writing";
   /** Centralized furniture positions — single source of truth. */
   layout: CaveLayout;
+  /** Responsive layout mode based on canvas width. */
+  layoutMode: "placeholder" | "compact" | "narrow" | "normal" | "wide";
+  /** True when canvas is significantly taller than wide (e.g. portrait panel). */
+  verticalMode: boolean;
 }
 
 // ── Shared palette (opaque, no transparency) ─────────────

@@ -418,22 +418,35 @@ export class BatCaveWorld {
     });
   }
 
-  /** Set canvas dimensions and wall height so we can position characters. */
-  setDimensions(w: number, h: number, wallH: number): void {
+  /** Set canvas dimensions and wall height so we can position characters.
+   *
+   * @param verticalMode - True when canvas height > width * 1.5 (portrait panel).
+   *   Passed through to getLayout so floorY uses the 65% formula instead of 82%.
+   * @param layoutMode - Responsive mode computed in Renderer.resize(); passed to
+   *   getLayout so bcTilesW is correctly capped in compact/narrow layouts, keeping
+   *   Pathfinder obstacleRects consistent with what the renderer actually draws.
+   */
+  setDimensions(
+    w: number,
+    h: number,
+    wallH: number,
+    verticalMode = false,
+    layoutMode: "placeholder" | "compact" | "narrow" | "normal" | "wide" = "normal",
+  ): void {
     this.worldWidth = w;
     this.worldHeight = h;
     this.wallH = wallH;
 
     const T = 16;
-    this._zoom = Math.max(
-      2,
-      Math.min(Math.floor(w / (16 * T)), Math.floor(h / (8 * T))),
-    );
+    // Mirror the zoom formula used in Renderer.resize() for consistency.
+    const zoomByWidth = Math.floor(w / (16 * T));
+    const zoomByHeight = Math.floor(h / (8 * T));
+    this._zoom = Math.max(2, Math.min(zoomByHeight, zoomByWidth + 1));
     this._zt = T * this._zoom;
 
     // Single source of truth for all furniture positions.
     const upgrades = new Set(this.progression.getUnlockedUpgrades());
-    const L = getLayout(w, h, this._zoom, this._zt, wallH, upgrades);
+    const L = getLayout(w, h, this._zoom, this._zt, wallH, upgrades, layoutMode, verticalMode);
     this._layout = L;
 
     // Build obstacle rects from centralized layout.

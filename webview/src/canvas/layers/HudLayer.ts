@@ -230,15 +230,17 @@ function drawOverlayHud(rc: RenderContext): void {
   // XP fill — accent colored.
   ctx.fillStyle = theme.accent;
   ctx.fillRect(0, xpBarY, width * xpProgress, xpBarH);
-  // Level badge (left side).
-  ctx.font = `bold ${Math.max(7, zoom * 2)}px ${font}`;
-  ctx.fillStyle = "#CCCCDD";
-  ctx.textAlign = "left";
-  ctx.fillText(
-    `Lv.${xpLevel}`,
-    zoom * 2,
-    xpBarY + xpBarH + Math.max(7, zoom * 2),
-  );
+  // Level badge — hidden in compact mode (bar alone is enough feedback).
+  if (rc.layoutMode !== "compact") {
+    ctx.font = `bold ${Math.max(7, zoom * 2)}px ${font}`;
+    ctx.fillStyle = "#CCCCDD";
+    ctx.textAlign = "left";
+    ctx.fillText(
+      `Lv.${xpLevel}`,
+      zoom * 2,
+      xpBarY + xpBarH + Math.max(7, zoom * 2),
+    );
+  }
 
   // ── 1c. Floating "+N XP" on gain ──
   const xpGain = prog.getRecentXpGain();
@@ -326,6 +328,7 @@ function drawOverlayHud(rc: RenderContext): void {
   }
 
   // ── 3. Top-right chip: model + session duration + repo ──
+  // compact → duration only; narrow → no repo label; normal/wide → full.
   const rightX = width - pad;
 
   // Model badge.
@@ -341,14 +344,22 @@ function drawOverlayHud(rc: RenderContext): void {
   const secs = Math.floor((elapsed % 60_000) / 1000);
   const durStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
 
+  const showModel = rc.layoutMode !== "compact";
+  const showRepoLabel = rc.layoutMode !== "compact" && rc.layoutMode !== "narrow" && theme.label !== "---";
+
   // Measure right chip total width for background pill.
   const durW = ctx.measureText(durStr).width;
   ctx.fillStyle = "#444458";
-  const modelW = ctx.measureText(modelShort).width;
+  const modelW = showModel ? ctx.measureText(modelShort).width : 0;
   ctx.font = `bold ${smallFont}px ${font}`;
-  const labelW =
-    theme.label !== "---" ? ctx.measureText(theme.label).width + zoom * 3 : 0;
-  const rightTotalW = durW + zoom * 3 + modelW + labelW + zoom * 2;
+  const labelW = showRepoLabel
+    ? ctx.measureText(theme.label).width + zoom * 3
+    : 0;
+  const rightTotalW =
+    durW +
+    (showModel ? zoom * 3 + modelW : 0) +
+    (showRepoLabel ? labelW : 0) +
+    zoom * 2;
 
   // Right chip background pill.
   const rightY = chipY + dotSize - brd;
@@ -363,21 +374,23 @@ function drawOverlayHud(rc: RenderContext): void {
   );
   ctx.restore();
 
-  // Compose right chip: "HARRIET  opus-4-6  5m 42s"
+  // Compose right chip: "HARRIET  opus-4-6  5m 42s" (fields omitted by mode).
   ctx.font = `${smallFont}px ${font}`;
   ctx.textAlign = "right";
   ctx.fillStyle = "#555566";
   ctx.fillText(durStr, rightX, rightY);
 
-  ctx.fillStyle = "#444458";
-  ctx.fillText(modelShort, rightX - durW - zoom * 3, rightY);
+  if (showModel) {
+    ctx.fillStyle = "#444458";
+    ctx.fillText(modelShort, rightX - durW - zoom * 3, rightY);
+  }
 
-  if (theme.label !== "---") {
+  if (showRepoLabel) {
     ctx.fillStyle = theme.accent;
     ctx.font = `bold ${smallFont}px ${font}`;
     ctx.fillText(
       theme.label,
-      rightX - durW - zoom * 3 - modelW - zoom * 3,
+      rightX - durW - (showModel ? zoom * 3 + modelW + zoom * 3 : zoom * 2),
       rightY,
     );
   }
@@ -388,9 +401,16 @@ function drawOverlayHud(rc: RenderContext): void {
     const agentY = chipY + dotSize + zoom * 3;
     let agentX = chipX;
     const agentDot = Math.max(2, zoom);
+    const agentFontSize = Math.max(8, zoom * 2.5);
+    ctx.font = `${agentFontSize}px ${font}`;
 
-    for (let i = 0; i < activeNames.length; i++) {
-      const name = activeNames[i];
+    // Cap visible dots to half the canvas width; show +N badge for overflow.
+    const maxVisible = Math.max(1, Math.floor((width / 2) / (agentDot + zoom * 5)));
+    const visibleNames = activeNames.slice(0, maxVisible);
+    const overflowCount = activeNames.length - visibleNames.length;
+
+    for (let i = 0; i < visibleNames.length; i++) {
+      const name = visibleNames[i];
       // Find agent meta for emoji.
       const agentEntries = Object.entries(AGENTS);
       const meta = agentEntries.find(([_, a]) => a.name === name);
@@ -399,13 +419,21 @@ function drawOverlayHud(rc: RenderContext): void {
       ctx.fillStyle = "#2ECC71";
       ctx.fillRect(agentX, agentY + zoom, agentDot, agentDot);
 
-      // Agent name.
+      // Agent label.
       ctx.fillStyle = "#777790";
-      ctx.font = `${Math.max(8, zoom * 2.5)}px ${font}`;
+      ctx.font = `${agentFontSize}px ${font}`;
       ctx.textAlign = "left";
       const label = meta ? meta[1].emoji : name.slice(0, 3);
       ctx.fillText(label, agentX + agentDot + zoom, agentY + zoom + agentDot);
       agentX += ctx.measureText(label).width + agentDot + zoom * 4;
+    }
+
+    // Overflow badge.
+    if (overflowCount > 0) {
+      ctx.fillStyle = "#444458";
+      ctx.font = `${agentFontSize}px ${font}`;
+      ctx.textAlign = "left";
+      ctx.fillText(`+${overflowCount}`, agentX, agentY + zoom + agentDot);
     }
   }
 
@@ -460,9 +488,17 @@ function drawOverlayHud(rc: RenderContext): void {
       };
       ctx.save();
       ctx.globalAlpha = alertAlpha;
-      // Alert pill background.
+      // Alert pill background — truncate text in compact mode.
       ctx.font = `bold ${Math.max(8, zoom * 2.5)}px ${font}`;
-      const alertText = `${latestAlert.severity === "critical" ? "!" : "i"} ${latestAlert.title}: ${latestAlert.detail}`;
+      const alertFull = `${latestAlert.severity === "critical" ? "!" : "i"} ${latestAlert.title}: ${latestAlert.detail}`;
+      const maxAlertChars =
+        rc.layoutMode === "compact"
+          ? Math.floor(width / (zoom * 2.5))
+          : alertFull.length;
+      const alertText =
+        alertFull.length > maxAlertChars
+          ? alertFull.slice(0, maxAlertChars - 1) + "…"
+          : alertFull;
       const alertTextW = ctx.measureText(alertText).width;
       ctx.fillStyle = "#06060c";
       ctx.fillRect(

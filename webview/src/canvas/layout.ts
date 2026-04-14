@@ -79,6 +79,11 @@ export interface CaveLayout {
   levelPlaques: { x: number; y: number };
   levelFlag: { x: number; y: number };
   repoBanner: { x: number; y: number; w: number; h: number };
+
+  /** Responsive layout mode derived from canvas width. */
+  layoutMode: "placeholder" | "compact" | "narrow" | "normal" | "wide";
+  /** True when canvas is significantly taller than wide (portrait panel). */
+  verticalMode: boolean;
 }
 
 /**
@@ -89,10 +94,13 @@ export interface CaveLayout {
  * @param zoom - Integer zoom factor (min 2).
  * @param zt - Tile size in pixels (16 * zoom).
  * @param wallH - Wall height in pixels.
+ * @param upgrades - Set of unlocked upgrade IDs.
+ * @param layoutMode - Responsive breakpoint derived from width.
+ * @param verticalMode - True when height > width * 1.5 (portrait panel).
  * @returns All furniture positions and dimensions.
  *
  * @example
- * const layout = getLayout(800, 600, 3, 48, 96);
+ * const layout = getLayout(800, 600, 3, 48, 96, new Set(), "normal", false);
  * drawBatcomputer(ctx, layout.bcX, layout.bcY, ...);
  */
 export function getLayout(
@@ -102,11 +110,21 @@ export function getLayout(
   zt: number,
   wallH: number,
   upgrades: ReadonlySet<string> = new Set(),
+  layoutMode: "placeholder" | "compact" | "narrow" | "normal" | "wide" = "normal",
+  verticalMode: boolean = false,
 ): CaveLayout {
   const cols = Math.ceil(width / zt) + 1;
 
-  // Batcomputer — centered, tile-aligned.
-  const bcTilesW = Math.min(5, cols - 2);
+  // Batcomputer — centered, tile-aligned. Cap depends on layout mode.
+  const bcTilesWMax =
+    layoutMode === "compact"
+      ? Math.min(3, cols - 2)
+      : layoutMode === "narrow"
+        ? Math.min(4, cols - 2)
+        : layoutMode === "wide"
+          ? Math.min(8, cols - 2)
+          : Math.min(5, cols - 2); // normal (default)
+  const bcTilesW = Math.max(1, bcTilesWMax);
   const bcW = zt * bcTilesW;
   const bcX = Math.floor((width - bcW) / 2);
   const bcY = wallH + zt;
@@ -115,8 +133,11 @@ export function getLayout(
   const screenAreaW = bcW - screenGap * 4;
   const screenW = Math.floor(screenAreaW / 3);
 
-  // Floor reference (82% of floor area below wall).
-  const floorY = wallH + Math.floor((height - wallH) * 0.82);
+  // Floor reference — 75% down in portrait panels (was 65% — workbench was off-screen
+  // below fold at 380×900), 82% in landscape.
+  const floorY = verticalMode
+    ? wallH + Math.floor((height - wallH) * 0.75)
+    : wallH + Math.floor((height - wallH) * 0.82);
 
   // Server rack — left of Batcomputer.
   const serverX = bcX - zt * 3;
@@ -125,16 +146,19 @@ export function getLayout(
   const serverH = zt * 3;
 
   // Workbench — far left, clamped to stay on-screen.
-  const workbenchX = Math.max(Math.floor(zt * 0.5), bcX - zt * 6);
-  const workbenchY = bcY;
   const workbenchW = zt * 3;
   const workbenchH = Math.floor(zt * 1.5) + zoom * 3;
+  // Clamp so workbench right edge doesn't overlap server rack.
+  const workbenchXRaw = Math.max(Math.floor(zt * 0.5), bcX - zt * 6);
+  const workbenchX = Math.min(workbenchXRaw, serverX - workbenchW - zoom);
+  const workbenchY = bcY;
 
-  // Display panel — right of Batcomputer.
-  const displayX = bcX + bcW + zt;
-  const displayY = bcY - zt;
+  // Display panel — right of Batcomputer; clamped to not overflow canvas.
   const displayW = Math.floor(zt * 2.5);
   const displayH = Math.floor(zt * 1.8);
+  const displayXRaw = bcX + bcW + zt;
+  const displayX = Math.min(displayXRaw, width - displayW - zoom);
+  const displayY = bcY - zt;
 
   // Chair — in front of Batcomputer.
   const chairW = zoom * 6;
@@ -155,16 +179,25 @@ export function getLayout(
   const tcCaseY = Math.max(zoom * 2, Math.floor((wallH - tcCaseH) * 0.3));
 
   // Whiteboard — wall-mounted, center-left, 50% larger than v3.
+  // Clamped so its right edge never reaches bcX (would overlap Batcomputer at
+  // compact/narrow widths where bcX is close to the horizontal midpoint).
   const whiteboardW = Math.floor(zt * 3);
   const whiteboardH = Math.floor(zt * 1.8);
-  const whiteboardX = Math.floor(width * 0.28);
+  const whiteboardXRaw = Math.floor(width * 0.28);
+  const whiteboardX = Math.min(whiteboardXRaw, bcX - whiteboardW - zoom * 2);
   const whiteboardY = Math.floor(wallH * 0.1);
 
-  // Arsenal/weapon rack — right wall (moved from left to avoid trophy case overlap).
+  // Arsenal/weapon rack — right wall; guard against overlap with display panel.
+  const arsenalRackW = Math.floor(zt * 2.2);
+  const arsenalRackX = Math.min(
+    width - Math.floor(zt * 4.5),
+    // Must not overlap display panel (display is to the right of Batcomputer).
+    displayX - arsenalRackW - zoom,
+  );
   const arsenalRack = {
-    x: width - Math.floor(zt * 4.5),
+    x: arsenalRackX,
     y: Math.floor(wallH * 0.3),
-    w: Math.floor(zt * 2.2),
+    w: arsenalRackW,
     h: Math.floor(zt * 1.5),
   };
 
@@ -236,5 +269,7 @@ export function getLayout(
     levelPlaques,
     levelFlag,
     repoBanner,
+    layoutMode,
+    verticalMode,
   };
 }

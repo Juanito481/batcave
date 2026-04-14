@@ -11,6 +11,8 @@ const vscode =
 export function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [ready, setReady] = useState(false);
+  // True when the panel is too small to render the full cave (<300x200).
+  const [isPlaceholder, setIsPlaceholder] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -27,7 +29,7 @@ export function App() {
     const renderer = new Renderer(ctx, world, replay);
     const loop = new GameLoop(renderer);
 
-    // Handle resize.
+    // Handle resize — also toggles placeholder mode for very small panels.
     const resize = () => {
       const parent = canvas.parentElement;
       if (!parent) return;
@@ -35,6 +37,7 @@ export function App() {
       canvas.height = parent.clientHeight;
       ctx.imageSmoothingEnabled = false;
       renderer.resize(canvas.width, canvas.height);
+      setIsPlaceholder(canvas.width < 300 || canvas.height < 200);
     };
 
     resize();
@@ -204,6 +207,7 @@ export function App() {
         position: "relative",
       }}
     >
+      {/* Canvas is always mounted so the ResizeObserver keeps working. */}
       <canvas
         ref={canvasRef}
         style={{
@@ -211,9 +215,12 @@ export function App() {
           width: "100%",
           height: "100%",
           imageRendering: "pixelated",
+          // Hide canvas in placeholder mode — Renderer.render() early-returns anyway,
+          // but keeping the canvas mounted preserves the ResizeObserver reference.
+          visibility: isPlaceholder ? "hidden" : "visible",
         }}
       />
-      {!ready && (
+      {!ready && !isPlaceholder && (
         <div
           style={{
             position: "absolute",
@@ -227,6 +234,26 @@ export function App() {
           }}
         >
           Initializing Bat Cave...
+        </div>
+      )}
+      {/* Minimal placeholder shown when panel is too narrow/short (<300×200). */}
+      {isPlaceholder && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 4,
+            fontFamily: "DM Mono, monospace",
+            fontSize: 10,
+            color: "#444458",
+          }}
+        >
+          <div style={{ width: 6, height: 6, background: "#1E7FD8" }} />
+          <span>BAT CAVE</span>
         </div>
       )}
     </div>
