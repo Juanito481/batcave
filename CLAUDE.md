@@ -6,15 +6,17 @@ VSCode extension — pixel art visualization of Claude Code activity in a Batman
 
 - **Extension host**: TypeScript, esbuild, Node.js
 - **Webview**: React 19, Canvas 2D, Vite
-- **Activity source**: Claude Code JSONL transcripts (`~/.claude/projects/`)
+- **Activity source**: dual — Claude Code JSONL transcripts (`~/.claude/projects/`) + OTel events file (`~/.batcave/otel-events.jsonl`) written by local OTel Collector. See `docs/decisions/0002-otel-consumer.md` and `docs/monitoring-setup.md`.
 - **Sound**: Web Audio API (procedural oscillator synthesis, no audio files)
 
 ## Architecture
 
 ```
 src/
-  extension.ts          — WebviewViewProvider, lifecycle, commands, settings bridge
+  extension.ts          — WebviewViewProvider, lifecycle, commands, settings bridge, monitor orchestration
   activity-monitor.ts   — JSONL polling (500ms), event parsing, agent identification
+  otel-monitor.ts       — OTel events file tail (500ms), OTLP log normalization, BatCaveEvent mapping (v5.0)
+  event-merger.ts       — dedup across JSONL + OTel sources, OTel wins on conflict (v5.0)
   types.ts              — re-export from shared/
 
 shared/
