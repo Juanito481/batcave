@@ -8,7 +8,7 @@
  * Three rule engines:
  * 1. Trigger Rules — event → agent deployment
  * 2. Pattern Learning — historical analysis → auto-suggestions
- * 3. Cost Governor — budget-aware throttling
+ * 3. Failure Governor — alert when tool failure rate spikes (v5.1+)
  */
 
 import { bus } from "./EventBus";
@@ -21,7 +21,7 @@ export const DIRECTOR_COLOR = "#B8A0FF";
 export type TriggerType =
   | "pr_opened"
   | "pr_review_requested"
-  | "cost_threshold"
+  | "failure_rate_threshold"
   | "context_pressure"
   | "error_detected"
   | "pattern_match"
@@ -40,11 +40,17 @@ export interface DirectorDecision {
   trigger: TriggerType;
   triggerDetail: string;
   agentIds: string[];
-  tasks: Map<string, string>;   // agentId → task description
+  tasks: Map<string, string>; // agentId → task description
   priority: "low" | "normal" | "high" | "critical";
   timestamp: number;
-  status: "proposed" | "approved" | "executing" | "completed" | "cancelled" | "overridden";
-  autoApproved: boolean;        // true = Director acted autonomously
+  status:
+    | "proposed"
+    | "approved"
+    | "executing"
+    | "completed"
+    | "cancelled"
+    | "overridden";
+  autoApproved: boolean; // true = Director acted autonomously
 }
 
 export interface TriggerRule {
@@ -54,30 +60,32 @@ export interface TriggerRule {
   condition: (ctx: DirectorContext) => boolean;
   deploy: (ctx: DirectorContext) => { agentId: string; task: string }[];
   priority: DirectorDecision["priority"];
-  autoApprove: boolean;         // false = requires master confirmation
+  autoApprove: boolean; // false = requires master confirmation
 }
 
 export interface DirectorContext {
   // Current session state.
   toolCount: number;
-  costUsd: number;
-  costBudget: number;
+  /** Rolling-window tool failure rate (0-1). Only meaningful when OTel is active. */
+  toolFailureRate: number;
+  /** Size of the rolling window (number of tool_end events with success signal). */
+  toolSampleSize: number;
   contextPct: number;
   activeAgentIds: string[];
-  recentTools: string[];        // last 20 tool names
-  recentFiles: string[];        // last 10 file paths
-  lastGitEvent: string | null;  // "commit", "push", or null
+  recentTools: string[]; // last 20 tool names
+  recentFiles: string[]; // last 10 file paths
+  lastGitEvent: string | null; // "commit", "push", or null
   sessionDurationMs: number;
 
   // Pattern memory.
-  agentSequences: string[][];   // past agent deployment sequences
+  agentSequences: string[][]; // past agent deployment sequences
   fileAgentMap: Map<string, string[]>; // file path → agents that were useful
 }
 
 export interface PatternInsight {
   type: "sequence" | "file_affinity" | "time_pattern";
   description: string;
-  confidence: number;           // 0-1
+  confidence: number; // 0-1
   suggestedAgent: string;
   suggestedTask: string;
 }
@@ -108,13 +116,17 @@ export class Director {
 
   private initDefaultRules(): void {
     this.rules = [
-      // Rule 1: Cost Governor — pause when over 70% budget.
+      // Rule 1: Failure Governor — alert when tool failure rate >= 40% over
+      // a window of at least 10 tool results. Replaces the v5.0 Cost Governor
+      // (removed per the workspace "No Cost Metrics" rule, issue #12). OTel
+      // events are the only source of a reliable success boolean.
       {
-        id: "cost-governor",
-        name: "Cost Governor",
-        trigger: "cost_threshold",
-        condition: (ctx) => ctx.costBudget > 0 && ctx.costUsd >= ctx.costBudget * 0.7,
-        deploy: () => [], // Governor doesn't deploy — it restricts.
+        id: "failure-governor",
+        name: "Failure Governor",
+        trigger: "failure_rate_threshold",
+        condition: (ctx) =>
+          ctx.toolSampleSize >= 10 && ctx.toolFailureRate >= 0.4,
+        deploy: () => [], // Governor doesn't deploy — it surfaces a warning.
         priority: "critical",
         autoApprove: true,
       },
@@ -126,7 +138,10 @@ export class Director {
         trigger: "context_pressure",
         condition: (ctx) => ctx.contextPct >= 85,
         deploy: () => [
-          { agentId: "pawn", task: "Context at critical level. Summarize current state and suggest conversation compaction." },
+          {
+            agentId: "pawn",
+            task: "Context at critical level. Summarize current state and suggest conversation compaction.",
+          },
         ],
         priority: "high",
         autoApprove: false, // needs master approval
@@ -137,15 +152,20 @@ export class Director {
         id: "auth-file-guard",
         name: "Auth File Security Guard",
         trigger: "file_change",
-        condition: (ctx) => ctx.recentFiles.some(f =>
-          /auth|login|password|secret|token|session|jwt|oauth/i.test(f),
-        ),
-        deploy: (ctx) => {
-          const authFile = ctx.recentFiles.find(f =>
+        condition: (ctx) =>
+          ctx.recentFiles.some((f) =>
             /auth|login|password|secret|token|session|jwt|oauth/i.test(f),
-          ) || "auth files";
+          ),
+        deploy: (ctx) => {
+          const authFile =
+            ctx.recentFiles.find((f) =>
+              /auth|login|password|secret|token|session|jwt|oauth/i.test(f),
+            ) || "auth files";
           return [
-            { agentId: "rook", task: `Security review triggered: ${authFile} was modified. Check for vulnerabilities.` },
+            {
+              agentId: "rook",
+              task: `Security review triggered: ${authFile} was modified. Check for vulnerabilities.`,
+            },
           ];
         },
         priority: "high",
@@ -158,11 +178,16 @@ export class Director {
         name: "Bulk Write Review",
         trigger: "pattern_match",
         condition: (ctx) => {
-          const writeCount = ctx.recentTools.filter(t => t === "Edit" || t === "Write").length;
+          const writeCount = ctx.recentTools.filter(
+            (t) => t === "Edit" || t === "Write",
+          ).length;
           return writeCount >= 10;
         },
         deploy: () => [
-          { agentId: "bishop", task: "Large number of file edits detected. Review recent changes for code smells and consistency." },
+          {
+            agentId: "bishop",
+            task: "Large number of file edits detected. Review recent changes for code smells and consistency.",
+          },
         ],
         priority: "normal",
         autoApprove: false,
@@ -175,7 +200,10 @@ export class Director {
         trigger: "file_change",
         condition: (ctx) => ctx.lastGitEvent === "commit",
         deploy: () => [
-          { agentId: "cardinal", task: "New commit detected. Run tests and verify nothing is broken." },
+          {
+            agentId: "cardinal",
+            task: "New commit detected. Run tests and verify nothing is broken.",
+          },
         ],
         priority: "normal",
         autoApprove: true,
@@ -186,15 +214,24 @@ export class Director {
         id: "ui-file-guard",
         name: "UI File Visual Check",
         trigger: "ui_change",
-        condition: (ctx) => ctx.recentFiles.some(f =>
-          /component|\.tsx|\.jsx|\.css|\.scss|ui\/|view|layout|style/i.test(f),
-        ),
+        condition: (ctx) =>
+          ctx.recentFiles.some((f) =>
+            /component|\.tsx|\.jsx|\.css|\.scss|ui\/|view|layout|style/i.test(
+              f,
+            ),
+          ),
         deploy: (ctx) => {
-          const uiFile = ctx.recentFiles.find(f =>
-            /component|\.tsx|\.jsx|\.css|\.scss|ui\/|view|layout|style/i.test(f),
-          ) || "UI files";
+          const uiFile =
+            ctx.recentFiles.find((f) =>
+              /component|\.tsx|\.jsx|\.css|\.scss|ui\/|view|layout|style/i.test(
+                f,
+              ),
+            ) || "UI files";
           return [
-            { agentId: "scout", task: `UI change detected: ${uiFile}. Check visual consistency and responsive layout.` },
+            {
+              agentId: "scout",
+              task: `UI change detected: ${uiFile}. Check visual consistency and responsive layout.`,
+            },
           ];
         },
         priority: "normal",
@@ -206,12 +243,21 @@ export class Director {
         id: "infra-file-guard",
         name: "Infrastructure Change Review",
         trigger: "infra_change",
-        condition: (ctx) => ctx.recentFiles.some(f =>
-          /docker|\.yml|\.yaml|ci\/|\.github|deploy|infra|terraform|k8s|helm/i.test(f),
-        ),
+        condition: (ctx) =>
+          ctx.recentFiles.some((f) =>
+            /docker|\.yml|\.yaml|ci\/|\.github|deploy|infra|terraform|k8s|helm/i.test(
+              f,
+            ),
+          ),
         deploy: () => [
-          { agentId: "chancellor", task: "Infrastructure file modified. Verify CI/CD pipeline and deployment config." },
-          { agentId: "knight", task: "Review infrastructure change for architectural impact." },
+          {
+            agentId: "chancellor",
+            task: "Infrastructure file modified. Verify CI/CD pipeline and deployment config.",
+          },
+          {
+            agentId: "knight",
+            task: "Review infrastructure change for architectural impact.",
+          },
         ],
         priority: "high",
         autoApprove: false,
@@ -222,11 +268,15 @@ export class Director {
         id: "test-file-guard",
         name: "Test File Change",
         trigger: "test_change",
-        condition: (ctx) => ctx.recentFiles.some(f =>
-          /\.test\.|\.spec\.|__test__|__spec__/i.test(f),
-        ),
+        condition: (ctx) =>
+          ctx.recentFiles.some((f) =>
+            /\.test\.|\.spec\.|__test__|__spec__/i.test(f),
+          ),
         deploy: () => [
-          { agentId: "cardinal", task: "Test files modified. Verify all tests pass and coverage is adequate." },
+          {
+            agentId: "cardinal",
+            task: "Test files modified. Verify all tests pass and coverage is adequate.",
+          },
         ],
         priority: "normal",
         autoApprove: true,
@@ -241,7 +291,7 @@ export class Director {
           // Check if the last agent deployment matches a known sequence.
           if (ctx.activeAgentIds.length === 0) return false;
           const lastAgent = ctx.activeAgentIds[ctx.activeAgentIds.length - 1];
-          return this.agentSequenceHistory.some(seq => {
+          return this.agentSequenceHistory.some((seq) => {
             const idx = seq.indexOf(lastAgent);
             return idx >= 0 && idx < seq.length - 1;
           });
@@ -253,7 +303,12 @@ export class Director {
             if (idx >= 0 && idx < seq.length - 1) {
               const nextAgent = seq[idx + 1];
               if (!ctx.activeAgentIds.includes(nextAgent)) {
-                return [{ agentId: nextAgent, task: `Auto-deployed: historically follows ${lastAgent} in your workflow.` }];
+                return [
+                  {
+                    agentId: nextAgent,
+                    task: `Auto-deployed: historically follows ${lastAgent} in your workflow.`,
+                  },
+                ];
               }
             }
           }
@@ -270,10 +325,12 @@ export class Director {
   /** Feed a tool event to the Director. */
   recordTool(toolName: string, filePath: string | null): void {
     this.recentToolBuffer.push(toolName);
-    if (this.recentToolBuffer.length > Director.MAX_RECENT) this.recentToolBuffer.shift();
+    if (this.recentToolBuffer.length > Director.MAX_RECENT)
+      this.recentToolBuffer.shift();
     if (filePath) {
       this.recentFileBuffer.push(filePath);
-      if (this.recentFileBuffer.length > Director.MAX_RECENT) this.recentFileBuffer.shift();
+      if (this.recentFileBuffer.length > Director.MAX_RECENT)
+        this.recentFileBuffer.shift();
     }
   }
 
@@ -281,7 +338,9 @@ export class Director {
   recordGitEvent(type: "commit" | "push"): void {
     this._lastGitEvent = type;
     // Clear after 10s — it's a transient signal.
-    setTimeout(() => { this._lastGitEvent = null; }, 10000);
+    setTimeout(() => {
+      this._lastGitEvent = null;
+    }, 10000);
   }
   private _lastGitEvent: string | null = null;
 
@@ -289,12 +348,23 @@ export class Director {
   recordAgentSequence(agentIds: string[]): void {
     if (agentIds.length >= 2) {
       this.agentSequenceHistory.push([...agentIds]);
-      if (this.agentSequenceHistory.length > 20) this.agentSequenceHistory.shift();
+      if (this.agentSequenceHistory.length > 20)
+        this.agentSequenceHistory.shift();
     }
   }
 
   /** Main tick — called from game loop. Evaluates rules periodically. */
-  update(deltaMs: number, ctx: Omit<DirectorContext, "agentSequences" | "fileAgentMap" | "recentTools" | "recentFiles" | "lastGitEvent">): DirectorDecision[] {
+  update(
+    deltaMs: number,
+    ctx: Omit<
+      DirectorContext,
+      | "agentSequences"
+      | "fileAgentMap"
+      | "recentTools"
+      | "recentFiles"
+      | "lastGitEvent"
+    >,
+  ): DirectorDecision[] {
     if (!this.enabled) return [];
 
     this.checkTimer += deltaMs;
@@ -315,18 +385,25 @@ export class Director {
 
     for (const rule of this.rules) {
       // Skip if already has an active decision for this rule.
-      if (this.decisions.some(d => d.id.startsWith(rule.id) && (d.status === "proposed" || d.status === "executing"))) {
+      if (
+        this.decisions.some(
+          (d) =>
+            d.id.startsWith(rule.id) &&
+            (d.status === "proposed" || d.status === "executing"),
+        )
+      ) {
         continue;
       }
 
       if (rule.condition(fullCtx)) {
         const deployments = rule.deploy(fullCtx);
-        if (deployments.length === 0 && rule.id === "cost-governor") {
+        if (deployments.length === 0 && rule.id === "failure-governor") {
           // Governor emits a special decision with no agents.
+          const pct = Math.round(ctx.toolFailureRate * 100);
           const decision: DirectorDecision = {
             id: `${rule.id}_${Date.now()}`,
             trigger: rule.trigger,
-            triggerDetail: `Cost at $${ctx.costUsd.toFixed(2)} (${Math.round(ctx.costUsd / ctx.costBudget * 100)}% of budget)`,
+            triggerDetail: `Tool failure rate ${pct}% over last ${ctx.toolSampleSize} tools`,
             agentIds: [],
             tasks: new Map(),
             priority: rule.priority,
@@ -348,7 +425,7 @@ export class Director {
             id: `${rule.id}_${Date.now()}`,
             trigger: rule.trigger,
             triggerDetail: rule.name,
-            agentIds: deployments.map(d => d.agentId),
+            agentIds: deployments.map((d) => d.agentId),
             tasks,
             priority: rule.priority,
             timestamp: Date.now(),
@@ -376,27 +453,33 @@ export class Director {
   // ── Decision Management ────────────────────────────────
 
   approveDecision(id: string): void {
-    const d = this.decisions.find(x => x.id === id);
+    const d = this.decisions.find((x) => x.id === id);
     if (d && d.status === "proposed") d.status = "approved";
   }
 
   cancelDecision(id: string): void {
-    const d = this.decisions.find(x => x.id === id);
-    if (d && (d.status === "proposed" || d.status === "approved")) d.status = "cancelled";
+    const d = this.decisions.find((x) => x.id === id);
+    if (d && (d.status === "proposed" || d.status === "approved"))
+      d.status = "cancelled";
   }
 
   overrideDecision(id: string): void {
-    const d = this.decisions.find(x => x.id === id);
+    const d = this.decisions.find((x) => x.id === id);
     if (d) d.status = "overridden";
   }
 
   completeDecision(id: string): void {
-    const d = this.decisions.find(x => x.id === id);
+    const d = this.decisions.find((x) => x.id === id);
     if (d) d.status = "completed";
   }
 
   getActiveDecisions(): DirectorDecision[] {
-    return this.decisions.filter(d => d.status === "proposed" || d.status === "approved" || d.status === "executing");
+    return this.decisions.filter(
+      (d) =>
+        d.status === "proposed" ||
+        d.status === "approved" ||
+        d.status === "executing",
+    );
   }
 
   getAllDecisions(): DirectorDecision[] {
@@ -404,16 +487,28 @@ export class Director {
   }
 
   getPendingApprovals(): DirectorDecision[] {
-    return this.decisions.filter(d => d.status === "proposed" && !d.autoApproved);
+    return this.decisions.filter(
+      (d) => d.status === "proposed" && !d.autoApproved,
+    );
   }
 
   // ── State ──────────────────────────────────────────────
 
-  getState(): DirectorState { return this.state; }
-  isEnabled(): boolean { return this.enabled; }
-  setEnabled(on: boolean): void { this.enabled = on; }
-  getRules(): TriggerRule[] { return this.rules; }
-  getPatterns(): PatternInsight[] { return this.patterns; }
+  getState(): DirectorState {
+    return this.state;
+  }
+  isEnabled(): boolean {
+    return this.enabled;
+  }
+  setEnabled(on: boolean): void {
+    this.enabled = on;
+  }
+  getRules(): TriggerRule[] {
+    return this.rules;
+  }
+  getPatterns(): PatternInsight[] {
+    return this.patterns;
+  }
 
   // ── Internals ──────────────────────────────────────────
 

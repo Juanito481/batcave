@@ -133,7 +133,10 @@ export interface SessionSummary {
   agentsSpawned: number;
   contextPeakPct: number; // highest context fill seen
   estimatedTokens: number;
-  estimatedCostUsd: number;
+  /** Tool failure rate over the session (0-1). OTel-sourced; undefined when OTel inactive. */
+  toolFailureRate?: number;
+  /** Total tool_end events observed with success signal. */
+  toolSampleSize?: number;
   toolBreakdown: {
     read: number;
     write: number;
