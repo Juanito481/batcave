@@ -348,7 +348,10 @@ function drawOverlayHud(rc: RenderContext): void {
   const durStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
 
   const showModel = rc.layoutMode !== "compact";
-  const showRepoLabel = rc.layoutMode !== "compact" && rc.layoutMode !== "narrow" && theme.label !== "---";
+  const showRepoLabel =
+    rc.layoutMode !== "compact" &&
+    rc.layoutMode !== "narrow" &&
+    theme.label !== "---";
 
   // Measure right chip total width for background pill.
   const durW = ctx.measureText(durStr).width;
@@ -384,8 +387,18 @@ function drawOverlayHud(rc: RenderContext): void {
   ctx.fillText(durStr, rightX, rightY);
 
   if (showModel) {
-    ctx.fillStyle = "#444458";
+    // Pulse the model badge for ~1.5s after a model switch (Sprint 2.3 Track B).
+    // Pulse value comes via RenderContext.modelSwitchPulse (0-1, decays linearly).
+    const pulse = rc.modelSwitchPulse ?? 0;
+    if (pulse > 0) {
+      // Lerp from accent blue (active) toward muted gray as pulse decays.
+      ctx.fillStyle = pulse > 0.5 ? theme.accent : "#7080A0";
+      ctx.font = `bold ${smallFont}px ${font}`;
+    } else {
+      ctx.fillStyle = "#444458";
+    }
     ctx.fillText(modelShort, rightX - durW - zoom * 3, rightY);
+    ctx.font = `${smallFont}px ${font}`; // restore default for callers below
   }
 
   if (showRepoLabel) {
@@ -408,7 +421,10 @@ function drawOverlayHud(rc: RenderContext): void {
     ctx.font = `${agentFontSize}px ${font}`;
 
     // Cap visible dots to half the canvas width; show +N badge for overflow.
-    const maxVisible = Math.max(1, Math.floor((width / 2) / (agentDot + zoom * 5)));
+    const maxVisible = Math.max(
+      1,
+      Math.floor(width / 2 / (agentDot + zoom * 5)),
+    );
     const visibleNames = activeNames.slice(0, maxVisible);
     const overflowCount = activeNames.length - visibleNames.length;
 

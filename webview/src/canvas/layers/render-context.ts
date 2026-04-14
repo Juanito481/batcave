@@ -27,6 +27,8 @@ export interface RenderContext {
   layoutMode: "placeholder" | "compact" | "narrow" | "normal" | "wide";
   /** True when canvas is significantly taller than wide (e.g. portrait panel). */
   verticalMode: boolean;
+  /** Model switch pulse strength (0-1, 0 when no recent switch). v5.1+. */
+  modelSwitchPulse?: number;
 }
 
 // ── Shared palette (opaque, no transparency) ─────────────
@@ -50,7 +52,7 @@ export const P = {
   LED_COLORS: ["#2ECC71", "#1E7FD8", "#E74C3C", "#F39C12", "#2ECC71"],
   // Herald visibility — furniture chrome.
   FURNITURE_OUTLINE: "#0f3f6c", // accent at ~50% for furniture outlines
-  FURNITURE_BG: "#141428",      // one step above BG for furniture fills (P2)
+  FURNITURE_BG: "#141428", // one step above BG for furniture fills (P2)
 } as const;
 
 // ── Seeded random (deterministic procedural detail) ──────

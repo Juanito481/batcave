@@ -20,7 +20,12 @@ type SoundId =
   | "interaction-chime"
   | "milestone"
   | "commit-fanfare"
-  | "push-sweep";
+  | "push-sweep"
+  // v5.1+ OTel-driven sounds (Sprint 2.3 Track B).
+  | "api-error"
+  | "rate-limit"
+  | "tool-reject"
+  | "prompt-start";
 
 export class SoundSystem {
   private ctx: AudioContext | null = null;
@@ -162,6 +167,26 @@ export class SoundSystem {
       case "push-sweep":
         // Ascending sweep — rocket launch feeling.
         this.playSlide(ctx, gain, 200, 1200, 0.3, v * 0.2);
+        break;
+      case "api-error":
+        // Sharp short descend — recoverable error acknowledgment.
+        this.playSlide(ctx, gain, 660, 220, 0.18, v * 0.25);
+        break;
+      case "rate-limit":
+        // Long ominous descend — hit the wall.
+        this.playSlide(ctx, gain, 440, 110, 0.6, v * 0.3);
+        break;
+      case "tool-reject":
+        // Two short low taps — Giovanni shaking head.
+        this.playTone(ctx, gain, 180, "square", 0.06, v * 0.2);
+        setTimeout(
+          () => this.playTone(ctx, gain, 180, "square", 0.06, v * 0.2),
+          90,
+        );
+        break;
+      case "prompt-start":
+        // Light ascending blip — work incoming.
+        this.playSlide(ctx, gain, 800, 1200, 0.08, v * 0.12);
         break;
     }
   }
