@@ -92,6 +92,29 @@ export class Character {
     this.idleStyle = style;
   }
 
+  /**
+   * Hot-swap the sprite sheet (e.g. when PNG assets finish loading after the
+   * procedural fallback was installed at spawn time).
+   */
+  setSprite(sprite: SpriteSheet): void {
+    this.sprite = sprite;
+  }
+
+  // ── Polymorph cycle ────────────────────────────────────
+  // Polymorph rotates between multiple monster sprite sheets to literally
+  // shift shape. Each cycle step swaps the active sheet.
+  private polymorphCycle: SpriteSheet[] | null = null;
+  private polymorphIndex = 0;
+  private polymorphTimer = 0;
+  private readonly POLYMORPH_STEP_MS = 900;
+
+  setPolymorphCycle(sheets: SpriteSheet[]): void {
+    if (sheets.length === 0) return;
+    this.polymorphCycle = sheets;
+    this.polymorphIndex = 0;
+    this.sprite = sheets[0];
+  }
+
   /** Start the enter animation (fade in from bottom). */
   enter(targetX: number, targetY: number): void {
     this.state = "entering";
@@ -156,6 +179,17 @@ export class Character {
   }
 
   update(deltaMs: number): void {
+    // Polymorph shape-shift: cycle through creature sprite sheets.
+    if (this.polymorphCycle) {
+      this.polymorphTimer += deltaMs;
+      if (this.polymorphTimer >= this.POLYMORPH_STEP_MS) {
+        this.polymorphTimer = 0;
+        this.polymorphIndex =
+          (this.polymorphIndex + 1) % this.polymorphCycle.length;
+        this.sprite = this.polymorphCycle[this.polymorphIndex];
+      }
+    }
+
     // Handle enter animation.
     if (this.state === "entering") {
       this.enterTimer += deltaMs;

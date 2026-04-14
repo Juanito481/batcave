@@ -6,8 +6,23 @@
 import { Character, IdleStyle } from "../entities/Character";
 import { Ambient } from "../entities/Ambient";
 import { generateAllSprites, SpriteSheet } from "../canvas/SpriteGenerator";
+import {
+  loadAgentSheet,
+  loadPolymorphCreatures,
+} from "../canvas/AssetSpriteLoader";
 import { Pathfinder, Rect } from "./Pathfinder";
 import { AgentMeta, UsageStats, AGENTS } from "../../../shared/types";
+
+/**
+ * English display name for an agent in the Batcave.
+ * Uses the agentId capitalized ("knight" → "Knight") rather than the canonical
+ * Italian `meta.name` ("L'Architetto"). Giovanni learns codenames faster this way
+ * and keeps the scene playful across all surfaces.
+ */
+function displayName(agentId: string, _meta?: AgentMeta): string {
+  if (!agentId) return "?";
+  return agentId.charAt(0).toUpperCase() + agentId.slice(1);
+}
 import { bus } from "../systems/EventBus";
 import {
   AGENT_PERSONALITIES,
@@ -161,14 +176,7 @@ export class BatCaveWorld {
    * Spawned on first setDimensions. Never exit on agent_exit events.
    * Gives the cave life even when no Scacchiera slash commands run.
    */
-  private readonly RESIDENT_IDS = [
-    "knight",
-    "bishop",
-    "pawn",
-    "oracle",
-    "marshal",
-    "ship",
-  ];
+  private readonly RESIDENT_IDS = ["knight", "bishop", "pawn", "oracle"];
   private residentsSpawned = false;
 
   // Companion NPC system (Ab, Andrea, Arturo + Francesco).
@@ -567,7 +575,7 @@ export class BatCaveWorld {
       const { x, y } = this.getAgentSlotPosition(slot, agentId);
       const char = new Character(
         agentId,
-        meta?.name || agentId,
+        displayName(agentId, meta),
         meta?.emoji || "?",
         sprite,
         x,
@@ -701,7 +709,7 @@ export class BatCaveWorld {
         const entranceY = slotY;
         const char = new Character(
           agentId,
-          meta?.name || agentId,
+          displayName(agentId, meta),
           meta?.emoji || "?",
           sprite,
           entranceX,
@@ -712,11 +720,11 @@ export class BatCaveWorld {
         // Queue walk to actual zone position after enter animation.
         this.behaviorSystem.queueWalkToZone(agentId, { x: slotX, y: slotY });
         this.agents.set(agentId, char);
-        this.logEvent("agent_enter", meta?.name || agentId);
+        this.logEvent("agent_enter", displayName(agentId, meta));
         this.audit(
           "agent",
           "agent_enter",
-          `${meta?.emoji || "?"} ${meta?.name || agentId} entered`,
+          `${meta?.emoji || "?"} ${displayName(agentId, meta)} entered`,
           { agentId },
         );
         this._agentPulseStart = Date.now();
@@ -725,13 +733,13 @@ export class BatCaveWorld {
         this.behaviorSystem.reactToAgentEnter(agentId, this.agents);
         this.trackAgentHistory(
           agentId,
-          meta?.name || agentId,
+          displayName(agentId, meta),
           meta?.emoji || "?",
           "enter",
         );
         this.trackAgentEnter(
           agentId,
-          meta?.name || agentId,
+          displayName(agentId, meta),
           meta?.emoji || "?",
         );
         bus.emit("agent:enter", { agentId, x: slotX, y: slotY });
@@ -1074,11 +1082,21 @@ export class BatCaveWorld {
     }
   }
 
+  /** Cycle of polymorph creature sprites, swapped every ~600ms by Character. */
+  polymorphSprites: SpriteSheet[] = [];
+
   setConfig(config: Record<string, unknown>): void {
     this.config = config as {
       agents?: Record<string, AgentMeta>;
       activeRepo?: string;
+      spritesBaseUri?: string;
     };
+    // Swap procedural sprites for PNG assets if available. Best-effort —
+    // missing assets keep the procedural fallback so nothing regresses.
+    const baseUri = (this.config as { spritesBaseUri?: string }).spritesBaseUri;
+    if (baseUri) {
+      this.loadAssetSprites(baseUri);
+    }
     // Resolve repo theme.
     const repo = this.config.activeRepo?.toLowerCase() || "";
     this.repoTheme = REPO_THEMES[repo] || DEFAULT_THEME;
@@ -1091,6 +1109,39 @@ export class BatCaveWorld {
         }
       }
     }
+  }
+
+  /**
+   * Replace procedural sprites with PNG assets composed by compose-sprites.mjs.
+   * Any agent with an available asset is swapped in-place; the rest keep the
+   * procedural fallback so we never regress if a file is missing.
+   */
+  private async loadAssetSprites(baseUri: string): Promise<void> {
+    const ids = [...this.sprites.keys()];
+    const updated: string[] = [];
+    await Promise.all(
+      ids.map(async (id) => {
+        const sheet = await loadAgentSheet(baseUri, id);
+        if (sheet) {
+          this.sprites.set(id, sheet);
+          // Swap sprite on any already-spawned character with this id.
+          const char = this.agents.get(id);
+          if (char) char.setSprite(sheet);
+          if (id === "alfred") this.alfred.setSprite(sheet);
+          if (id === "giovanni") this.giovanni.setSprite(sheet);
+          updated.push(id);
+        }
+      }),
+    );
+    // Polymorph cycle (8 creatures).
+    this.polymorphSprites = await loadPolymorphCreatures(baseUri);
+    if (this.polymorphSprites.length > 0) {
+      const poly = this.agents.get("polymorph");
+      if (poly) poly.setPolymorphCycle(this.polymorphSprites);
+    }
+    console.log(
+      `[batcave] swapped ${updated.length} agent sprites + ${this.polymorphSprites.length} polymorph variants`,
+    );
   }
 
   update(deltaMs: number): void {

@@ -14,3 +14,5 @@ package-lock.json
 *.map
 .DS_Store
 CLAUDE.md
+assets-raw/
+scripts/

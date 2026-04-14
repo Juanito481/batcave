@@ -466,11 +466,17 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
   private sendConfig(): void {
     const workspaceName =
       vscode.workspace.workspaceFolders?.[0]?.name || "unknown";
+    const spritesBaseUri = this.view?.webview
+      .asWebviewUri(
+        vscode.Uri.joinPath(this.extensionUri, "webview", "assets", "sprites"),
+      )
+      .toString();
     this.view?.webview.postMessage({
       command: "config",
       payload: {
         activeRepo: workspaceName,
         agents: AGENTS,
+        spritesBaseUri,
       },
     });
     this.sendSoundSettings();
