@@ -51,32 +51,40 @@ webview/src/
 
 - **Alfred (Claude)** — butler, palette: dark tailcoat + white accent. Permanent.
 - **Giovanni (Batman)** — cowl, palette: grey/black + accent blue #1E7FD8. Permanent. Goes to Batcomputer periodically.
-- **13 Scacchiera agents** — appear/disappear when invoked via Skill/Agent tools. Each has unique sprite, zone, behavior, and quips.
+- **21 Scacchiera agents** — appear/disappear when invoked via Skill/Agent tools. Each has unique sprite palette, zone, behavior, and quips. Roster canonico in `Docs/agents-scacchiera.md` del workspace.
 
-## Agent Personality System (v2.0.0)
+## Agent Personality System (v4.2.0)
 
-Each of the 13 chess-piece agents has:
+Each of the 21 chess-piece agents has:
 
 - **Unique body archetype**: 12 distinct pixel-art silhouettes (caped, robed, armored, coated, hooded, heavy, glitch, labcoat, geared, compact, naval, standard)
 - **Preferred zone**: agents go to their meaningful area (server rack, workbench, display panel, batcomputer, patrol, follow Alfred, entrance)
 - **Idle behavior**: signature actions when not working (guard, inspect, pace, follow, lurk, chaos, etc.)
 - **Quips**: 4 personality-specific speech lines shown in bubbles every 20-40s idle
 
-| Agent        | Body     | Zone        | Behavior |
-| ------------ | -------- | ----------- | -------- |
-| King         | caped    | batcomputer | survey   |
-| Queen        | robed    | batcomputer | pace     |
-| White Rook   | armored  | server      | guard    |
-| Bishop       | coated   | workbench   | inspect  |
-| Knight       | standard | batcomputer | draft    |
-| Pawn         | compact  | follow      | note     |
-| Black Rook   | hooded   | server      | lurk     |
-| Black Bishop | heavy    | patrol      | demolish |
-| Black Knight | glitch   | patrol      | chaos    |
-| Chancellor   | standard | server      | maintain |
-| Cardinal     | labcoat  | workbench   | test     |
-| Scout        | geared   | display     | scan     |
-| Ship         | naval    | entrance    | standby  |
+| Agent      | Body     | Zone        | Behavior |
+| ---------- | -------- | ----------- | -------- |
+| King       | caped    | batcomputer | survey   |
+| Queen      | robed    | batcomputer | pace     |
+| Heretic    | glitch   | patrol      | chaos    |
+| Knight     | standard | batcomputer | draft    |
+| Weaver     | standard | server      | maintain |
+| Sculptor   | labcoat  | workbench   | draft    |
+| Herald     | coated   | display     | inspect  |
+| Bishop     | coated   | workbench   | inspect  |
+| Cardinal   | labcoat  | workbench   | test     |
+| Scout      | geared   | display     | scan     |
+| Specter    | heavy    | patrol      | demolish |
+| Rook       | armored  | server      | guard    |
+| Marauder   | hooded   | server      | lurk     |
+| Marshal    | armored  | batcomputer | survey   |
+| Chancellor | standard | server      | maintain |
+| Ship       | naval    | entrance    | standby  |
+| Pawn       | compact  | follow      | note     |
+| Oracle     | robed    | display     | scan     |
+| Thief      | hooded   | entrance    | lurk     |
+| Polymorph  | glitch   | patrol      | chaos    |
+| Loop       | compact  | patrol      | pace     |
 
 ## Systems
 

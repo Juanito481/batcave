@@ -44,7 +44,7 @@ export const AGENT_CHIMES: Record<string, AgentChime> = {
     volume: 0.2,
   },
   // White Rook — heavy power chord, low E2-B2.
-  "white-rook": {
+  rook: {
     notes: [82, 123],
     type: "square",
     noteDuration: 0.2,
@@ -76,7 +76,7 @@ export const AGENT_CHIMES: Record<string, AgentChime> = {
     volume: 0.15,
   },
   // Black Rook — ominous low slide, Eb2-Bb1.
-  "black-rook": {
+  marauder: {
     notes: [78, 58],
     type: "sawtooth",
     noteDuration: 0.25,
@@ -84,7 +84,7 @@ export const AGENT_CHIMES: Record<string, AgentChime> = {
     volume: 0.2,
   },
   // Black Bishop — dissonant minor second, B3-C4.
-  "black-bishop": {
+  specter: {
     notes: [247, 262],
     type: "square",
     noteDuration: 0.2,
@@ -92,7 +92,7 @@ export const AGENT_CHIMES: Record<string, AgentChime> = {
     volume: 0.18,
   },
   // Black Knight — chaotic staccato, random-feeling but fixed: F#4-C5-Ab4.
-  "black-knight": {
+  heretic: {
     notes: [370, 523, 415],
     type: "sawtooth",
     noteDuration: 0.06,
@@ -130,5 +130,69 @@ export const AGENT_CHIMES: Record<string, AgentChime> = {
     noteDuration: 0.35,
     noteGap: 0,
     volume: 0.2,
+  },
+  // Herald — fanfare, C5-E5-G5.
+  herald: {
+    notes: [523, 659, 784],
+    type: "triangle",
+    noteDuration: 0.09,
+    noteGap: 0.04,
+    volume: 0.18,
+  },
+  // Sculptor — chisel tap, A5 double.
+  sculptor: {
+    notes: [880, 880],
+    type: "triangle",
+    noteDuration: 0.06,
+    noteGap: 0.08,
+    volume: 0.16,
+  },
+  // Weaver — loom shuttle, F4-A4 alternation.
+  weaver: {
+    notes: [349, 440, 349, 440],
+    type: "sine",
+    noteDuration: 0.08,
+    noteGap: 0.05,
+    volume: 0.15,
+  },
+  // Marshal — bugle call, G3-C4-E4-G4.
+  marshal: {
+    notes: [196, 262, 330, 392],
+    type: "sawtooth",
+    noteDuration: 0.1,
+    noteGap: 0.05,
+    volume: 0.22,
+  },
+  // Polymorph — shape-shift slide, random-feeling dyad E4-Bb4.
+  polymorph: {
+    notes: [330, 466],
+    type: "triangle",
+    noteDuration: 0.1,
+    noteGap: 0.04,
+    volume: 0.17,
+  },
+  // Thief — sneaky minor descent, G4-F4-Eb4.
+  thief: {
+    notes: [392, 349, 311],
+    type: "sine",
+    noteDuration: 0.07,
+    noteGap: 0.03,
+    volume: 0.14,
+  },
+  // Oracle — celestial chord, D5-F#5-A5.
+  oracle: {
+    notes: [587, 740, 880],
+    type: "sine",
+    noteDuration: 0.16,
+    noteGap: 0.02,
+    volume: 0.18,
+  },
+  // Loop — cyclic pulse, C5-C5-C5.
+  loop: {
+    notes: [523, 523, 523],
+    type: "square",
+    noteDuration: 0.05,
+    noteGap: 0.08,
+    volume: 0.14,
   },
 };

@@ -125,7 +125,7 @@ describe("ActivityMonitor", () => {
         type: "assistant",
         message: {
           content: [makeToolUseBlock("Agent", "tool-2", {
-            description: "Launch black-knight for chaos testing",
+            description: "Launch heretic for chaos testing",
             prompt: "test edge cases",
           })],
         },
@@ -133,7 +133,7 @@ describe("ActivityMonitor", () => {
 
       const enters = events.filter((e) => e.type === "agent_enter");
       expect(enters).toHaveLength(1);
-      expect((enters[0] as any).agentId).toBe("black-knight");
+      expect((enters[0] as any).agentId).toBe("heretic");
     });
 
     it("identifies agent from Italian name in prompt", () => {
@@ -149,7 +149,7 @@ describe("ActivityMonitor", () => {
 
       const enters = events.filter((e) => e.type === "agent_enter");
       expect(enters).toHaveLength(1);
-      expect((enters[0] as any).agentId).toBe("white-rook");
+      expect((enters[0] as any).agentId).toBe("rook");
     });
 
     it("does not false-positive on partial word matches", () => {

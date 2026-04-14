@@ -31,7 +31,7 @@ export interface CompanionState {
  * Agent IDs that trigger Francesco's appearance when active.
  * Francesco is the CTO auditor — he shows up when audit-related agents arrive.
  */
-export const AUDIT_AGENTS = ["bishop", "black-bishop", "white-rook"];
+export const AUDIT_AGENTS = ["bishop", "specter", "rook"];
 
 /** Sprites and layout dependencies CompanionSystem needs from BatCave. */
 export interface CompanionDeps {

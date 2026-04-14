@@ -16,14 +16,23 @@ import { WebSocketServer, WebSocket } from "ws";
 import * as fs from "fs";
 import * as path from "path";
 import {
-  PoolAgent, TeamMember, ClientMessage, ServerMessage,
-  PoolAgentStatus, QueuedTask, MemberRole,
-  DEFAULT_PORT, HEARTBEAT_INTERVAL_MS, POOL_AGENT_IDS,
+  PoolAgent,
+  TeamMember,
+  ClientMessage,
+  ServerMessage,
+  PoolAgentStatus,
+  QueuedTask,
+  MemberRole,
+  DEFAULT_PORT,
+  HEARTBEAT_INTERVAL_MS,
+  POOL_AGENT_IDS,
 } from "../shared/protocol";
 
 // ── Persistence ─────────────────────────────────────────
 
-const STATE_FILE = process.env.BATCAVE_STATE_FILE || path.join(__dirname, "..", "batcave-server-state.json");
+const STATE_FILE =
+  process.env.BATCAVE_STATE_FILE ||
+  path.join(__dirname, "..", "batcave-server-state.json");
 const SAVE_DEBOUNCE_MS = 2000;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -70,7 +79,12 @@ function initPool(): void {
     for (const a of saved.agents) {
       // Reset transient fields — working agents go idle on restart.
       if (a.status === "working" || a.status === "assigned") {
-        a.status = a.queue.length > 0 ? "assigned" : (a.schedule?.enabled ? "scheduled" : "idle");
+        a.status =
+          a.queue.length > 0
+            ? "assigned"
+            : a.schedule?.enabled
+              ? "scheduled"
+              : "idle";
         a.assignedTo = null;
         a.currentTask = null;
         a.taskStartedAt = null;
@@ -81,20 +95,35 @@ function initPool(): void {
     return;
   }
 
-  const agentMeta: Record<string, { name: string; emoji: string; role: string }> = {
-    king:           { name: "Il Sovrano",       emoji: "♔", role: "Vision & coherence" },
-    queen:          { name: "La Stratega",      emoji: "👑", role: "Business analysis" },
-    "white-rook":   { name: "La Fortezza",      emoji: "♖", role: "Security defense" },
-    bishop:         { name: "Bishop",           emoji: "🔎", role: "Code review" },
-    knight:         { name: "L'Architetto",     emoji: "🐴", role: "Architecture" },
-    pawn:           { name: "Il Segretario",    emoji: "♟️", role: "Briefing & status" },
-    "black-rook":   { name: "Lo Scassinatore",  emoji: "♜", role: "Red team & pentest" },
-    "black-bishop": { name: "Il Demolitore",    emoji: "♝", role: "Tech debt hunter" },
-    "black-knight": { name: "Il Sabotatore",    emoji: "♞", role: "Chaos & edge cases" },
-    chancellor:     { name: "Il Cancelliere",   emoji: "⚙️", role: "DevOps & infra" },
-    cardinal:       { name: "Il Cardinale",     emoji: "🧪", role: "Testing & QA" },
-    scout:          { name: "L'Esploratore",    emoji: "👁️", role: "Browser & visual" },
-    ship:           { name: "La Nave",          emoji: "🚢", role: "Git commit & push" },
+  const agentMeta: Record<
+    string,
+    { name: string; emoji: string; role: string }
+  > = {
+    king: { name: "Il Sovrano", emoji: "♔", role: "Vision & coherence" },
+    queen: { name: "La Stratega", emoji: "👑", role: "Business analysis" },
+    heretic: { name: "L'Eretico", emoji: "♞", role: "Antifragile audit" },
+    knight: { name: "L'Architetto", emoji: "🐴", role: "Architecture & build" },
+    weaver: { name: "Il Tessitore", emoji: "🧵", role: "Backend & data" },
+    sculptor: { name: "Lo Scultore", emoji: "🎨", role: "Frontend & UI" },
+    herald: { name: "L'Araldo", emoji: "📣", role: "Design system" },
+    bishop: { name: "Bishop", emoji: "🔎", role: "Code review" },
+    cardinal: { name: "Il Cardinale", emoji: "🧪", role: "Testing & QA" },
+    scout: { name: "L'Esploratore", emoji: "👁️", role: "Browser & visual" },
+    specter: { name: "Lo Spettro", emoji: "♝", role: "Tech debt hunter" },
+    rook: { name: "La Fortezza", emoji: "♖", role: "Security defense" },
+    marauder: { name: "Il Razziatore", emoji: "♜", role: "Red team & pentest" },
+    marshal: {
+      name: "Il Maresciallo",
+      emoji: "📜",
+      role: "Chain orchestrator",
+    },
+    chancellor: { name: "Il Cancelliere", emoji: "⚙️", role: "DevOps & infra" },
+    ship: { name: "La Nave", emoji: "🚢", role: "Git commit & push" },
+    pawn: { name: "Il Segretario", emoji: "♟️", role: "Briefing & status" },
+    oracle: { name: "L'Informatrice", emoji: "🔮", role: "Knowledge graph" },
+    thief: { name: "Il Ladro", emoji: "🏴‍☠️", role: "External scouting" },
+    polymorph: { name: "Il Mutaforma", emoji: "🎭", role: "Ad-hoc expertise" },
+    loop: { name: "Il Ciclo", emoji: "🔁", role: "Ralph loop" },
   };
 
   for (const id of POOL_AGENT_IDS) {
@@ -126,7 +155,11 @@ function broadcast(msg: ServerMessage, except?: string): void {
     }
   }
   // Persist state on agent changes.
-  if (msg.type === "agent_updated" || msg.type === "task_assigned" || msg.type === "task_completed") {
+  if (
+    msg.type === "agent_updated" ||
+    msg.type === "task_assigned" ||
+    msg.type === "task_completed"
+  ) {
     saveState();
   }
 }
@@ -141,7 +174,7 @@ function getFullState(): ServerMessage {
   return {
     type: "state",
     agents: Array.from(agents.values()),
-    members: Array.from(members.values()).map(m => m.member),
+    members: Array.from(members.values()).map((m) => m.member),
   };
 }
 
@@ -174,7 +207,11 @@ function sanitize(s: unknown): string {
   return s.replace(/[\x00-\x1f\x7f]/g, "").slice(0, MAX_STRING_LEN);
 }
 
-function handleMessage(clientId: string, ws: WebSocket, msg: ClientMessage): void {
+function handleMessage(
+  clientId: string,
+  ws: WebSocket,
+  msg: ClientMessage,
+): void {
   // Rate limiting.
   if (isRateLimited(clientId)) {
     send(ws, { type: "error", message: "Rate limited — slow down" });
@@ -233,8 +270,15 @@ function handleMessage(clientId: string, ws: WebSocket, msg: ClientMessage): voi
       agent.currentTask = sanitize(msg.task);
       agent.taskStartedAt = Date.now();
       broadcast({ type: "agent_updated", agent });
-      broadcast({ type: "task_assigned", agentId: msg.agentId, task: msg.task, assignedTo: msg.assignTo });
-      log(`${agent.emoji} ${agent.name} assigned to ${msg.assignTo}: ${msg.task}`);
+      broadcast({
+        type: "task_assigned",
+        agentId: msg.agentId,
+        task: msg.task,
+        assignedTo: msg.assignTo,
+      });
+      log(
+        `${agent.emoji} ${agent.name} assigned to ${msg.assignTo}: ${msg.task}`,
+      );
       break;
     }
 
@@ -267,7 +311,10 @@ function handleMessage(clientId: string, ws: WebSocket, msg: ClientMessage): voi
       const agent = agents.get(msg.agentId);
       if (!agent || !client) return;
       if (agent.queue.length >= MAX_QUEUE_DEPTH) {
-        send(ws, { type: "error", message: `Queue full (max ${MAX_QUEUE_DEPTH})` });
+        send(ws, {
+          type: "error",
+          message: `Queue full (max ${MAX_QUEUE_DEPTH})`,
+        });
         return;
       }
       const task: QueuedTask = {
@@ -290,14 +337,16 @@ function handleMessage(clientId: string, ws: WebSocket, msg: ClientMessage): voi
         agent.taskStartedAt = Date.now();
       }
       broadcast({ type: "agent_updated", agent });
-      log(`Task queued for ${agent.emoji} ${agent.name}: ${msg.task} (by ${client.member.name})`);
+      log(
+        `Task queued for ${agent.emoji} ${agent.name}: ${msg.task} (by ${client.member.name})`,
+      );
       break;
     }
 
     case "cancel_task": {
       const agent = agents.get(msg.agentId);
       if (!agent) return;
-      agent.queue = agent.queue.filter(t => t.id !== msg.taskId);
+      agent.queue = agent.queue.filter((t) => t.id !== msg.taskId);
       broadcast({ type: "agent_updated", agent });
       break;
     }
@@ -318,7 +367,9 @@ function handleMessage(clientId: string, ws: WebSocket, msg: ClientMessage): voi
       };
       if (msg.enabled) agent.status = "scheduled";
       broadcast({ type: "agent_updated", agent });
-      log(`Schedule set for ${agent.emoji} ${agent.name}: ${msg.cron} — ${msg.task}`);
+      log(
+        `Schedule set for ${agent.emoji} ${agent.name}: ${msg.cron} — ${msg.task}`,
+      );
       break;
     }
 
@@ -339,7 +390,9 @@ function handleMessage(clientId: string, ws: WebSocket, msg: ClientMessage): voi
       agent.taskStartedAt = Date.now();
       agent.stats.totalTasks++;
       broadcast({ type: "agent_updated", agent });
-      log(`${agent.emoji} ${agent.name} started working for ${client.member.name}`);
+      log(
+        `${agent.emoji} ${agent.name} started working for ${client.member.name}`,
+      );
       break;
     }
 
@@ -350,7 +403,11 @@ function handleMessage(clientId: string, ws: WebSocket, msg: ClientMessage): voi
         agent.stats.totalActiveMs += Date.now() - agent.taskStartedAt;
       }
       agent.stats.lastActiveAt = Date.now();
-      broadcast({ type: "task_completed", agentId: msg.agentId, completedBy: client.member.name });
+      broadcast({
+        type: "task_completed",
+        agentId: msg.agentId,
+        completedBy: client.member.name,
+      });
       // Dequeue next or go idle.
       if (agent.queue.length > 0) {
         const next = agent.queue.shift()!;
@@ -421,7 +478,10 @@ function startServer(port: number = DEFAULT_PORT): void {
   setInterval(() => {
     const now = Date.now();
     for (const [id, { member, ws }] of members) {
-      if (now - member.lastActiveAt > 30000 && ws.readyState === WebSocket.OPEN) {
+      if (
+        now - member.lastActiveAt > 30000 &&
+        ws.readyState === WebSocket.OPEN
+      ) {
         member.status = "idle";
         broadcast({ type: "member_updated", member });
       }
@@ -436,7 +496,9 @@ const TEAM_TOKEN = process.env.BATCAVE_TOKEN || "";
 const port = parseInt(process.env.PORT || String(DEFAULT_PORT), 10);
 
 if (!TEAM_TOKEN) {
-  console.warn("[WARN] No BATCAVE_TOKEN set — server accepts all connections. Set BATCAVE_TOKEN env for production.");
+  console.warn(
+    "[WARN] No BATCAVE_TOKEN set — server accepts all connections. Set BATCAVE_TOKEN env for production.",
+  );
 }
 
 startServer(port);
