@@ -124,6 +124,13 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  /** Send an arbitrary message to the webview. Used by palette commands. */
+  sendToWebview(msg: Record<string, unknown>): void {
+    if (this.view && this.webviewReady) {
+      this.view.webview.postMessage(msg);
+    }
+  }
+
   private handleEvent(event: BatCaveEvent): void {
     if (this.webviewReady && this.view) {
       this.postEvent(event);
@@ -469,6 +476,18 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("batcave.exportSessions", () => {
       // Trigger export via webview message flow (webview has the current session data).
       provider.triggerExport();
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("batcave.replaySession", () => {
+      provider.sendToWebview({ command: "trigger-replay" });
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("batcave.enterKonami", () => {
+      provider.sendToWebview({ command: "trigger-konami" });
     }),
   );
 

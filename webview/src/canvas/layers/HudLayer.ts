@@ -117,6 +117,9 @@ function drawSpeechBubbles(rc: RenderContext): void {
   const quip = world.getCurrentQuip();
   if (quip) {
     drawBubble(ctx, alf.x, alf.y - zoom * 20, quip, zoom, fontSize);
+  } else if (world.getAlfredSilentBubble()) {
+    // Silent-click feedback — brief "·" dot when Alfred cooldown is active (P1 #5).
+    drawBubble(ctx, alf.x, alf.y - zoom * 20, "\u00b7", zoom, fontSize);
   } else if (alfredState !== "idle") {
     const tool = world.getCurrentTool();
     const text = tool ? tool.toLowerCase() : alfredState;
@@ -923,8 +926,53 @@ function drawLevelUpPopup(rc: RenderContext): void {
   ctx.restore();
 }
 
+// ── Floor eye progress outline (P1 #6) ───────────────
+// Draws an eye-shaped outline at the last floor click position.
+// Size grows with click count (1→20%, 2→40%, 3→60%, 4→80%, 5→100%).
+// Fades out 2s after the last click (driven by rapidClickTimer in KeyboardHandler).
+
+function drawFloorEyeProgress(rc: RenderContext): void {
+  const { ctx, world } = rc;
+  const zoom = rc.zoom;
+  const kb = world.getKeyboard();
+  const progress = kb.getFloorClickProgress();
+  if (progress <= 0) return;
+
+  const pos = kb.getLastFloorClickPos();
+  const ex = Math.floor(pos.x);
+  const ey = Math.floor(pos.y);
+
+  // Eye outline grows from 20% to 100% of max size as clicks accumulate.
+  const maxR = zoom * 12;
+  const r = Math.max(zoom, Math.floor(maxR * progress));
+  const outlineW = Math.max(1, zoom);
+
+  // Eye-shape: horizontal ellipse using top/bottom arcs drawn as pixel rects.
+  // Approximate: wide outline of an almond shape using pixel-art horizontal stripes.
+  const halfH = Math.max(1, Math.floor(r * 0.4));
+  const color = "#1E7FD8"; // P.ACCENT — opaque
+
+  ctx.fillStyle = color;
+  for (let dy = -halfH; dy <= halfH; dy++) {
+    // Width of eye shape at this row: ellipse formula.
+    const ratio = 1 - (dy / (halfH + 1)) ** 2;
+    const rowW = Math.floor(r * ratio * 2);
+    if (rowW < 2) continue;
+    const rowX = ex - Math.floor(rowW / 2);
+    const rowY = ey + dy;
+    // Only draw the outline (top/bottom row or left/right edges).
+    if (Math.abs(dy) === halfH || Math.abs(dy) === halfH - 1) {
+      ctx.fillRect(rowX, rowY, rowW, outlineW);
+    } else {
+      ctx.fillRect(rowX, rowY, outlineW, outlineW);
+      ctx.fillRect(rowX + rowW - outlineW, rowY, outlineW, outlineW);
+    }
+  }
+}
+
 export function drawOverlay(rc: RenderContext): void {
   drawToolIcon(rc);
+  drawFloorEyeProgress(rc);
   drawSpeechBubbles(rc);
   drawOverlayHud(rc);
   drawSessionIndicators(rc);

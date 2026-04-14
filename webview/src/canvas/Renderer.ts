@@ -183,6 +183,24 @@ export class Renderer {
       rc.ctx.translate(shakeOffset, 0);
     }
 
+    // Giovanni zoom boost: brief scale-in towards Batcomputer when Giovanni is
+    // clicked. Raw value is 0..500 (ms accumulator), normalized to 0..1 and
+    // mapped to a max 15% scale increase. Centered on Batcomputer midpoint so
+    // the camera "pushes in" towards the screens rather than expanding from
+    // the top-left corner.
+    const rawBoost = this.world.getGiovanniZoomBoost();
+    const boostActive = rawBoost > 0 && this.layout !== null;
+    if (boostActive && this.layout) {
+      const boostNorm = rawBoost / 500; // 0..1
+      const boostScale = 1 + boostNorm * 0.15; // 1.0 .. 1.15
+      const cx = this.layout.bcX + this.layout.bcW / 2;
+      const cy = this.layout.bcY + this.layout.bcH / 2;
+      rc.ctx.save();
+      // Translate so the Batcomputer center stays fixed during scale.
+      rc.ctx.translate(cx * (1 - boostScale), cy * (1 - boostScale));
+      rc.ctx.scale(boostScale, boostScale);
+    }
+
     // Clear.
     rc.ctx.fillStyle = P.BG;
     rc.ctx.fillRect(0, 0, rc.width, rc.height);
@@ -220,6 +238,11 @@ export class Renderer {
 
     // Layer 3.5: Particles.
     this.particles.draw(rc.ctx, zoom);
+
+    // Close zoom boost transform before HUD so overlay is never scaled.
+    if (boostActive) {
+      rc.ctx.restore();
+    }
 
     // Layer 4: HUD overlay.
     drawOverlay(rc);

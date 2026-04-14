@@ -62,9 +62,33 @@ export function App() {
         world.setSessionHistory(msg.payload.sessions);
       } else if (msg.command === "whiteboard-message") {
         world.setWhiteboardMessage(msg.payload.message || null);
+      } else if (msg.command === "trigger-replay") {
+        // Command palette: Bat Cave: Replay Session.
+        const trail = world.getAuditTrail();
+        if (trail.length > 5) {
+          world.enterReplayMode();
+          replay.load(trail as never);
+          replay.play();
+        }
+      } else if (msg.command === "trigger-konami") {
+        // Command palette: Bat Cave: Enter Konami Code.
+        const keys = ["ArrowUp","ArrowUp","ArrowDown","ArrowDown","ArrowLeft","ArrowRight","ArrowLeft","ArrowRight"];
+        keys.forEach((k) => world.getKeyboard().handleKeyDown(k));
       }
     };
     window.addEventListener("message", handleMessage);
+
+    // Mousemove handler — hover hit-test + cursor update (P0 discoverability).
+    const handleMouseMove = (e: MouseEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const cx = (e.clientX - rect.left) * scaleX;
+      const cy = (e.clientY - rect.top) * scaleY;
+      world.setHoveredTarget(cx, cy);
+      canvas.style.cursor = world.getHoveredTarget() ? "pointer" : "default";
+    };
+    canvas.addEventListener("mousemove", handleMouseMove);
 
     // Click handler for interactive Batcomputer screens + replay timeline.
     const handleClick = (e: MouseEvent) => {
@@ -109,7 +133,6 @@ export function App() {
       world.handleClick(cx, cy);
     };
     canvas.addEventListener("click", handleClick);
-    canvas.style.cursor = "pointer";
 
     // Keyboard shortcuts for replay + easter eggs.
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -192,6 +215,7 @@ export function App() {
       // Save state on teardown.
       vscode?.setState(world.getPersistedState());
       canvas.removeEventListener("click", handleClick);
+      canvas.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("message", handleMessage);
     };

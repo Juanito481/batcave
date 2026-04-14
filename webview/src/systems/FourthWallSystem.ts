@@ -69,8 +69,12 @@ export class FourthWallSystem {
   private insistCheckDone = false;
   private toolCountAtLastCheck = 0;
 
-  // Click response cooldown.
-  private clickCooldown = 0;
+  // Decoupled click cooldowns — Alfred and Giovanni are independent (P2 #7).
+  private alfredClickCooldown = 0;
+  private giovanniClickCooldown = 0;
+
+  // Silent-click dot bubble accumulator — shows "·" for 1.5s when cooldown active.
+  private silentBubbleTimer = 0;
 
   // Track last bash result for head-shake.
   private lastBashFailed = false;
@@ -96,7 +100,9 @@ export class FourthWallSystem {
    */
   update(dt: number): void {
     this.sessionTimer += dt;
-    this.clickCooldown = Math.max(0, this.clickCooldown - dt);
+    this.alfredClickCooldown = Math.max(0, this.alfredClickCooldown - dt);
+    this.giovanniClickCooldown = Math.max(0, this.giovanniClickCooldown - dt);
+    this.silentBubbleTimer = Math.max(0, this.silentBubbleTimer - dt);
     this.updateGiovanniMirror(dt);
     this.updateAlfredFourthWall(dt);
   }
@@ -106,8 +112,8 @@ export class FourthWallSystem {
    * The caller should display this as a speech bubble.
    */
   clickAlfred(): string | null {
-    if (this.clickCooldown > 0) return null;
-    this.clickCooldown = 5000;
+    if (this.alfredClickCooldown > 0) return null;
+    this.alfredClickCooldown = 5000;
 
     const tools = this.deps.getSessionToolCount();
     const dur = this.deps.getSessionDurationMs();
@@ -137,9 +143,22 @@ export class FourthWallSystem {
   /**
    * Handle click on Giovanni — returns stats summary or null.
    */
+  /**
+   * Called when Alfred is clicked but the cooldown is active.
+   * Shows a brief "·" bubble for 1.5 seconds via getAlfredSilentBubble().
+   */
+  onSilentAlfredClick(): void {
+    this.silentBubbleTimer = 1500;
+  }
+
+  /** True while the silent-click dot bubble should render. */
+  getAlfredSilentBubble(): boolean {
+    return this.silentBubbleTimer > 0;
+  }
+
   clickGiovanni(): string | null {
-    if (this.clickCooldown > 0) return null;
-    this.clickCooldown = 5000;
+    if (this.giovanniClickCooldown > 0) return null;
+    this.giovanniClickCooldown = 5000;
 
     const tools = this.deps.getSessionToolCount();
     const dur = this.deps.getSessionDurationMs();

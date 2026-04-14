@@ -33,6 +33,23 @@ import { CaveReactionSystem } from "../systems/CaveReactionSystem";
 import { ProgressionSystem } from "../systems/ProgressionSystem";
 import { KeyboardHandler } from "../systems/KeyboardHandler";
 
+/**
+ * Hover target — identifies which interactive element the cursor is over.
+ * Used by App.tsx (cursor style) and FurnitureLayer (outline/glow rendering).
+ */
+export interface HoverTarget {
+  kind:
+    | "screen-files"
+    | "screen-stats"
+    | "screen-agents"
+    | "whiteboard"
+    | "alfred"
+    | "giovanni"
+    | "agent"
+    | "trophy";
+  id?: string; // agent id or trophy slot index (stringified)
+}
+
 /** Per-agent session statistics for enterprise observability. */
 export interface AgentSessionStats {
   agentId: string;
@@ -325,6 +342,20 @@ export class BatCaveWorld {
   private caveLevel = 1;
   private totalToolsCumulative = 0;
   private lastMilestoneNotified = 0;
+
+  // ── Hover state (P0 discoverability) ─────────────────
+  private hoveredTarget: HoverTarget | null = null;
+
+  // ── Batcomputer first-time hint pulse ─────────────────
+  // Accumulates ms; drives sin glow in FurnitureLayer for first 30s or until first click.
+  private hintAccumulator = 0;
+  private _hasClickedBatcomputer = false;
+
+  // ── Giovanni zoom boost (P2) ──────────────────────────
+  // Transient accumulator: positive = ease-in zoom, negative = ease-back.
+  // Full cycle: 500ms in + 1500ms back = 2000ms.
+  private giovanniZoomBoost = 0;
+  private giovanniZoomPhase: "idle" | "in" | "out" = "idle";
 
   // Agent enter pulse — timestamp of last agent_enter for LED wave effect.
   private _agentPulseStart = 0;
@@ -957,6 +988,12 @@ export class BatCaveWorld {
     }
     // Alfred quips (every 30-50s when idle).
     this.updateQuips(deltaMs);
+    // Hint accumulator — drives first-time Batcomputer pulse glow.
+    if (!this._hasClickedBatcomputer) {
+      this.hintAccumulator += deltaMs;
+    }
+    // Giovanni zoom boost — frame-driven, no setTimeout.
+    this.updateGiovanniZoomBoost(deltaMs);
     // Bat Signal decay.
     if (this.batSignalTimer > 0) {
       this.batSignalTimer -= deltaMs;
@@ -1117,6 +1154,147 @@ export class BatCaveWorld {
     return this._zoom;
   }
 
+  // ── Hover API (P0 discoverability) ───────────────────
+
+  /**
+   * Perform a hit test at canvas coordinates and store the result.
+   * Called from App.tsx mousemove handler every frame.
+   *
+   * @param cx - Canvas x coordinate (already scaled for DPR).
+   * @param cy - Canvas y coordinate (already scaled for DPR).
+   */
+  setHoveredTarget(cx: number, cy: number): void {
+    this.hoveredTarget = this._hitTest(cx, cy);
+  }
+
+  /** Current hover target — read by App.tsx and FurnitureLayer. */
+  getHoveredTarget(): HoverTarget | null {
+    return this.hoveredTarget;
+  }
+
+  /** Hint accumulator — ms elapsed since session start (stops when Batcomputer first clicked). */
+  getHintAccumulator(): number {
+    return this.hintAccumulator;
+  }
+
+  /** True once the player has clicked any Batcomputer screen. */
+  get hasClickedBatcomputer(): boolean {
+    return this._hasClickedBatcomputer;
+  }
+
+  /** Active zoom boost from Giovanni click camera effect (0 = no boost). */
+  getGiovanniZoomBoost(): number {
+    return this.giovanniZoomBoost;
+  }
+
+  /**
+   * Shared hit-test logic — used by both handleClick and setHoveredTarget.
+   * Returns the first matching interactive target, or null for empty floor/wall.
+   */
+  private _hitTest(cx: number, cy: number): HoverTarget | null {
+    const zoom = this._zoom;
+    const L = this._layout;
+    if (!L) return null;
+
+    const screenGap = Math.floor(zoom * 3);
+
+    // Left Batcomputer screen.
+    if (
+      cx >= L.bcX + screenGap &&
+      cx <= L.bcX + screenGap + L.screenW &&
+      cy >= L.bcY &&
+      cy <= L.bcY + L.bcH
+    ) return { kind: "screen-files" };
+
+    // Center Batcomputer screen.
+    if (
+      cx >= L.bcX + screenGap + L.screenW + screenGap &&
+      cx <= L.bcX + screenGap + L.screenW * 2 + screenGap &&
+      cy >= L.bcY &&
+      cy <= L.bcY + L.bcH
+    ) return { kind: "screen-stats" };
+
+    // Right Batcomputer screen.
+    if (
+      cx >= L.bcX + (screenGap + L.screenW) * 2 + screenGap &&
+      cx <= L.bcX + L.bcW - screenGap &&
+      cy >= L.bcY &&
+      cy <= L.bcY + L.bcH
+    ) return { kind: "screen-agents" };
+
+    // Whiteboard.
+    if (
+      cx >= L.whiteboardX &&
+      cx <= L.whiteboardX + L.whiteboardW &&
+      cy >= L.whiteboardY &&
+      cy <= L.whiteboardY + L.whiteboardH
+    ) return { kind: "whiteboard" };
+
+    // Trophy case.
+    const tc = L.trophyCase;
+    if (
+      cx >= tc.caseX &&
+      cx <= tc.caseX + tc.caseW &&
+      cy >= tc.caseY &&
+      cy <= tc.caseY + tc.caseH
+    ) return { kind: "trophy" };
+
+    // Alfred.
+    const hitSize = 16 * zoom;
+    {
+      const ax = this.alfred.x - hitSize / 2;
+      const ay = this.alfred.y - hitSize;
+      if (cx >= ax && cx <= ax + hitSize && cy >= ay && cy <= ay + hitSize)
+        return { kind: "alfred" };
+    }
+
+    // Giovanni.
+    {
+      const gx = this.giovanni.x - hitSize / 2;
+      const gy = this.giovanni.y - hitSize;
+      if (cx >= gx && cx <= gx + hitSize && cy >= gy && cy <= gy + hitSize)
+        return { kind: "giovanni" };
+    }
+
+    // Agents — hitSize at least 24px or 16*zoom (P2 #10).
+    const agentHitSize = Math.max(24, 16 * zoom);
+    for (const [agentId, agent] of this.agents) {
+      if (!agent.visible) continue;
+      const ax = agent.x - agentHitSize / 2;
+      const ay = agent.y - agentHitSize;
+      if (cx >= ax && cx <= ax + agentHitSize && cy >= ay && cy <= ay + agentHitSize)
+        return { kind: "agent", id: agentId };
+    }
+
+    return null;
+  }
+
+  // ── Giovanni zoom boost (frame-driven) ────────────────
+
+  /** Trigger the brief camera zoom towards Batcomputer after Giovanni click. */
+  triggerGiovanniZoomBoost(): void {
+    this.giovanniZoomPhase = "in";
+    this.giovanniZoomBoost = 0;
+  }
+
+  private updateGiovanniZoomBoost(dt: number): void {
+    if (this.giovanniZoomPhase === "idle") return;
+
+    if (this.giovanniZoomPhase === "in") {
+      this.giovanniZoomBoost += dt;
+      if (this.giovanniZoomBoost >= 500) {
+        this.giovanniZoomBoost = 500;
+        this.giovanniZoomPhase = "out";
+      }
+    } else {
+      this.giovanniZoomBoost -= dt;
+      if (this.giovanniZoomBoost <= 0) {
+        this.giovanniZoomBoost = 0;
+        this.giovanniZoomPhase = "idle";
+      }
+    }
+  }
+
   getZt(): number {
     return this._zt;
   }
@@ -1130,6 +1308,11 @@ export class BatCaveWorld {
     const fwQuip = this.fourthWall.getAlfredQuip();
     if (fwQuip) return fwQuip;
     return this.currentQuip;
+  }
+
+  /** True while the silent-click "·" dot should show above Alfred (1.5s). */
+  getAlfredSilentBubble(): boolean {
+    return this.fourthWall.getAlfredSilentBubble();
   }
 
   isBatSignalActive(): boolean {
@@ -1189,33 +1372,51 @@ export class BatCaveWorld {
 
     const screenGap = Math.floor(zoom * 3);
 
-    // Left screen → files (toggle).
+    // Left screen → files (toggle) + particle burst.
     if (
       cx >= L.bcX + screenGap &&
       cx <= L.bcX + screenGap + L.screenW &&
       cy >= L.bcY &&
       cy <= L.bcY + L.bcH
     ) {
+      this._hasClickedBatcomputer = true;
+      const screenCx = L.bcX + screenGap + Math.floor(L.screenW / 2);
+      const screenCy = L.bcY + Math.floor(L.bcH / 2);
+      for (let i = 0; i < 7; i++) {
+        bus.emit("particle:spawn", { preset: "tool-spark", x: screenCx + (i - 3) * zoom * 2, y: screenCy });
+      }
       this.setExpandedPanel("files");
       return;
     }
-    // Center screen → stats (toggle).
+    // Center screen → stats (toggle) + particle burst.
     if (
       cx >= L.bcX + screenGap + L.screenW + screenGap &&
       cx <= L.bcX + screenGap + L.screenW * 2 + screenGap &&
       cy >= L.bcY &&
       cy <= L.bcY + L.bcH
     ) {
+      this._hasClickedBatcomputer = true;
+      const screenCx = L.bcX + screenGap + L.screenW + screenGap + Math.floor(L.screenW / 2);
+      const screenCy = L.bcY + Math.floor(L.bcH / 2);
+      for (let i = 0; i < 7; i++) {
+        bus.emit("particle:spawn", { preset: "tool-spark", x: screenCx + (i - 3) * zoom * 2, y: screenCy });
+      }
       this.setExpandedPanel("stats");
       return;
     }
-    // Right screen → agents (toggle).
+    // Right screen → agents (toggle) + particle burst.
     if (
       cx >= L.bcX + (screenGap + L.screenW) * 2 + screenGap &&
       cx <= L.bcX + L.bcW - screenGap &&
       cy >= L.bcY &&
       cy <= L.bcY + L.bcH
     ) {
+      this._hasClickedBatcomputer = true;
+      const screenCx = L.bcX + (screenGap + L.screenW) * 2 + screenGap + Math.floor(L.screenW / 2);
+      const screenCy = L.bcY + Math.floor(L.bcH / 2);
+      for (let i = 0; i < 7; i++) {
+        bus.emit("particle:spawn", { preset: "tool-spark", x: screenCx + (i - 3) * zoom * 2, y: screenCy });
+      }
       this.setExpandedPanel("agents");
       return;
     }
@@ -1297,7 +1498,7 @@ export class BatCaveWorld {
       }
     }
 
-    // Click on Alfred → fourth wall contextual quip.
+    // Click on Alfred → fourth wall contextual quip + particle burst.
     const hitSize = 16 * zoom;
     {
       const ax = this.alfred.x - hitSize / 2;
@@ -1307,12 +1508,21 @@ export class BatCaveWorld {
         if (quip) {
           this.currentQuip = quip;
           this.quipDisplayTimer = 5000;
+          // Emit agent-enter (green) particle burst at Alfred position.
+          bus.emit("particle:spawn", {
+            preset: "agent-enter",
+            x: this.alfred.x,
+            y: this.alfred.y - 20,
+          });
+        } else {
+          // Silent click (cooldown active) — handled inside FourthWallSystem.
+          this.fourthWall.onSilentAlfredClick();
         }
         return;
       }
     }
 
-    // Click on Giovanni → stats mirror.
+    // Click on Giovanni → stats mirror + camera zoom boost.
     {
       const gx = this.giovanni.x - hitSize / 2;
       const gy = this.giovanni.y - hitSize;
@@ -1321,17 +1531,21 @@ export class BatCaveWorld {
         if (quip) {
           this.currentQuip = quip;
           this.quipDisplayTimer = 4000;
+          // Trigger brief camera zoom toward Batcomputer.
+          this.triggerGiovanniZoomBoost();
         }
         return;
       }
     }
 
     // Click on an agent character → react + show detail panel.
+    // Use max(24, 16*zoom) hitbox so small agents remain clickable.
+    const agentHitSize = Math.max(24, 16 * zoom);
     for (const [agentId, agent] of this.agents) {
       if (!agent.visible) continue;
-      const ax = agent.x - hitSize / 2;
-      const ay = agent.y - hitSize;
-      if (cx >= ax && cx <= ax + hitSize && cy >= ay && cy <= ay + hitSize) {
+      const ax = agent.x - agentHitSize / 2;
+      const ay = agent.y - agentHitSize;
+      if (cx >= ax && cx <= ax + agentHitSize && cy >= ay && cy <= ay + agentHitSize) {
         // Agent reacts to being clicked (turns, quips, emotion).
         this.behaviorSystem.clickAgent(agentId, this.agents);
         this.selectedAgentId = agentId;

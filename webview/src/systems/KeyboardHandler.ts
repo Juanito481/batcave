@@ -128,6 +128,23 @@ export class KeyboardHandler {
     return this.easterEggs;
   }
 
+  /**
+   * Returns floor-click progress as a value 0–1 (0 = no clicks, 1 = 5/5 triggered).
+   * Used by HudLayer to render eye-shape outline that grows with each click.
+   * Returns 0 when the rapid-click window has expired.
+   */
+  getFloorClickProgress(): number {
+    if (this.rapidClickTimer <= 0) return 0;
+    return Math.min(1, this.rapidClickCount / 5);
+  }
+
+  /**
+   * Position of the last floor click — used by HudLayer for the progress outline.
+   */
+  getLastFloorClickPos(): { x: number; y: number } {
+    return { x: this.lastClickX, y: this.lastClickY };
+  }
+
   // ── Triggers ────────────────────────────────────────
 
   private triggerMirrorCave(): void {

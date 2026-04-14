@@ -26,6 +26,7 @@ function drawBatcomputer(
   tilesW: number,
   now: number,
   world: RenderContext["world"],
+  hoveredScreen?: "screen-files" | "screen-stats" | "screen-agents" | null,
 ): void {
   const state = world.getAlfredState();
   const totalW = zt * tilesW;
@@ -68,8 +69,12 @@ function drawBatcomputer(
   const smallFont = Math.max(8, zoom * 2.5);
   const labelFont = Math.max(10, zoom * 3);
 
+  // Map screen index to HoverTarget kind for hover brightness boost.
+  const screenKinds = ["screen-files", "screen-stats", "screen-agents"] as const;
+
   for (let i = 0; i < 3; i++) {
     const sx = x + gap + i * (sw + gap);
+    const isHovered = hoveredScreen === screenKinds[i];
 
     // Bezel.
     ctx.fillStyle = "#0a0a14";
@@ -77,10 +82,14 @@ function drawBatcomputer(
     // Screen surface.
     ctx.fillStyle = "#060610";
     ctx.fillRect(sx, y + gap, sw, sh);
-    // Screen glow.
+    // Screen glow — +20% brightness when hovered (P0).
     const phase = Math.sin(now / 800 + i * 2.1);
     const glowBase = screenColors[i];
-    const glow = phase > 0 ? lighten(glowBase, phase * 0.15) : glowBase;
+    const hoverLift = isHovered ? 0.2 : 0;
+    const glow = lighten(
+      phase > 0 ? lighten(glowBase, phase * 0.15) : glowBase,
+      hoverLift,
+    );
     ctx.fillStyle = glow;
     ctx.fillRect(
       sx + zoom + tremor,
@@ -92,6 +101,18 @@ function drawBatcomputer(
     ctx.fillStyle = "#040408";
     for (let sl = 0; sl < sh; sl += zoom) {
       ctx.fillRect(sx, y + gap + sl, sw, zoom);
+    }
+    // Hover outline — 1px P.ACCENT border on hovered screen (P0).
+    if (isHovered) {
+      ctx.fillStyle = P.ACCENT;
+      // Top.
+      ctx.fillRect(sx - zoom, y + gap - zoom, sw + zoom * 2, zoom);
+      // Bottom.
+      ctx.fillRect(sx - zoom, y + gap + sh, sw + zoom * 2, zoom);
+      // Left.
+      ctx.fillRect(sx - zoom, y + gap - zoom, zoom, sh + zoom * 2);
+      // Right.
+      ctx.fillRect(sx + sw, y + gap - zoom, zoom, sh + zoom * 2);
     }
   }
 
@@ -1324,7 +1345,14 @@ export function drawAllFurniture(rc: RenderContext): void {
     ctx.fillRect(haloX, haloY, haloW, haloH);
   }
 
-  drawBatcomputer(ctx, bcX, bcY, zt, zoom, bcTilesW, now, world);
+  // Resolve hovered screen for the Batcomputer draw.
+  const hover = world.getHoveredTarget();
+  const hoveredScreen =
+    hover?.kind === "screen-files" || hover?.kind === "screen-stats" || hover?.kind === "screen-agents"
+      ? hover.kind
+      : null;
+
+  drawBatcomputer(ctx, bcX, bcY, zt, zoom, bcTilesW, now, world, hoveredScreen);
 
   // Scala / Exit — bottom-left, 2x2 tile.
   drawScala(ctx, zt, zoom, height);
@@ -1344,6 +1372,47 @@ export function drawAllFurniture(rc: RenderContext): void {
 
   // Whiteboard (wall-mounted, center-left).
   drawWhiteboard(ctx, zoom, world, L);
+
+  // Whiteboard hover border — faint 1px P.ACCENT outline (P0 #11).
+  if (hover?.kind === "whiteboard") {
+    ctx.fillStyle = P.ACCENT;
+    const wx = L.whiteboardX;
+    const wy = L.whiteboardY;
+    const ww = L.whiteboardW;
+    const wh = L.whiteboardH;
+    ctx.fillRect(wx - zoom, wy - zoom, ww + zoom * 2, zoom);          // top
+    ctx.fillRect(wx - zoom, wy + wh, ww + zoom * 2, zoom);            // bottom
+    ctx.fillRect(wx - zoom, wy - zoom, zoom, wh + zoom * 2);          // left
+    ctx.fillRect(wx + ww, wy - zoom, zoom, wh + zoom * 2);            // right
+  }
+
+  // First-time Batcomputer hint pulse — sin-driven glow ring around center screen label
+  // for the first 30s of session, or until the player clicks any screen (P0 #3).
+  if (!world.hasClickedBatcomputer && world.getHintAccumulator() < 30000) {
+    const hint = world.getHintAccumulator();
+    // Slow pulse: period ~3s.
+    const pulse = Math.sin(hint / 480) * 0.5 + 0.5;
+    const ringZoom = zoom * 2;
+    const ringPad = Math.floor(4 + pulse * 6) * zoom;
+    // Target: center screen of Batcomputer.
+    const screenGap = Math.floor(zoom * 3);
+    const sw = Math.floor((L.bcW - screenGap * 4) / 3);
+    const sh = Math.floor(zt * 1.5) - screenGap * 2;
+    const centerSx = bcX + screenGap + sw + screenGap;
+    const centerSy = bcY + screenGap;
+    // Draw expanding/contracting ring around center screen using 4 rects (no rgba).
+    // Use a semi-opaque opaque color from palette driven by pulse.
+    const ringColor = pulse > 0.6 ? P.ACCENT : "#1a4a7a";
+    ctx.fillStyle = ringColor;
+    // Top bar.
+    ctx.fillRect(centerSx - ringPad, centerSy - ringPad, sw + ringPad * 2, ringZoom);
+    // Bottom bar.
+    ctx.fillRect(centerSx - ringPad, centerSy + sh, sw + ringPad * 2, ringZoom);
+    // Left bar.
+    ctx.fillRect(centerSx - ringPad, centerSy - ringPad, ringZoom, sh + ringPad * 2);
+    // Right bar.
+    ctx.fillRect(centerSx + sw + ringPad - ringZoom, centerSy - ringPad, ringZoom, sh + ringPad * 2);
+  }
 
   // Arsenal rack (weapon + tools, right wall).
   drawWeaponRack(ctx, zoom, L);

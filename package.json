@@ -2,7 +2,7 @@
   "name": "batcave",
   "displayName": "Bat Cave",
   "description": "Pixel art visualization of Claude Code activity with animated chess-piece agents in a DC-style lab environment",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "publisher": "juanito481",
   "license": "MIT",
   "repository": {
@@ -55,6 +55,14 @@
       {
         "command": "batcave.exportSessions",
         "title": "Bat Cave: Export Session History"
+      },
+      {
+        "command": "batcave.replaySession",
+        "title": "Bat Cave: Replay Session"
+      },
+      {
+        "command": "batcave.enterKonami",
+        "title": "Bat Cave: Enter Konami Code"
       }
     ],
     "configuration": {
