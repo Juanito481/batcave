@@ -31,14 +31,23 @@ function drawBatcomputer(
   const totalW = zt * tilesW;
   const totalH = Math.floor(zt * 1.5);
 
-  // Desk body.
-  ctx.fillStyle = "#1c1c2e";
+  // Desk body. P2: use FURNITURE_BG as base fill.
+  ctx.fillStyle = P.FURNITURE_BG;
   ctx.fillRect(x, y, totalW, totalH);
   ctx.fillStyle = P.HIGHLIGHT;
   ctx.fillRect(x, y, totalW, zoom);
   ctx.fillStyle = "#141422";
   ctx.fillRect(x, y + totalH - zoom, totalW, zoom);
-  outlineRect(ctx, x, y, totalW, totalH, zoom);
+  outlineRect(ctx, x, y, totalW, totalH, zoom, P.FURNITURE_OUTLINE); // P0: furniture outline
+  // P1: top-edge highlight bar.
+  ctx.fillStyle = "#3a4a5a";
+  ctx.fillRect(x, y, totalW, Math.max(1, zoom));
+  // P1: static label above furniture.
+  const _labelFont = Math.max(7, zoom * 2);
+  ctx.font = `${_labelFont}px "DM Mono", monospace`;
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#334455";
+  ctx.fillText("BAT", x + Math.floor(totalW / 2), y - Math.max(2, zoom));
 
   // 3 screens.
   const gap = Math.floor(zoom * 3);
@@ -257,9 +266,15 @@ function drawServerRack(
   const w = zt * 2;
   const h = zt * 3;
 
-  // Body.
-  ctx.fillStyle = "#111120";
+  // Body. P2: use FURNITURE_BG as base fill.
+  ctx.fillStyle = P.FURNITURE_BG;
   ctx.fillRect(x, y, w, h);
+  // P1: static label above furniture.
+  const _srvLabelFont = Math.max(7, zoom * 2);
+  ctx.font = `${_srvLabelFont}px "DM Mono", monospace`;
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#334455";
+  ctx.fillText("SRV", x + Math.floor(w / 2), y - Math.max(2, zoom));
   // Front panel (slightly darker).
   ctx.fillStyle = "#0e0e1a";
   ctx.fillRect(x + zoom, y + zoom, w - zoom * 2, h - zoom * 2);
@@ -275,8 +290,11 @@ function drawServerRack(
   // Top highlight.
   ctx.fillStyle = P.HIGHLIGHT;
   ctx.fillRect(x, y, w, zoom);
-  // Outline.
-  outlineRect(ctx, x, y, w, h, zoom);
+  // Outline. P0: furniture outline color.
+  outlineRect(ctx, x, y, w, h, zoom, P.FURNITURE_OUTLINE);
+  // P1: top-edge highlight bar.
+  ctx.fillStyle = "#3a4a5a";
+  ctx.fillRect(x, y, w, Math.max(1, zoom));
 
   // Rack unit dividers.
   ctx.fillStyle = "#1a1a2e";
@@ -358,16 +376,25 @@ function drawWorkbench(
   const w = zt * 3;
   const h = Math.floor(zt * 1.5);
 
-  // Table top.
-  ctx.fillStyle = "#1a1a2a";
+  // Table top. P2: FURNITURE_BG as base.
+  ctx.fillStyle = P.FURNITURE_BG;
   ctx.fillRect(x, y, w, zoom * 2);
   ctx.fillStyle = P.HIGHLIGHT;
   ctx.fillRect(x, y, w, zoom);
   // Table body.
   ctx.fillStyle = "#141422";
   ctx.fillRect(x, y + zoom * 2, w, h - zoom * 2);
-  // Outline.
-  outlineRect(ctx, x, y, w, h, zoom);
+  // Outline. P0: furniture outline color.
+  outlineRect(ctx, x, y, w, h, zoom, P.FURNITURE_OUTLINE);
+  // P1: top-edge highlight bar.
+  ctx.fillStyle = "#3a4a5a";
+  ctx.fillRect(x, y, w, Math.max(1, zoom));
+  // P1: static label above furniture.
+  const _wrkLabelFont = Math.max(7, zoom * 2);
+  ctx.font = `${_wrkLabelFont}px "DM Mono", monospace`;
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#334455";
+  ctx.fillText("WRK", x + Math.floor(w / 2), y - Math.max(2, zoom));
 
   // Table legs.
   ctx.fillStyle = "#101018";
@@ -456,12 +483,21 @@ function drawDisplayPanel(
   ctx.fillStyle = "#141428";
   ctx.fillRect(x + Math.floor(w / 2) - zoom * 2, y + h, zoom * 4, zoom * 3);
 
-  // Panel body.
-  ctx.fillStyle = "#0a0a14";
+  // Panel body. P2: FURNITURE_BG as base.
+  ctx.fillStyle = P.FURNITURE_BG;
   ctx.fillRect(x, y, w, h);
   ctx.fillStyle = "#1a1a2e";
   ctx.fillRect(x, y, w, zoom);
-  outlineRect(ctx, x, y, w, h, zoom);
+  outlineRect(ctx, x, y, w, h, zoom, P.FURNITURE_OUTLINE); // P0: furniture outline color
+  // P1: top-edge highlight bar.
+  ctx.fillStyle = "#3a4a5a";
+  ctx.fillRect(x, y, w, Math.max(1, zoom));
+  // P1: static label above furniture.
+  const _dspLabelFont = Math.max(7, zoom * 2);
+  ctx.font = `${_dspLabelFont}px "DM Mono", monospace`;
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#334455";
+  ctx.fillText("DSP", x + Math.floor(w / 2), y - Math.max(2, zoom));
 
   // Single screen area.
   const gap = zoom * 2;
@@ -1271,6 +1307,23 @@ export function drawAllFurniture(rc: RenderContext): void {
   // Use L.displayX (already clamped in layout.ts) — avoids the panel clipping
   // ~10px past the canvas right edge at wide viewports (1400×900).
   drawDisplayPanel(ctx, L.displayX, L.displayY, zt, zoom, now, world);
+
+  // Ambient halo under Batcomputer — wraps desk + chair footprint. (P0+P1)
+  {
+    const state = world.getAlfredState();
+    const haloColor =
+      state === "thinking" ? "#1E3A5A"
+      : state === "writing" ? "#0E2A1A"
+      : "#0f2040"; // idle — permanent dark blue halo
+    const haloX = bcX - zoom * 4;
+    const haloY = bcY - zoom * 2;
+    const haloW = bcW + zoom * 8;
+    // Extend down to cover chair footprint (desk height + chair depth).
+    const haloH = Math.floor(zt * 1.5) + zoom * 3 + zoom * 8;
+    ctx.fillStyle = haloColor;
+    ctx.fillRect(haloX, haloY, haloW, haloH);
+  }
+
   drawBatcomputer(ctx, bcX, bcY, zt, zoom, bcTilesW, now, world);
 
   // Scala / Exit — bottom-left, 2x2 tile.

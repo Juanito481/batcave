@@ -344,8 +344,9 @@ export class Character {
     const labelBoxW = Math.round(labelW + labelPad * 2);
     const labelBoxH = Math.round(labelFont + labelPad);
     const brd = Math.max(1, Math.floor(zoom / 2));
+    // P0: pill backdrop — border #2a2a4a, fill #06060c.
     // Border.
-    ctx.fillStyle = "#2a2a3e";
+    ctx.fillStyle = "#2a2a4a";
     ctx.fillRect(
       labelX - brd,
       labelY - brd,
@@ -353,7 +354,7 @@ export class Character {
       labelBoxH + brd * 2,
     );
     // Background.
-    ctx.fillStyle = "#0c1018";
+    ctx.fillStyle = "#06060c";
     ctx.fillRect(labelX, labelY, labelBoxW, labelBoxH);
     // Text.
     ctx.fillStyle = "#B0B0CC";

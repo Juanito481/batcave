@@ -432,6 +432,12 @@ export class Ambient {
         if (frame >= 0) {
           ctx.fillStyle = DRIP_BRIGHT;
           ctx.fillRect(dx - px, dy, px * 3, px);
+          // P1: thinking state — 2×1px accent splash at impact point.
+          // stateBoost < 1 means thinking (setStateBoost(0.5) called by world).
+          if (this.stateBoost < 1) {
+            ctx.fillStyle = "#1E7FD8";
+            ctx.fillRect(dx - px, dy, px * 2, px);
+          }
         }
         // Frame 1: expanding ring.
         if (frame >= 1) {

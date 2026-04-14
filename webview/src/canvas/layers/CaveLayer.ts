@@ -289,15 +289,15 @@ function drawWallDetails(
     ctx.fillRect(x, pipeY - zoom, zoom * 2, Math.max(1, Math.floor(zoom / 2)));
   }
 
-  // LED strip along wall bottom — state-reactive + repo-themed.
-  const ledY = wallH - zoom;
+  // LED strip along wall bottom — state-reactive + repo-themed. (P0: brighter per state)
+  const ledY = wallH - zoom * 2;
   const state = world.getAlfredState();
   const stateColor =
     state === "thinking"
-      ? "#1e4478"
+      ? "#1E7FD8"  // full accent blue
       : state === "writing"
-        ? "#1e5432"
-        : "#1a3a5a";
+        ? "#2ECC71"  // green
+        : "#1E5A9A"; // idle — muted blue
   const stateDim =
     state === "thinking"
       ? "#0e2440"
@@ -336,7 +336,7 @@ function drawWallDetails(
     }
 
     ctx.fillStyle = color;
-    ctx.fillRect(x, ledY, zoom * 4, zoom);
+    ctx.fillRect(x, ledY, zoom * 4, zoom * 2); // P0: height from zoom*1 to zoom*2
   }
 
   // Wall-mounted monitor (right side) — git log.
@@ -423,6 +423,7 @@ const TORCH_FLAMES = ["#FFD700", "#E67E22", "#C0392B"] as const;
  * @param flameFrame - 0-2 discrete frame index, advanced by caller based on state speed.
  * @param floorY - Bottom of the canvas — where the light pool is drawn.
  * @param torchBoost - Intensity multiplier from CaveReactionSystem (1.0 = normal, up to 2.0).
+ * @param alfredState - Current Alfred state — drives pool height and writing rim. (P1)
  */
 function drawTorch(
   ctx: CanvasRenderingContext2D,
@@ -432,18 +433,30 @@ function drawTorch(
   flameFrame: number,
   floorY: number,
   torchBoost: number = 1.0,
+  alfredState: "idle" | "thinking" | "writing" = "idle",
 ): void {
   const tx = Math.floor(x);
   const ty = Math.floor(wallY);
 
-  // Floor light pool — scaled by torchBoost on agent arrivals.
-  // Brighter pool color when heavily boosted (> 1.2) to sell the effect.
+  // Floor light pool — scaled by torchBoost on agent arrivals. (P1: brighter base colors)
   const poolW = Math.floor(zoom * 8 * torchBoost);
-  const poolH = Math.floor(zoom * 3 * torchBoost);
+  // P1: thinking state pool is taller by zoom*2.
+  const basePoolH = Math.floor(zoom * 3 * torchBoost);
+  const poolH = alfredState === "thinking" ? basePoolH + Math.floor(zoom * 2) : basePoolH;
   const poolX = tx - Math.floor(poolW / 2);
   const poolY = floorY - poolH;
-  ctx.fillStyle = torchBoost > 1.2 ? "#222230" : "#1a1a22";
+  ctx.fillStyle = torchBoost > 1.2 ? "#2a2a48" : "#222238"; // P1: boosted → #2a2a48, normal → #222238
   ctx.fillRect(poolX, poolY, poolW, poolH);
+
+  // P1: writing state — 1px orange rim around the pool.
+  if (alfredState === "writing") {
+    const brd = Math.max(1, zoom);
+    ctx.fillStyle = "#E67E22";
+    ctx.fillRect(poolX - brd, poolY - brd, poolW + brd * 2, brd); // top
+    ctx.fillRect(poolX - brd, poolY - brd, brd, poolH + brd * 2); // left
+    ctx.fillRect(poolX + poolW, poolY - brd, brd, poolH + brd * 2); // right
+    ctx.fillRect(poolX - brd, poolY + poolH, poolW + brd * 2, brd); // bottom
+  }
 
   // Bracket — 2px wide dark base (wall mount).
   ctx.fillStyle = "#5a3a1a";
@@ -512,7 +525,7 @@ function drawTorches(
 
   for (let i = 0; i < torchXPositions.length; i++) {
     const frame = (baseFrame + i * 7) % 3; // offset each torch by 7 frames
-    drawTorch(ctx, torchXPositions[i], wallH, zoom, frame, floorY, torchBoost);
+    drawTorch(ctx, torchXPositions[i], wallH, zoom, frame, floorY, torchBoost, alfredState);
   }
 }
 
@@ -561,12 +574,14 @@ export function drawCaveEnvironment(rc: RenderContext): void {
   }
 
   // ── Screen glow on floor (static lightened tiles near Batcomputer) ──
+  // P0: boost glow to 0.25 during thinking state.
   const bcTilesW = Math.min(5, Math.ceil(width / zt) - 1);
   const bcCenterTile = Math.floor(width / zt / 2);
   const bcStartTile = bcCenterTile - Math.floor(bcTilesW / 2);
   const bcEndTile = bcStartTile + bcTilesW;
   const bcRowTile = wallRows; // row just below wall
-  const glowColor = lighten(P.FLOOR_A, 0.08);
+  const glowStrength = rc.alfredState === "thinking" ? 0.25 : 0.08;
+  const glowColor = lighten(P.FLOOR_A, glowStrength);
   for (let y = bcRowTile; y <= bcRowTile + 1 && y < rows; y++) {
     for (let x = bcStartTile - 1; x <= bcEndTile; x++) {
       if (x < 0 || x >= cols) continue;
@@ -590,8 +605,8 @@ export function drawCaveEnvironment(rc: RenderContext): void {
     drawStalactiteGlow(ctx, cols, zt, zoom, wallH, rc.now);
   }
 
-  // Wall bottom edge (opaque, no rgba).
-  ctx.fillStyle = P.OUTLINE;
+  // Wall bottom edge — 1px accent line at wall/floor boundary. (P1)
+  ctx.fillStyle = P.ACCENT;
   ctx.fillRect(0, wallH, width, zoom);
 
   // ── Stalagmites (from floor, before furniture) ──

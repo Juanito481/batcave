@@ -276,7 +276,7 @@ function drawOverlayHud(rc: RenderContext): void {
   const pace = world.getPace();
   const paceText = pace.current > 0 ? `  ${pace.current}/min` : "";
   const chipTextW = ctx.measureText(stateLabel + paceText).width;
-  const dotSize = zoom * 2;
+  const dotSize = zoom * 3; // P2: state dot size increased from zoom*2 to zoom*3
   const chipPillW = dotSize + zoom * 3 + chipTextW + zoom * 2;
   const chipPillH = dotSize + zoom * 2;
   ctx.fillStyle = "#080c12";

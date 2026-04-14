@@ -69,8 +69,9 @@ function deriveShades(p: CharacterPalette): DerivedShades {
 
 const PALETTES: Record<string, CharacterPalette> = {
   alfred: {
-    skin: "#E8C0A0", hair: "#4A4A5A", shirt: "#1A1A2A",
-    pants: "#101820", accent: "#FFFFFF", eyes: "#1a1a2e",
+    // P0: shirt #1A1A2A → #2A2A3E, pants #101820 → #1A1A2E for visibility.
+    skin: "#E8C0A0", hair: "#4A4A5A", shirt: "#2A2A3E",
+    pants: "#1A1A2E", accent: "#FFFFFF", eyes: "#1a1a2e",
   },
   giovanni: {
     skin: "#D8B090", hair: "#1a1a2a", shirt: "#5a6070",
@@ -883,6 +884,36 @@ export function generateSpriteSheet(characterId: string): SpriteSheet {
     } else {
       ctx.fillRect(f * FW + 3, sy - 1, 1, 1);
       ctx.fillRect(f * FW + 12, sy, 1, 1);
+    }
+  }
+
+  // P1: Agent accent stripe — 2px horizontal bar at shoulder row (~row 6 in body).
+  // Applied to all rows/frames so the stripe is visible in every animation state.
+  if (characterId !== "giovanni" && characterId !== "alfred") {
+    const stripeY = 4 + (ACCESSORY_TEMPLATES[characterId]?.length ?? 0) + 6; // acc offset + body row 6
+    ctx.fillStyle = palette.accent;
+    for (let row = 0; row < 5; row++) {
+      for (let f = 0; f < 3; f++) {
+        // 2px stripe across the shoulder width (cols 4-11, centered in 16px).
+        ctx.fillRect(f * FW + 4, row * FH + stripeY, 8, 1);
+        ctx.fillRect(f * FW + 4, row * FH + stripeY + 1, 8, 1);
+      }
+    }
+  }
+
+  // P2: Giovanni ear tip — 1-2px #FFD700 at the cowl ear tips (row 4 offset 0,
+  // Batman body rows 0-1: ear tip positions col 4 and col 11).
+  if (characterId === "giovanni") {
+    const accH = ACCESSORY_TEMPLATES["giovanni"]?.length ?? 0;
+    ctx.fillStyle = "#FFD700";
+    for (let row = 0; row < 5; row++) {
+      for (let f = 0; f < 3; f++) {
+        const baseX = f * FW;
+        const baseY = row * FH + 4 + accH; // sprite start Y within frame
+        // Row 0 ear tips: col 4, col 11.
+        ctx.fillRect(baseX + 4, baseY + 0, 1, 1);
+        ctx.fillRect(baseX + 11, baseY + 0, 1, 1);
+      }
     }
   }
 

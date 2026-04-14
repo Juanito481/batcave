@@ -48,6 +48,9 @@ export const P = {
   OUTLINE: "#060a10",
   HIGHLIGHT: "#2a3240",
   LED_COLORS: ["#2ECC71", "#1E7FD8", "#E74C3C", "#F39C12", "#2ECC71"],
+  // Herald visibility — furniture chrome.
+  FURNITURE_OUTLINE: "#0f3f6c", // accent at ~50% for furniture outlines
+  FURNITURE_BG: "#141428",      // one step above BG for furniture fills (P2)
 } as const;
 
 // ── Seeded random (deterministic procedural detail) ──────
@@ -63,6 +66,10 @@ export function seed(i: number): number {
 
 // ── Outline rect helper ─────────────────────────────────
 
+/**
+ * Draws a 1-zoom-pixel border around a rectangle.
+ * @param color - Override border color (defaults to P.OUTLINE). Pass P.FURNITURE_OUTLINE for furniture.
+ */
 export function outlineRect(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -70,8 +77,9 @@ export function outlineRect(
   w: number,
   h: number,
   zoom: number,
+  color?: string,
 ): void {
-  ctx.fillStyle = P.OUTLINE;
+  ctx.fillStyle = color ?? P.OUTLINE;
   ctx.fillRect(x, y, w, zoom);
   ctx.fillRect(x, y + h - zoom, w, zoom);
   ctx.fillRect(x, y, zoom, h);
