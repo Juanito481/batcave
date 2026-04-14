@@ -2,9 +2,13 @@
 # Copia in: .github/workflows/claude-review.yml di ogni repo di produzione
 #
 # Prerequisiti:
-#   1. Aggiungi ANTHROPIC_API_KEY come secret nel repo GitHub
-#      → Settings > Secrets and variables > Actions > New repository secret
-#   2. Verifica che GITHUB_TOKEN abbia permesso di scrivere commenti sulle PR
+#   1. Genera un OAuth token con la subscription Claude Max:
+#        claude setup-token
+#      (richiede `npm install -g @anthropic-ai/claude-code` se non installato)
+#   2. Aggiungi CLAUDE_CODE_OAUTH_TOKEN come secret nel repo GitHub:
+#        gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo <owner>/<repo>
+#   3. Installa la GitHub App "Claude Code" sul repo (https://github.com/apps/claude)
+#   4. Verifica che GITHUB_TOKEN abbia permesso di scrivere commenti sulle PR
 
 name: Claude Code Review
 
@@ -33,7 +37,7 @@ jobs:
       - name: Claude Code Review
         uses: anthropics/claude-code-action@beta
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           model: claude-sonnet-4-6
           direct_prompt: |
             Sei Bishop della Scacchiera Alfred — L'Ossessivo. Review questa PR come farebbe un code reviewer implacabile ma costruttivo.
