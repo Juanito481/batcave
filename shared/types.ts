@@ -26,6 +26,8 @@ export interface AgentEvent {
   agentId: string;
   agentName: string;
   timestamp: number;
+  /** Where the event was sourced. Defaults to "jsonl" for back-compat. */
+  source?: "jsonl" | "otel";
 }
 
 export interface ToolEvent {
@@ -34,6 +36,43 @@ export interface ToolEvent {
   timestamp: number;
   /** File path touched by this tool (Read, Edit, Write, Glob, Grep). */
   filePath?: string;
+  /** True on tool_end when OTel reports success. Optional for JSONL (unknown). */
+  success?: boolean;
+  /** Duration in ms from OTel tool_result. Optional for JSONL (unknown). */
+  durationMs?: number;
+  source?: "jsonl" | "otel";
+}
+
+/** API error from Claude Code (OTel only). v5.0+. */
+export interface ApiErrorEvent {
+  type: "api_error";
+  timestamp: number;
+  statusCode: string;
+  attempt: number;
+  model?: string;
+}
+
+/** Tool rejected by user (OTel only). v5.0+. */
+export interface ToolRejectedEvent {
+  type: "tool_rejected";
+  timestamp: number;
+  toolName: string;
+}
+
+/** User submitted a new prompt (OTel only). v5.0+. */
+export interface PromptStartEvent {
+  type: "prompt_start";
+  timestamp: number;
+  promptLength: number;
+}
+
+/** Plugin finished installing (OTel only). v5.0+. */
+export interface PluginInstalledEvent {
+  type: "plugin_installed";
+  timestamp: number;
+  pluginName: string;
+  pluginVersion?: string;
+  marketplaceName?: string;
 }
 
 export interface SessionEvent {
@@ -71,7 +110,11 @@ export type BatCaveEvent =
   | UsageStats
   | GitEvent
   | TodoEvent
-  | SessionsListEvent;
+  | SessionsListEvent
+  | ApiErrorEvent
+  | ToolRejectedEvent
+  | PromptStartEvent
+  | PluginInstalledEvent;
 
 export interface BatCaveConfig {
   activeRepo: string;

@@ -2,7 +2,7 @@
   "name": "batcave",
   "displayName": "Bat Cave",
   "description": "Pixel art visualization of Claude Code activity with animated chess-piece agents in a DC-style lab environment",
-  "version": "4.2.0",
+  "version": "5.0.0",
   "publisher": "juanito481",
   "license": "MIT",
   "repository": {
@@ -79,6 +79,22 @@
           "minimum": 0,
           "maximum": 100,
           "description": "Sound volume (0-100)"
+        },
+        "batcave.telemetrySource": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "jsonl",
+            "otel",
+            "both"
+          ],
+          "default": "auto",
+          "description": "Where to read Claude Code activity from. 'auto' uses OTel if available, falls back to JSONL. See docs/monitoring-setup.md."
+        },
+        "batcave.otelEventsFile": {
+          "type": "string",
+          "default": "~/.batcave/otel-events.jsonl",
+          "description": "Path to the OTel events file written by the local OTel Collector (file/json exporter). Supports ~ expansion."
         }
       }
     }

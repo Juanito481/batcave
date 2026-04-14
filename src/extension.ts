@@ -12,12 +12,16 @@
 
 import * as vscode from "vscode";
 import { ActivityMonitor } from "./activity-monitor";
+import { OtelMonitor } from "./otel-monitor";
+import { EventMerger } from "./event-merger";
 import {
   BatCaveEvent,
   AGENTS,
   ExtToWebviewMessage,
   SessionSummary,
 } from "./types";
+
+type TelemetrySource = "auto" | "jsonl" | "otel" | "both";
 
 /** Escape a string for safe use inside single-quoted shell arguments. */
 function escapeShellArg(s: string): string {
@@ -47,6 +51,8 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
   private view?: vscode.WebviewView;
   private webviewReady = false;
   private monitor: ActivityMonitor;
+  private otelMonitor: OtelMonitor | null = null;
+  private merger: EventMerger;
   private eventQueue: BatCaveEvent[] = [];
   private globalState: vscode.Memento;
 
@@ -55,7 +61,62 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
     globalState: vscode.Memento,
   ) {
     this.globalState = globalState;
-    this.monitor = new ActivityMonitor((event) => this.handleEvent(event));
+    this.merger = new EventMerger((event) => this.handleEvent(event));
+    this.monitor = new ActivityMonitor((event) =>
+      this.merger.push({
+        ...event,
+        source: (event as { source?: "jsonl" | "otel" }).source ?? "jsonl",
+      } as BatCaveEvent),
+    );
+  }
+
+  private getTelemetrySource(): TelemetrySource {
+    const v = vscode.workspace
+      .getConfiguration("batcave")
+      .get<string>("telemetrySource", "auto");
+    if (v === "jsonl" || v === "otel" || v === "both") return v;
+    return "auto";
+  }
+
+  private getOtelEventsFile(): string {
+    return vscode.workspace
+      .getConfiguration("batcave")
+      .get<string>("otelEventsFile", "~/.batcave/otel-events.jsonl");
+  }
+
+  private startMonitors(): void {
+    const mode = this.getTelemetrySource();
+    const otelPath = this.getOtelEventsFile();
+
+    // Lazily construct OTel monitor so we can check availability.
+    if (!this.otelMonitor) {
+      this.otelMonitor = new OtelMonitor(
+        otelPath,
+        (event) => this.merger.push(event),
+        (msg) => console.log(`[batcave] ${msg}`),
+      );
+    }
+
+    const otelAvailable = this.otelMonitor.isAvailable();
+    const useOtel =
+      mode === "otel" || mode === "both" || (mode === "auto" && otelAvailable);
+    const useJsonl = mode === "jsonl" || mode === "both" || mode === "auto";
+
+    if (useOtel && otelAvailable) {
+      this.otelMonitor.start();
+    } else if (useOtel && !otelAvailable) {
+      console.log(
+        `[batcave] telemetrySource=${mode} but OTel events file not found at ${otelPath} — falling back to JSONL. See docs/monitoring-setup.md.`,
+      );
+    }
+    if (useJsonl) {
+      this.monitor.start();
+    }
+  }
+
+  private stopMonitors(): void {
+    this.monitor.stop();
+    this.otelMonitor?.stop();
   }
 
   resolveWebviewView(
@@ -107,10 +168,23 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
     });
 
     // Start monitoring Claude Code activity.
-    this.monitor.start();
+    this.startMonitors();
+
+    // Reconfigure monitors when telemetry settings change.
+    const configSub = vscode.workspace.onDidChangeConfiguration((e) => {
+      if (
+        e.affectsConfiguration("batcave.telemetrySource") ||
+        e.affectsConfiguration("batcave.otelEventsFile")
+      ) {
+        this.stopMonitors();
+        this.otelMonitor = null; // rebuild with new path
+        this.startMonitors();
+      }
+    });
 
     webviewView.onDidDispose(() => {
-      this.monitor.stop();
+      this.stopMonitors();
+      configSub.dispose();
       this.webviewReady = false;
     });
   }
@@ -118,8 +192,8 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
   reset(): void {
     if (this.view && this.webviewReady) {
       this.view.webview.postMessage({ command: "reset", payload: {} });
-      this.monitor.stop();
-      this.monitor.start();
+      this.stopMonitors();
+      this.startMonitors();
       this.sendConfig();
     }
   }
