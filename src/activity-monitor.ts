@@ -411,10 +411,10 @@ export class ActivityMonitor {
     const text = desc + " " + prompt;
 
     // Check each known agent ID using word-boundary regex to avoid partial matches.
-    // Sort by length descending so "black-knight" matches before "knight".
+    // Sort by length descending so "heretic" matches before "knight".
     const sortedIds = Object.keys(AGENTS).sort((a, b) => b.length - a.length);
     for (const agentId of sortedIds) {
-      // Match "black-knight" or "black knight" as whole words.
+      // Match "heretic" or "black knight" as whole words.
       const pattern = new RegExp(`\\b${agentId.replace("-", "[- ]")}\\b`);
       if (pattern.test(text)) {
         return agentId;
@@ -425,13 +425,13 @@ export class ActivityMonitor {
     const italianMap: Record<string, string> = {
       sovrano: "king",
       stratega: "queen",
-      fortezza: "white-rook",
+      fortezza: "rook",
       architetto: "knight",
       ossessivo: "bishop",
       segretario: "pawn",
-      scassinatore: "black-rook",
-      demolitore: "black-bishop",
-      sabotatore: "black-knight",
+      scassinatore: "marauder",
+      demolitore: "specter",
+      sabotatore: "heretic",
       cancelliere: "chancellor",
       cardinale: "cardinal",
       esploratore: "scout",

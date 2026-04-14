@@ -145,8 +145,9 @@ export type WebviewToExtMessage =
   | { command: "saveSession"; payload: SessionSummary }
   | { command: "exportSession" };
 
-/** Known Alfred chess-piece agents. */
+/** Known Alfred chess-piece agents — Scacchiera v4.1 roster (21 agents). */
 export const AGENTS: Record<string, AgentMeta> = {
+  // ── Strategia ──
   king: {
     name: "Il Sovrano",
     emoji: "\u2654",
@@ -159,53 +160,45 @@ export const AGENTS: Record<string, AgentMeta> = {
     role: "Business analysis",
     color: "white",
   },
-  "white-rook": {
-    name: "La Fortezza",
-    emoji: "\u2656",
-    role: "Security defense",
-    color: "white",
+  heretic: {
+    name: "L'Eretico",
+    emoji: "\u265E",
+    role: "Antifragile audit",
+    color: "black",
   },
-  bishop: {
-    name: "Bishop",
-    emoji: "\uD83D\uDD0E",
-    role: "Code review",
-    color: "white",
-  },
+
+  // ── Builder ──
   knight: {
     name: "L'Architetto",
     emoji: "\uD83D\uDC34",
     role: "Architecture & build",
     color: "white",
   },
-  pawn: {
-    name: "Il Segretario",
-    emoji: "\u265F\uFE0F",
-    role: "Briefing & status",
+  weaver: {
+    name: "Il Tessitore",
+    emoji: "\uD83E\uDDF5",
+    role: "Backend & data",
+    color: "specialist",
+  },
+  sculptor: {
+    name: "Lo Scultore",
+    emoji: "\uD83C\uDFA8",
+    role: "Frontend & UI",
+    color: "specialist",
+  },
+  herald: {
+    name: "L'Araldo",
+    emoji: "\uD83D\uDCE3",
+    role: "Design system",
+    color: "specialist",
+  },
+
+  // ── Qualita ──
+  bishop: {
+    name: "Bishop",
+    emoji: "\uD83D\uDD0E",
+    role: "Code review",
     color: "white",
-  },
-  "black-rook": {
-    name: "Lo Scassinatore",
-    emoji: "\u265C",
-    role: "Red team & pentest",
-    color: "black",
-  },
-  "black-bishop": {
-    name: "Il Demolitore",
-    emoji: "\u265D",
-    role: "Tech debt hunter",
-    color: "black",
-  },
-  "black-knight": {
-    name: "Il Sabotatore",
-    emoji: "\u265E",
-    role: "Chaos & edge cases",
-    color: "black",
-  },
-  chancellor: {
-    name: "Il Cancelliere",
-    emoji: "\u2699\uFE0F",
-    role: "DevOps & infra",
-    color: "variant",
   },
   cardinal: {
     name: "Il Cardinale",
@@ -219,10 +212,78 @@ export const AGENTS: Record<string, AgentMeta> = {
     role: "Browser & visual",
     color: "specialist",
   },
+  specter: {
+    name: "Lo Spettro",
+    emoji: "\u265D",
+    role: "Tech debt hunter",
+    color: "black",
+  },
+
+  // ── Sicurezza ──
+  rook: {
+    name: "La Fortezza",
+    emoji: "\u2656",
+    role: "Security defense",
+    color: "white",
+  },
+  marauder: {
+    name: "Il Razziatore",
+    emoji: "\u265C",
+    role: "Red team & pentest",
+    color: "black",
+  },
+
+  // ── Orchestrazione & ops ──
+  marshal: {
+    name: "Il Maresciallo",
+    emoji: "\uD83D\uDCDC",
+    role: "Chain orchestrator",
+    color: "variant",
+  },
+  chancellor: {
+    name: "Il Cancelliere",
+    emoji: "\u2699\uFE0F",
+    role: "DevOps & infra",
+    color: "variant",
+  },
   ship: {
     name: "La Nave",
     emoji: "\uD83D\uDEA2",
     role: "Git commit & push",
+    color: "utility",
+  },
+  pawn: {
+    name: "Il Segretario",
+    emoji: "\u265F\uFE0F",
+    role: "Briefing & status",
+    color: "white",
+  },
+
+  // ── Conoscenza ──
+  oracle: {
+    name: "L'Informatrice",
+    emoji: "\uD83D\uDD2E",
+    role: "Knowledge graph",
+    color: "specialist",
+  },
+  thief: {
+    name: "Il Ladro",
+    emoji: "\uD83C\uDFF4\u200D\u2620\uFE0F",
+    role: "External scouting",
+    color: "black",
+  },
+
+  // ── Meta ──
+  polymorph: {
+    name: "Il Mutaforma",
+    emoji: "\uD83C\uDFAD",
+    role: "Ad-hoc expertise",
+    color: "specialist",
+  },
+  loop: {
+    name: "Il Ciclo",
+    emoji: "\uD83D\uDD01",
+    role: "Ralph loop",
     color: "utility",
   },
 };

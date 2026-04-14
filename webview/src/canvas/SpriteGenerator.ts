@@ -45,22 +45,29 @@ interface DerivedShades {
 function deriveShades(p: CharacterPalette): DerivedShades {
   // GBA-style 16-color budget: 6 base + 4 shadow (H,S,T,P) + 4 highlight (H,S,T,A) + outline + transparent.
   return {
-    base: { H: p.hair, S: p.skin, T: p.shirt, P: p.pants, A: p.accent, E: p.eyes },
+    base: {
+      H: p.hair,
+      S: p.skin,
+      T: p.shirt,
+      P: p.pants,
+      A: p.accent,
+      E: p.eyes,
+    },
     shadow: {
-      H: darken(p.hair, 0.30),
+      H: darken(p.hair, 0.3),
       S: darken(p.skin, 0.22),
       T: darken(p.shirt, 0.25),
       P: darken(p.pants, 0.25),
-      A: p.accent,   // no separate shadow — budget
-      E: p.eyes,     // no separate shadow — budget
+      A: p.accent, // no separate shadow — budget
+      E: p.eyes, // no separate shadow — budget
     },
     highlight: {
       H: lighten(p.hair, 0.18),
       S: lighten(p.skin, 0.15),
       T: lighten(p.shirt, 0.15),
-      P: p.pants,    // no separate highlight — budget
-      A: lighten(p.accent, 0.20),
-      E: p.eyes,     // no separate highlight — budget
+      P: p.pants, // no separate highlight — budget
+      A: lighten(p.accent, 0.2),
+      E: p.eyes, // no separate highlight — budget
     },
   };
 }
@@ -70,80 +77,220 @@ function deriveShades(p: CharacterPalette): DerivedShades {
 const PALETTES: Record<string, CharacterPalette> = {
   alfred: {
     // P0: shirt #1A1A2A → #2A2A3E, pants #101820 → #1A1A2E for visibility.
-    skin: "#E8C0A0", hair: "#4A4A5A", shirt: "#2A2A3E",
-    pants: "#1A1A2E", accent: "#FFFFFF", eyes: "#1a1a2e",
+    skin: "#E8C0A0",
+    hair: "#4A4A5A",
+    shirt: "#2A2A3E",
+    pants: "#1A1A2E",
+    accent: "#FFFFFF",
+    eyes: "#1a1a2e",
   },
   giovanni: {
-    skin: "#D8B090", hair: "#1a1a2a", shirt: "#5a6070",
-    pants: "#3a3a4a", accent: "#FFD700", eyes: "#FFFFFF",
+    skin: "#D8B090",
+    hair: "#1a1a2a",
+    shirt: "#5a6070",
+    pants: "#3a3a4a",
+    accent: "#FFD700",
+    eyes: "#FFFFFF",
   },
   king: {
-    skin: "#F0D0A0", hair: "#FFD700", shirt: "#4A0E6B",
-    pants: "#380854", accent: "#FFD700", eyes: "#1a1a2e",
+    skin: "#F0D0A0",
+    hair: "#FFD700",
+    shirt: "#4A0E6B",
+    pants: "#380854",
+    accent: "#FFD700",
+    eyes: "#1a1a2e",
   },
   queen: {
-    skin: "#F0D0A0", hair: "#8B0000", shirt: "#1E7FD8",
-    pants: "#155FA0", accent: "#FFD700", eyes: "#1a1a2e",
+    skin: "#F0D0A0",
+    hair: "#8B0000",
+    shirt: "#1E7FD8",
+    pants: "#155FA0",
+    accent: "#FFD700",
+    eyes: "#1a1a2e",
   },
-  "white-rook": {
-    skin: "#F0D0A0", hair: "#808090", shirt: "#C0C0D0",
-    pants: "#A0A0B0", accent: "#1E7FD8", eyes: "#1a1a2e",
+  rook: {
+    skin: "#F0D0A0",
+    hair: "#808090",
+    shirt: "#C0C0D0",
+    pants: "#A0A0B0",
+    accent: "#1E7FD8",
+    eyes: "#1a1a2e",
   },
   bishop: {
-    skin: "#F0D0A0", hair: "#2C2C3C", shirt: "#2A2A3A",
-    pants: "#1A1A2A", accent: "#E74C3C", eyes: "#1a1a2e",
+    skin: "#F0D0A0",
+    hair: "#2C2C3C",
+    shirt: "#2A2A3A",
+    pants: "#1A1A2A",
+    accent: "#E74C3C",
+    eyes: "#1a1a2e",
   },
   knight: {
-    skin: "#F0D0A0", hair: "#4A3728", shirt: "#2E8B57",
-    pants: "#1D6B3F", accent: "#90EE90", eyes: "#1a1a2e",
+    skin: "#F0D0A0",
+    hair: "#4A3728",
+    shirt: "#2E8B57",
+    pants: "#1D6B3F",
+    accent: "#90EE90",
+    eyes: "#1a1a2e",
   },
   pawn: {
-    skin: "#F0D0A0", hair: "#6B4226", shirt: "#8B7355",
-    pants: "#6B5335", accent: "#D2B48C", eyes: "#1a1a2e",
+    skin: "#F0D0A0",
+    hair: "#6B4226",
+    shirt: "#8B7355",
+    pants: "#6B5335",
+    accent: "#D2B48C",
+    eyes: "#1a1a2e",
   },
-  "black-rook": {
-    skin: "#D0B090", hair: "#1A1A1A", shirt: "#2C0A0A",
-    pants: "#1A0606", accent: "#FF4444", eyes: "#FF4444",
+  marauder: {
+    skin: "#D0B090",
+    hair: "#1A1A1A",
+    shirt: "#2C0A0A",
+    pants: "#1A0606",
+    accent: "#FF4444",
+    eyes: "#FF4444",
   },
-  "black-bishop": {
-    skin: "#D0B090", hair: "#3A3A3A", shirt: "#404050",
-    pants: "#303040", accent: "#9B59B6", eyes: "#9B59B6",
+  specter: {
+    skin: "#D0B090",
+    hair: "#3A3A3A",
+    shirt: "#404050",
+    pants: "#303040",
+    accent: "#9B59B6",
+    eyes: "#9B59B6",
   },
-  "black-knight": {
-    skin: "#D0B090", hair: "#1A1A1A", shirt: "#333344",
-    pants: "#222233", accent: "#E67E22", eyes: "#E67E22",
+  heretic: {
+    skin: "#D0B090",
+    hair: "#1A1A1A",
+    shirt: "#333344",
+    pants: "#222233",
+    accent: "#E67E22",
+    eyes: "#E67E22",
   },
   chancellor: {
-    skin: "#F0D0A0", hair: "#4A4A5A", shirt: "#34495E",
-    pants: "#2C3E50", accent: "#3498DB", eyes: "#1a1a2e",
+    skin: "#F0D0A0",
+    hair: "#4A4A5A",
+    shirt: "#34495E",
+    pants: "#2C3E50",
+    accent: "#3498DB",
+    eyes: "#1a1a2e",
   },
   cardinal: {
-    skin: "#F0D0A0", hair: "#F5F5F5", shirt: "#FFFFFF",
-    pants: "#E0E0E0", accent: "#2ECC71", eyes: "#1a1a2e",
+    skin: "#F0D0A0",
+    hair: "#F5F5F5",
+    shirt: "#FFFFFF",
+    pants: "#E0E0E0",
+    accent: "#2ECC71",
+    eyes: "#1a1a2e",
   },
   scout: {
-    skin: "#F0D0A0", hair: "#2C6B2F", shirt: "#2E4A1E",
-    pants: "#1E3A0E", accent: "#7CFC00", eyes: "#1a1a2e",
+    skin: "#F0D0A0",
+    hair: "#2C6B2F",
+    shirt: "#2E4A1E",
+    pants: "#1E3A0E",
+    accent: "#7CFC00",
+    eyes: "#1a1a2e",
   },
   ship: {
-    skin: "#C0C0D0", hair: "#808090", shirt: "#505060",
-    pants: "#404050", accent: "#1E7FD8", eyes: "#1E7FD8",
+    skin: "#C0C0D0",
+    hair: "#808090",
+    shirt: "#505060",
+    pants: "#404050",
+    accent: "#1E7FD8",
+    eyes: "#1E7FD8",
+  },
+  herald: {
+    skin: "#F0D0A0",
+    hair: "#5A3D22",
+    shirt: "#1E7FD8",
+    pants: "#155FA0",
+    accent: "#FFD700",
+    eyes: "#1a1a2e",
+  },
+  sculptor: {
+    skin: "#F0D0A0",
+    hair: "#8B5A2B",
+    shirt: "#F5F5F5",
+    pants: "#D0D0D8",
+    accent: "#1E7FD8",
+    eyes: "#1a1a2e",
+  },
+  weaver: {
+    skin: "#F0D0A0",
+    hair: "#4A3728",
+    shirt: "#3A4A60",
+    pants: "#2A3A50",
+    accent: "#1ABC9C",
+    eyes: "#1a1a2e",
+  },
+  marshal: {
+    skin: "#F0D0A0",
+    hair: "#2A2A2A",
+    shirt: "#8B6B2F",
+    pants: "#6B4F1F",
+    accent: "#C0C0C0",
+    eyes: "#1a1a2e",
+  },
+  polymorph: {
+    skin: "#D0B090",
+    hair: "#6A4A8B",
+    shirt: "#4A2A6B",
+    pants: "#3A1A5B",
+    accent: "#E91E63",
+    eyes: "#E91E63",
+  },
+  thief: {
+    skin: "#D0B090",
+    hair: "#1A1A1A",
+    shirt: "#2C2C2C",
+    pants: "#1A1A1A",
+    accent: "#FFD700",
+    eyes: "#FFD700",
+  },
+  oracle: {
+    skin: "#F0D0A0",
+    hair: "#6B2B8B",
+    shirt: "#301B5B",
+    pants: "#201040",
+    accent: "#9B59B6",
+    eyes: "#9B59B6",
+  },
+  loop: {
+    skin: "#F0D0A0",
+    hair: "#6B5335",
+    shirt: "#2E7D6E",
+    pants: "#1E6D5E",
+    accent: "#F39C12",
+    eyes: "#1a1a2e",
   },
   ab: {
-    skin: "#C8A882", hair: "#3D2B1F", shirt: "#1A1A1A",
-    pants: "#2B4570", accent: "#333333", eyes: "#1a1a2e",
+    skin: "#C8A882",
+    hair: "#3D2B1F",
+    shirt: "#1A1A1A",
+    pants: "#2B4570",
+    accent: "#333333",
+    eyes: "#1a1a2e",
   },
   andrea: {
-    skin: "#F0D0A0", hair: "#A0724A", shirt: "#5B6B3D",
-    pants: "#4A5A2D", accent: "#8B7355", eyes: "#1a1a2e",
+    skin: "#F0D0A0",
+    hair: "#A0724A",
+    shirt: "#5B6B3D",
+    pants: "#4A5A2D",
+    accent: "#8B7355",
+    eyes: "#1a1a2e",
   },
   arturo: {
-    skin: "#E0C8A8", hair: "#B83200", shirt: "#0E0E0E",
-    pants: "#101010", accent: "#1A1A1A", eyes: "#1a1a2e",
+    skin: "#E0C8A8",
+    hair: "#B83200",
+    shirt: "#0E0E0E",
+    pants: "#101010",
+    accent: "#1A1A1A",
+    eyes: "#1a1a2e",
   },
   francesco: {
-    skin: "#E8C8A0", hair: "#1A1A2A", shirt: "#2C3E50",
-    pants: "#3A3A3A", accent: "#4A6A7A", eyes: "#1a1a2e",
+    skin: "#E8C8A0",
+    hair: "#1A1A2A",
+    shirt: "#2C3E50",
+    pants: "#3A3A3A",
+    accent: "#4A6A7A",
+    eyes: "#1a1a2e",
   },
 };
 
@@ -179,23 +326,23 @@ const BODY_STANDARD = [
 // 3=suit highlight, t=suit shadow for grey torso.
 // P=pants(dark grey legs), A=belt(gold), E=eyes(white).
 const BODY_BATMAN = [
-  "....H......H....",  // cowl ear tips (tall, narrow, symmetric)
-  "...HH......HH...",  // ear shafts
-  "...HHHHHHHHHH...",  // ears merge into skull
-  "..HHHHHHHHHHHH..",  // full cowl width
-  "..HHhEEHHEEhHH..",  // brow + white angular eyes
-  "..HHHHHHHHHHHH..",  // nose bridge
-  "....HHSSSSHH....",  // lower face (tiny skin window)
-  ".....SSSSSS.....",  // chin
-  "......SSSS......",  // neck
-  "..tTT3TT3TTTt...",  // shoulders — cape wraps grey suit
-  "..TTTTTTTTTTTT..",  // upper chest — wide cape
-  "..tTT3TT3TTTt...",  // mid chest — suit visible under cape
-  "..TTTTtTtTTTTT..",  // lower chest
-  "..tTTTTTTTTTTt..",  // waist cape
-  "...TAAAAAAT.....",  // gold utility belt
-  "...TTPPPPPPTT...",  // upper legs under cape
-  "...TTPp..pPTT...",  // lower legs + boots
+  "....H......H....", // cowl ear tips (tall, narrow, symmetric)
+  "...HH......HH...", // ear shafts
+  "...HHHHHHHHHH...", // ears merge into skull
+  "..HHHHHHHHHHHH..", // full cowl width
+  "..HHhEEHHEEhHH..", // brow + white angular eyes
+  "..HHHHHHHHHHHH..", // nose bridge
+  "....HHSSSSHH....", // lower face (tiny skin window)
+  ".....SSSSSS.....", // chin
+  "......SSSS......", // neck
+  "..tTT3TT3TTTt...", // shoulders — cape wraps grey suit
+  "..TTTTTTTTTTTT..", // upper chest — wide cape
+  "..tTT3TT3TTTt...", // mid chest — suit visible under cape
+  "..TTTTtTtTTTTT..", // lower chest
+  "..tTTTTTTTTTTt..", // waist cape
+  "...TAAAAAAT.....", // gold utility belt
+  "...TTPPPPPPTT...", // upper legs under cape
+  "...TTPp..pPTT...", // lower legs + boots
 ];
 
 // Caped — King: wide cape draping from shoulders, regal silhouette.
@@ -240,7 +387,7 @@ const BODY_ROBED = [
   "..tTTTTtTTTTt...",
 ];
 
-// Armored — White Rook: wide, stocky, boxy torso with shield.
+// Armored — Rook / Marshal: wide, stocky, boxy torso with shield.
 const BODY_ARMORED = [
   "......HHHH......",
   ".....HHHHHH.....",
@@ -282,7 +429,7 @@ const BODY_COATED = [
   "....TT.Pp.TT....",
 ];
 
-// Hooded — Black Rook: cloak with hood, narrow and sinister.
+// Hooded — Marauder / Thief: cloak with hood, narrow and sinister.
 const BODY_HOODED = [
   ".....HHHHHH.....",
   "....HhHHH1HH....",
@@ -303,7 +450,7 @@ const BODY_HOODED = [
   ".....Pp..pP.....",
 ];
 
-// Heavy — Black Bishop: very wide shoulders, demolition build.
+// Heavy — Specter: very wide shoulders, demolition build.
 const BODY_HEAVY = [
   "......HHHH......",
   ".....HhHHHH.....",
@@ -324,7 +471,7 @@ const BODY_HEAVY = [
   "....Pp....pP....",
 ];
 
-// Glitch — Black Knight: asymmetric, irregular silhouette.
+// Glitch — Heretic / Polymorph: asymmetric, irregular silhouette.
 const BODY_GLITCH = [
   ".....HHHHH......",
   "....HhHHHH.H....",
@@ -468,23 +615,23 @@ const BACK_STANDARD = [
 ];
 
 const BACK_BATMAN = [
-  "....H......H....",  // cowl ear tips (symmetric)
-  "...HH......HH...",  // ear shafts
-  "...HHHHHHHHHH...",  // ears merge into skull
-  "..HHHHHHHHHHHH..",  // full cowl
-  "..HHHHHHHHHHHH..",  // back of cowl
-  "..HHHHHHHHHHHH..",  // back of cowl
-  "....HHHHHHHH....",  // cowl narrows
-  ".....HHHHHH.....",  // lower cowl
-  "......SSSS......",  // neck
-  "..tTTTTTTTTTTt..",  // shoulders
-  "..TTTTTTTTTTTT..",  // upper back — cape
-  "..tTTTTtTTTTTt..",  // mid back
-  "..TTTTTTTTTTTT..",  // lower back
-  "..tTTTTTTTTTTt..",  // waist
-  "...TAAAAAAT.....",  // belt
-  "...TTPPPPPPTT...",  // upper legs
-  "...TTPp..pPTT...",  // lower legs
+  "....H......H....", // cowl ear tips (symmetric)
+  "...HH......HH...", // ear shafts
+  "...HHHHHHHHHH...", // ears merge into skull
+  "..HHHHHHHHHHHH..", // full cowl
+  "..HHHHHHHHHHHH..", // back of cowl
+  "..HHHHHHHHHHHH..", // back of cowl
+  "....HHHHHHHH....", // cowl narrows
+  ".....HHHHHH.....", // lower cowl
+  "......SSSS......", // neck
+  "..tTTTTTTTTTTt..", // shoulders
+  "..TTTTTTTTTTTT..", // upper back — cape
+  "..tTTTTtTTTTTt..", // mid back
+  "..TTTTTTTTTTTT..", // lower back
+  "..tTTTTTTTTTTt..", // waist
+  "...TAAAAAAT.....", // belt
+  "...TTPPPPPPTT...", // upper legs
+  "...TTPp..pPTT...", // lower legs
 ];
 
 const BACK_CAPED = [
@@ -549,11 +696,16 @@ const BACK_HOODED = [
 
 function getBackTemplate(bodyType: BodyType): string[] {
   switch (bodyType) {
-    case "batman": return BACK_BATMAN;
-    case "caped": return BACK_CAPED;
-    case "robed": return BACK_ROBED;
-    case "hooded": return BACK_HOODED;
-    default: return BACK_STANDARD;
+    case "batman":
+      return BACK_BATMAN;
+    case "caped":
+      return BACK_CAPED;
+    case "robed":
+      return BACK_ROBED;
+    case "hooded":
+      return BACK_HOODED;
+    default:
+      return BACK_STANDARD;
   }
 }
 
@@ -623,21 +775,31 @@ const LEGS_HOODED: string[][] = [
 
 function getFrontLegs(bodyType: BodyType): string[][] {
   switch (bodyType) {
-    case "batman": return LEGS_BATMAN;
-    case "caped": return LEGS_CAPED;
-    case "robed": return LEGS_ROBED;
-    case "armored": return LEGS_ARMORED;
-    case "hooded": return LEGS_HOODED;
-    default: return LEGS_FRONT;
+    case "batman":
+      return LEGS_BATMAN;
+    case "caped":
+      return LEGS_CAPED;
+    case "robed":
+      return LEGS_ROBED;
+    case "armored":
+      return LEGS_ARMORED;
+    case "hooded":
+      return LEGS_HOODED;
+    default:
+      return LEGS_FRONT;
   }
 }
 
 function getBackLegs(bodyType: BodyType): string[][] {
   switch (bodyType) {
-    case "batman": return LEGS_BATMAN;
-    case "caped": return LEGS_CAPED;
-    case "robed": return LEGS_ROBED;
-    default: return LEGS_BACK;
+    case "batman":
+      return LEGS_BATMAN;
+    case "caped":
+      return LEGS_CAPED;
+    case "robed":
+      return LEGS_ROBED;
+    default:
+      return LEGS_BACK;
   }
 }
 
@@ -645,47 +807,16 @@ function getBackLegs(bodyType: BodyType): string[][] {
 
 const ACCESSORY_TEMPLATES: Record<string, string[]> = {
   giovanni: [],
-  king: [
-    "......A.AA......",
-    ".....AAAAAA.....",
-    "....A.AAAA.A....",
-  ],
-  queen: [
-    "......A..A......",
-    ".....AAAAAA.....",
-  ],
-  "white-rook": [
-    "....AAA..AAA....",
-    "....AAAAAAAA....",
-  ],
-  knight: [
-    "................",
-    "....A...........",
-  ],
-  "black-rook": [
-    "....A......A....",
-    "................",
-  ],
-  "black-bishop": [
-    "....AAAAAAAA....",
-    "....AAAAAAAA....",
-  ],
-  chancellor: [
-    "................",
-    ".....A....A.....",
-  ],
-  cardinal: [
-    "................",
-    "......AAAA......",
-  ],
-  scout: [
-    "..AAAAAAAAAAAA..",
-    "...AAAAAAAAAA...",
-  ],
-  ship: [
-    "....AAAAAAAA....",
-    ".....AAAAAA.....",
-  ],
+  king: ["......A.AA......", ".....AAAAAA.....", "....A.AAAA.A...."],
+  queen: ["......A..A......", ".....AAAAAA....."],
+  rook: ["....AAA..AAA....", "....AAAAAAAA...."],
+  knight: ["................", "....A..........."],
+  marauder: ["....A......A....", "................"],
+  specter: ["....AAAAAAAA....", "....AAAAAAAA...."],
+  chancellor: ["................", ".....A....A....."],
+  cardinal: ["................", "......AAAA......"],
+  scout: ["..AAAAAAAAAAAA..", "...AAAAAAAAAA..."],
+  ship: ["....AAAAAAAA....", ".....AAAAAA....."],
 };
 
 // ── Resolve body type for a character ───────────────────
@@ -702,7 +833,11 @@ type PixelMap = (string | null)[][];
 const FW = 16;
 const FH = 32;
 
-function buildPixelMap(characterId: string, bodyTemplate: string[], legVariant?: string[]): PixelMap {
+function buildPixelMap(
+  characterId: string,
+  bodyTemplate: string[],
+  legVariant?: string[],
+): PixelMap {
   const map: PixelMap = Array.from({ length: FH }, () => Array(FW).fill(null));
   const accessory = ACCESSORY_TEMPLATES[characterId];
   let oy = 4; // Start offset for vertical centering in 32px frame.
@@ -775,7 +910,14 @@ function renderFrame(
   // Pass 2 — Fill with directional shading.
   // Lowercase letters = forced shadow (h→H shadow, t→T shadow, etc.)
   // Digit 1-6 = forced highlight (1→H, 2→S, 3→T, 4→P, 5→A, 6→E)
-  const FORCED_HIGHLIGHT: Record<string, string> = { "1": "H", "2": "S", "3": "T", "4": "P", "5": "A", "6": "E" };
+  const FORCED_HIGHLIGHT: Record<string, string> = {
+    "1": "H",
+    "2": "S",
+    "3": "T",
+    "4": "P",
+    "5": "A",
+    "6": "E",
+  };
 
   for (let y = 0; y < FH; y++) {
     for (let x = 0; x < FW; x++) {
@@ -787,7 +929,11 @@ function renderFrame(
       // Check forced shading.
       const isLower = raw >= "a" && raw <= "z";
       const isDigit = FORCED_HIGHLIGHT[raw] !== undefined;
-      const key = isLower ? raw.toUpperCase() : isDigit ? FORCED_HIGHLIGHT[raw] : raw;
+      const key = isLower
+        ? raw.toUpperCase()
+        : isDigit
+          ? FORCED_HIGHLIGHT[raw]
+          : raw;
 
       let color: string;
       if (isLower) {
@@ -856,25 +1002,57 @@ export function generateSpriteSheet(characterId: string): SpriteSheet {
   const walkBobs = [0, -1, 0];
   for (let f = 0; f < 3; f++) {
     const map = buildPixelMap(characterId, bodyFront, legsFront[legFrames[f]]);
-    renderFrame(ctx, f * FW, FH, offsetMap(map, walkBobs[f]), shades, false, true);
+    renderFrame(
+      ctx,
+      f * FW,
+      FH,
+      offsetMap(map, walkBobs[f]),
+      shades,
+      false,
+      true,
+    );
   }
 
   // Row 2 — Walk up (3 distinct leg poses, back-facing).
   for (let f = 0; f < 3; f++) {
     const map = buildPixelMap(characterId, bodyBack, legsBack[legFrames[f]]);
-    renderFrame(ctx, f * FW, FH * 2, offsetMap(map, walkBobs[f]), shades, false, true);
+    renderFrame(
+      ctx,
+      f * FW,
+      FH * 2,
+      offsetMap(map, walkBobs[f]),
+      shades,
+      false,
+      true,
+    );
   }
 
   // Row 3 — Walk side (flipped, with corrected shading direction).
   for (let f = 0; f < 3; f++) {
     const map = buildPixelMap(characterId, bodyFront, LEGS_SIDE[legFrames[f]]);
-    renderFrame(ctx, f * FW, FH * 3, offsetMap(map, walkBobs[f]), shades, true, false);
+    renderFrame(
+      ctx,
+      f * FW,
+      FH * 3,
+      offsetMap(map, walkBobs[f]),
+      shades,
+      true,
+      false,
+    );
   }
 
   // Row 4 — Action (bob + sparkle overlay at arms).
   for (let f = 0; f < 3; f++) {
     const map = buildPixelMap(characterId, bodyFront);
-    renderFrame(ctx, f * FW, FH * 4, offsetMap(map, bobs[f]), shades, false, true);
+    renderFrame(
+      ctx,
+      f * FW,
+      FH * 4,
+      offsetMap(map, bobs[f]),
+      shades,
+      false,
+      true,
+    );
     const accH = ACCESSORY_TEMPLATES[characterId]?.length ?? 0;
     const sy = FH * 4 + accH + 16 + bobs[f];
     ctx.fillStyle = palette.accent;

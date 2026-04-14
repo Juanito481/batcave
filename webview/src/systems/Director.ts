@@ -145,7 +145,7 @@ export class Director {
             /auth|login|password|secret|token|session|jwt|oauth/i.test(f),
           ) || "auth files";
           return [
-            { agentId: "white-rook", task: `Security review triggered: ${authFile} was modified. Check for vulnerabilities.` },
+            { agentId: "rook", task: `Security review triggered: ${authFile} was modified. Check for vulnerabilities.` },
           ];
         },
         priority: "high",
