@@ -102,6 +102,27 @@ export interface ChainCardState {
   lastUpdateMs: number;
 }
 
+/** Oracle knowledge graph snapshot (v5.5+) — sourced from graphify-out/. */
+export interface OracleStatsState {
+  totalNodes: number;
+  totalEdges: number;
+  communities: number;
+  reportDate: string;
+  lastUpdateMs: number;
+}
+
+/** Oracle god node, used by ConstellationLayer. */
+export interface OracleGodNodeState {
+  name: string;
+  edges: number;
+}
+
+/** Oracle community summary. */
+export interface OracleCommunityState {
+  id: string;
+  name: string;
+}
+
 const REPO_THEMES: Record<string, RepoTheme> = {
   harriet: {
     accent: "#1E7FD8",
@@ -171,6 +192,17 @@ export class BatCaveWorld {
 
   // Scacchiera chains — active chain cards consumed by MissionBoardLayer.
   private chainCards: Map<string, ChainCardState> = new Map();
+
+  // Oracle knowledge graph state (updated on oracle_rebuild events).
+  private oracleStats: OracleStatsState | null = null;
+  private oracleGodNodes: OracleGodNodeState[] = [];
+  private oracleCommunities: OracleCommunityState[] = [];
+  private oraclePulseMs = 0;
+  private oracleLastQuery: {
+    query: string;
+    resultCount: number;
+    timestamp: number;
+  } | null = null;
 
   // Companion NPC system (Ab, Andrea, Arturo + Francesco).
   private companionSystem!: CompanionSystem;
@@ -1011,12 +1043,125 @@ export class BatCaveWorld {
         this.audit("agent", type, `${chainId} (${card.currentAgent})`);
         break;
       }
+
+      case "oracle_rebuild": {
+        const e = event as Record<string, unknown>;
+        const totalNodes = Number(e.totalNodes ?? 0);
+        const deltaNodes = Number(e.deltaNodes ?? 0);
+        const deltaEdges = Number(e.deltaEdges ?? 0);
+
+        this.oracleStats = {
+          totalNodes,
+          totalEdges: Number(e.totalEdges ?? 0),
+          communities: Number(e.communities ?? 0),
+          reportDate: String(e.reportDate ?? ""),
+          lastUpdateMs: Date.now(),
+        };
+
+        // Store god nodes + community list for ConstellationLayer.
+        const godNodesRaw = e.godNodes as
+          | Array<{ name: string; edges: number }>
+          | undefined;
+        const communitiesRaw = e.communityList as
+          | Array<{ id: string; name: string }>
+          | undefined;
+        if (Array.isArray(godNodesRaw)) {
+          this.oracleGodNodes = godNodesRaw.map((n) => ({
+            name: String(n.name ?? ""),
+            edges: Number(n.edges ?? 0),
+          }));
+        }
+        if (Array.isArray(communitiesRaw)) {
+          this.oracleCommunities = communitiesRaw.map((c) => ({
+            id: String(c.id ?? ""),
+            name: String(c.name ?? ""),
+          }));
+        }
+        this.oraclePulseMs = Date.now();
+
+        // Burst intensity scales with delta — larger rebuilds get more feedback.
+        const magnitude = Math.min(
+          20,
+          Math.max(6, Math.abs(deltaNodes) + Math.abs(deltaEdges)),
+        );
+        // Emit near the Batcomputer (center-bottom) where screens show oracle output.
+        bus.emit("particle:spawn", {
+          preset: "think-pulse",
+          x: 0.5,
+          y: 0.7,
+          count: magnitude,
+        });
+        bus.emit("sound:play", { id: "think-chime" });
+        this.caveReactions.triggerTorchBoost();
+
+        this.audit(
+          "system",
+          "oracle_rebuild",
+          `${totalNodes} nodes (Δ${deltaNodes >= 0 ? "+" : ""}${deltaNodes})`,
+        );
+        break;
+      }
+
+      case "oracle_query": {
+        const e = event as Record<string, unknown>;
+        const query = String(e.queryText ?? "").slice(0, 120);
+        const results = Number(e.resultCount ?? 0);
+
+        this.oracleLastQuery = {
+          query,
+          resultCount: results,
+          timestamp: Date.now(),
+        };
+        this.oraclePulseMs = Date.now();
+
+        // Oracle character wakes up: emit a short anticipatory pulse on the
+        // display zone (Oracle's home). Character spawn is gated — oracle_query
+        // should nudge an already-present Oracle rather than force re-entry.
+        bus.emit("particle:spawn", {
+          preset: "think-pulse",
+          x: 0.75,
+          y: 0.45,
+          count: Math.min(12, Math.max(3, Math.round(results / 2))),
+        });
+        bus.emit("sound:play", { id: "tool-click" });
+        this.audit("system", "oracle_query", `${query} → ${results} results`);
+        break;
+      }
     }
   }
 
   /** Active Scacchiera chain cards, in insertion order. Consumed by MissionBoardLayer. */
   getChainCards(): ChainCardState[] {
     return Array.from(this.chainCards.values());
+  }
+
+  /** Oracle knowledge-graph summary for overlays. */
+  getOracleStats(): OracleStatsState | null {
+    return this.oracleStats;
+  }
+
+  /** Most recent oracle_query seen, used by ConstellationLayer HUD. */
+  getOracleLastQuery(): {
+    query: string;
+    resultCount: number;
+    timestamp: number;
+  } | null {
+    return this.oracleLastQuery;
+  }
+
+  /** Top-degree god nodes, consumed by ConstellationLayer. */
+  getOracleGodNodes(): OracleGodNodeState[] {
+    return this.oracleGodNodes;
+  }
+
+  /** Community list for constellation color mapping. */
+  getOracleCommunities(): OracleCommunityState[] {
+    return this.oracleCommunities;
+  }
+
+  /** Timestamp of the last oracle pulse — drives constellation glow animation. */
+  getOraclePulseMs(): number {
+    return this.oraclePulseMs;
   }
 
   setConfig(config: Record<string, unknown>): void {

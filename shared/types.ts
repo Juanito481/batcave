@@ -89,6 +89,44 @@ export interface ChainEvent {
   source?: "chains";
 }
 
+/** Oracle god node — top-degree graph hub. */
+export interface OracleGodNode {
+  name: string;
+  edges: number;
+}
+
+/** Oracle community entry — Louvain cluster summary. */
+export interface OracleCommunity {
+  id: string;
+  name: string;
+}
+
+/** Oracle knowledge-graph event (rebuild or query). v5.5+. */
+export interface OracleEvent {
+  type: "oracle_rebuild" | "oracle_query";
+  timestamp: number;
+  /** Rebuild: total nodes in the graph. */
+  totalNodes?: number;
+  /** Rebuild: total edges. */
+  totalEdges?: number;
+  /** Rebuild: community count. */
+  communities?: number;
+  /** Rebuild: date header from GRAPH_REPORT.md. */
+  reportDate?: string;
+  /** Rebuild: delta vs previous poll (undefined on first observation). */
+  deltaNodes?: number;
+  deltaEdges?: number;
+  /** Rebuild: top-degree god nodes (up to 10). */
+  godNodes?: OracleGodNode[];
+  /** Rebuild: community list (first 30). */
+  communityList?: OracleCommunity[];
+  /** Query: human-readable query string. */
+  queryText?: string;
+  /** Query: rows returned. */
+  resultCount?: number;
+  source?: "oracle";
+}
+
 export interface SessionEvent {
   type: "session_idle" | "session_thinking" | "session_writing";
   timestamp: number;
@@ -129,7 +167,8 @@ export type BatCaveEvent =
   | ToolRejectedEvent
   | PromptStartEvent
   | PluginInstalledEvent
-  | ChainEvent;
+  | ChainEvent
+  | OracleEvent;
 
 export interface BatCaveConfig {
   activeRepo: string;

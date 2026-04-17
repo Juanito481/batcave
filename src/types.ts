@@ -6,6 +6,7 @@ export {
   ToolEvent,
   SessionEvent,
   ChainEvent,
+  OracleEvent,
   BatCaveEvent,
   BatCaveConfig,
   SessionSummary,

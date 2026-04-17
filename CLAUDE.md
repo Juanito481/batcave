@@ -132,6 +132,18 @@ The cave communicates Claude's state through environment, not UI overlays:
 
 Activity monitor scans all `~/.claude/projects/*/` directories. Sessions active within the last 5 minutes are tracked and displayed as indicators in the HUD. The current session is highlighted green.
 
+## Oracle Integration (v5.5.0)
+
+Batcave is the live viewer of the workspace knowledge graph (see `docs/decisions/0005-oracle-consumer.md` and workspace `graphify-out/`).
+
+- **src/oracle-monitor.ts** — polls `graphify-out/GRAPH_REPORT.md` (first 4KB for stats, full read only on detected rebuild). Extracts total nodes / edges / communities / top 10 god nodes / first 30 community hubs. Also tails `~/.batcave/oracle-events.jsonl` for `oracle_query` events emitted by the Oracle CLI. Emits `OracleEvent` (rebuild + query types).
+- **Status bar** — `$(symbol-misc) 18657 · 2198c` (nodes · communities), tooltip with rebuild timestamp, click opens `GRAPH_REPORT.md`. Command `batcave.openOracleReport`.
+- **Explorer sidebar — Oracle tree view** — live stats + browsable community list (first 50 `graphify-out/wiki/*.md` pages). Click a page to open it.
+- **webview/src/canvas/layers/ConstellationLayer.ts** — pixel-art knowledge map mounted on the upper-right wall, mirroring the mission board. Up to 10 stars (one per god node), size/brightness proportional to edge count, color-coded by community hash. Sparse Bresenham-drawn connections between nearest neighbors. 1.5s pulse wash on every `oracle_rebuild` or `oracle_query`.
+- **world/BatCave.ts** — `oracle_rebuild` triggers a `think-pulse` particle burst near the Batcomputer + torch boost; `oracle_query` triggers an Oracle-zone pulse sized by the result count + a `tool-click` sound.
+
+The entire pipeline is zero-token: OracleMonitor consumes file artifacts produced by the local graphify post-commit hook.
+
 ## Chains Visualizer (v5.4.0)
 
 Batcave watches `.claude/chains/active/` in the active workspace for Scacchiera Marshal chains (see workspace ADR 0002 and this repo's `docs/decisions/0004-chain-consumer.md`).

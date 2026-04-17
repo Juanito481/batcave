@@ -2,7 +2,7 @@
   "name": "batcave",
   "displayName": "Bat Cave",
   "description": "Pixel art visualization of Claude Code activity with animated chess-piece agents in a DC-style lab environment",
-  "version": "5.4.0",
+  "version": "5.5.0",
   "publisher": "juanito481",
   "license": "MIT",
   "repository": {
@@ -44,6 +44,12 @@
           "name": "Scacchiera Chains",
           "icon": "$(link)",
           "contextualTitle": "Scacchiera Chains"
+        },
+        {
+          "id": "batcave.oracleView",
+          "name": "Oracle",
+          "icon": "$(symbol-misc)",
+          "contextualTitle": "Oracle Knowledge Graph"
         }
       ]
     },
@@ -51,6 +57,10 @@
       {
         "view": "batcave.chainsView",
         "contents": "No active Scacchiera chains.\n\nStart one with `/marshal build: <goal>` in Claude Code, or [open the Bat Cave](command:batcave.show) to see agents.\n\n[Refresh](command:batcave.refreshChains)"
+      },
+      {
+        "view": "batcave.oracleView",
+        "contents": "Oracle knowledge graph not built yet.\n\nRun `/oracle build` in Claude Code, or wait for the post-commit hook.\n\n[Refresh](command:batcave.refreshOracle)"
       }
     ],
     "commands": [
@@ -86,6 +96,15 @@
         "command": "batcave.refreshChains",
         "title": "Bat Cave: Refresh Chains",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "batcave.openOracleReport",
+        "title": "Bat Cave: Open Oracle Report"
+      },
+      {
+        "command": "batcave.refreshOracle",
+        "title": "Bat Cave: Refresh Oracle",
+        "icon": "$(refresh)"
       }
     ],
     "menus": {
@@ -93,6 +112,11 @@
         {
           "command": "batcave.refreshChains",
           "when": "view == batcave.chainsView",
+          "group": "navigation"
+        },
+        {
+          "command": "batcave.refreshOracle",
+          "when": "view == batcave.oracleView",
           "group": "navigation"
         }
       ]

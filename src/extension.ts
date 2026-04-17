@@ -15,6 +15,8 @@ import { ActivityMonitor } from "./activity-monitor";
 import { OtelMonitor } from "./otel-monitor";
 import { ChainMonitor } from "./chain-monitor";
 import { ChainsTreeProvider, ChainViewState } from "./chains-tree-provider";
+import { OracleMonitor } from "./oracle-monitor";
+import { OracleTreeProvider, OracleStats } from "./oracle-tree-provider";
 import { EventMerger } from "./event-merger";
 import {
   BatCaveEvent,
@@ -55,11 +57,19 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
   private monitor: ActivityMonitor;
   private otelMonitor: OtelMonitor | null = null;
   private chainMonitor: ChainMonitor | null = null;
+  private oracleMonitor: OracleMonitor | null = null;
   private merger: EventMerger;
   private eventQueue: BatCaveEvent[] = [];
   private globalState: vscode.Memento;
   private chainStatusBar?: vscode.StatusBarItem;
   private chainsTreeProvider?: ChainsTreeProvider;
+  private oracleStatusBar?: vscode.StatusBarItem;
+  private oracleTreeProvider?: OracleTreeProvider;
+  private oracleLastQuery: {
+    query: string;
+    resultCount: number;
+    timestamp: number;
+  } | null = null;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -125,6 +135,32 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
     this.refreshChainStatusBar();
     this.chainsTreeProvider?.refresh();
 
+    // Oracle monitor — knowledge graph rebuilds + query events.
+    if (!this.oracleMonitor) {
+      const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      this.oracleMonitor = new OracleMonitor(
+        workspaceRoot,
+        (event) => {
+          this.merger.push(event);
+          if (event.type === "oracle_rebuild") {
+            this.refreshOracleStatusBar();
+            this.oracleTreeProvider?.refresh();
+          } else if (event.type === "oracle_query") {
+            this.oracleLastQuery = {
+              query: event.queryText ?? "",
+              resultCount: event.resultCount ?? 0,
+              timestamp: event.timestamp,
+            };
+            this.oracleTreeProvider?.refresh();
+          }
+        },
+        (msg) => console.log(`[batcave] ${msg}`),
+      );
+    }
+    this.oracleMonitor.start();
+    this.refreshOracleStatusBar();
+    this.oracleTreeProvider?.refresh();
+
     const otelAvailable = this.otelMonitor.isAvailable();
     const useOtel =
       mode === "otel" || mode === "both" || (mode === "auto" && otelAvailable);
@@ -146,6 +182,58 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
     this.monitor.stop();
     this.otelMonitor?.stop();
     this.chainMonitor?.stop();
+    this.oracleMonitor?.stop();
+  }
+
+  /** Oracle status bar + tree view wiring (Tier 1). */
+  setOracleStatusBar(item: vscode.StatusBarItem): void {
+    this.oracleStatusBar = item;
+    this.refreshOracleStatusBar();
+  }
+
+  setOracleTreeProvider(p: OracleTreeProvider): void {
+    this.oracleTreeProvider = p;
+  }
+
+  getOracleStats(): OracleStats | null {
+    return this.oracleMonitor?.getStats() ?? null;
+  }
+
+  getOracleWorkspaceRoot(): string | null {
+    return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? null;
+  }
+
+  getOracleLastQuery(): typeof this.oracleLastQuery {
+    return this.oracleLastQuery;
+  }
+
+  private refreshOracleStatusBar(): void {
+    if (!this.oracleStatusBar) return;
+    const stats = this.oracleMonitor?.getStats();
+    if (!stats) {
+      this.oracleStatusBar.text = "$(symbol-misc) Oracle —";
+      this.oracleStatusBar.tooltip =
+        "No graph built yet. Run /oracle build or wait for post-commit hook.";
+    } else {
+      this.oracleStatusBar.text = `$(symbol-misc) ${stats.totalNodes.toLocaleString()} · ${stats.communities}c`;
+      this.oracleStatusBar.tooltip = [
+        `Oracle knowledge graph`,
+        `${stats.totalNodes.toLocaleString()} nodes · ${stats.totalEdges.toLocaleString()} edges`,
+        `${stats.communities} communities`,
+        `Last rebuild: ${stats.reportDate || "unknown"}`,
+      ].join("\n");
+    }
+    this.oracleStatusBar.command = "batcave.openOracleReport";
+    this.oracleStatusBar.show();
+  }
+
+  openOracleReport(): void {
+    const root = this.getOracleWorkspaceRoot();
+    if (!root) return;
+    const reportPath = vscode.Uri.file(
+      `${root}/graphify-out/GRAPH_REPORT.md`,
+    );
+    vscode.window.showTextDocument(reportPath, { preview: true });
   }
 
   /** Set (or replace) the status bar item that displays active chain count. */
@@ -692,6 +780,36 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand("batcave.refreshChains", () => {
       chainsTreeProvider.refresh();
+    }),
+  );
+
+  // Oracle status bar + tree view (Tier 1 integration).
+  const oracleBar = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Left,
+    49,
+  );
+  context.subscriptions.push(oracleBar);
+  provider.setOracleStatusBar(oracleBar);
+
+  const oracleTreeProvider = new OracleTreeProvider({
+    getStats: () => provider.getOracleStats(),
+    getWorkspaceRoot: () => provider.getOracleWorkspaceRoot(),
+    getLastQuery: () => provider.getOracleLastQuery(),
+  });
+  provider.setOracleTreeProvider(oracleTreeProvider);
+  context.subscriptions.push(
+    vscode.window.registerTreeDataProvider(
+      "batcave.oracleView",
+      oracleTreeProvider,
+    ),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("batcave.openOracleReport", () => {
+      provider.openOracleReport();
+    }),
+    vscode.commands.registerCommand("batcave.refreshOracle", () => {
+      oracleTreeProvider.refresh();
     }),
   );
 

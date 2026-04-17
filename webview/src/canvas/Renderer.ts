@@ -9,6 +9,7 @@ import { drawCaveEnvironment } from "./layers/CaveLayer";
 import { drawAllFurniture } from "./layers/FurnitureLayer";
 import { drawOverlay } from "./layers/HudLayer";
 import { drawMissionBoard } from "./layers/MissionBoardLayer";
+import { drawConstellation } from "./layers/ConstellationLayer";
 
 /**
  * Canvas 2D renderer — thin orchestrator.
@@ -222,6 +223,9 @@ export class Renderer {
 
     // Layer 0.25: Mission board (wall-mounted, behind ambient + characters).
     drawMissionBoard(rc);
+
+    // Layer 0.3: Constellation / knowledge map on the opposite wall.
+    drawConstellation(rc);
 
     // Layer 0.5: Ambient (bats, drips, dust, spiders, fireflies).
     this.world.getAmbient().draw(rc.ctx, zoom);
