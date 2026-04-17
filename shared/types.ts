@@ -75,6 +75,20 @@ export interface PluginInstalledEvent {
   marketplaceName?: string;
 }
 
+/** Chain lifecycle event from .claude/chains/active/ watcher. v5.4+. */
+export interface ChainEvent {
+  type: "chain_created" | "chain_updated" | "chain_archived";
+  chainId: string;
+  chainType: string;
+  target: string;
+  step: { current: number; total: number };
+  currentAgent: string;
+  nextAgent: string;
+  flag: "clean" | "warn" | "block";
+  timestamp: number;
+  source?: "chains";
+}
+
 export interface SessionEvent {
   type: "session_idle" | "session_thinking" | "session_writing";
   timestamp: number;
@@ -114,7 +128,8 @@ export type BatCaveEvent =
   | ApiErrorEvent
   | ToolRejectedEvent
   | PromptStartEvent
-  | PluginInstalledEvent;
+  | PluginInstalledEvent
+  | ChainEvent;
 
 export interface BatCaveConfig {
   activeRepo: string;

@@ -90,6 +90,18 @@ export interface RepoTheme {
   label: string;
 }
 
+/** Scacchiera chain card state (v5.4+) — sourced from .claude/chains/active/. */
+export interface ChainCardState {
+  chainId: string;
+  chainType: string;
+  target: string;
+  step: { current: number; total: number };
+  currentAgent: string;
+  nextAgent: string;
+  flag: "clean" | "warn" | "block";
+  lastUpdateMs: number;
+}
+
 const REPO_THEMES: Record<string, RepoTheme> = {
   harriet: {
     accent: "#1E7FD8",
@@ -156,6 +168,9 @@ export class BatCaveWorld {
   alfred: Character;
   giovanni: Character;
   private agents: Map<string, Character> = new Map();
+
+  // Scacchiera chains — active chain cards consumed by MissionBoardLayer.
+  private chainCards: Map<string, ChainCardState> = new Map();
 
   // Companion NPC system (Ab, Andrea, Arturo + Francesco).
   private companionSystem!: CompanionSystem;
@@ -947,7 +962,61 @@ export class BatCaveWorld {
         }
         break;
       }
+
+      case "chain_created":
+      case "chain_updated":
+      case "chain_archived": {
+        const e = event as Record<string, unknown>;
+        const chainId = String(e.chainId ?? "");
+        if (!chainId) break;
+
+        if (type === "chain_archived") {
+          this.chainCards.delete(chainId);
+          bus.emit("particle:spawn", {
+            preset: "agent-exit",
+            x: 0.1,
+            y: 0.2,
+            count: 8,
+          });
+          this.audit("agent", "chain_archived", chainId);
+          break;
+        }
+
+        const card: ChainCardState = {
+          chainId,
+          chainType: String(e.chainType ?? "unknown"),
+          target: String(e.target ?? ""),
+          step: (e.step as { current: number; total: number }) ?? {
+            current: 0,
+            total: 0,
+          },
+          currentAgent: String(e.currentAgent ?? ""),
+          nextAgent: String(e.nextAgent ?? ""),
+          flag: (e.flag as "clean" | "warn" | "block" | undefined) ?? "clean",
+          lastUpdateMs: Date.now(),
+        };
+        const isNew = !this.chainCards.has(chainId);
+        this.chainCards.set(chainId, card);
+
+        // Spawn feedback particles at mission board area (upper-left wall).
+        bus.emit("particle:spawn", {
+          preset: isNew ? "agent-enter" : "tool-spark",
+          x: 0.08,
+          y: 0.25,
+          count: isNew ? 12 : 6,
+        });
+        if (isNew) {
+          bus.emit("sound:play", { id: "agent-chime" });
+        }
+        this.audit("agent", type, `${chainId} (${card.currentAgent})`);
+        break;
+      }
     }
+  }
+
+  /** Active Scacchiera chain cards, in insertion order. Consumed by MissionBoardLayer. */
+  getChainCards(): ChainCardState[] {
+    return Array.from(this.chainCards.values());
   }
 
   setConfig(config: Record<string, unknown>): void {

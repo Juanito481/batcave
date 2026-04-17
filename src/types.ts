@@ -5,6 +5,7 @@ export {
   AgentEvent,
   ToolEvent,
   SessionEvent,
+  ChainEvent,
   BatCaveEvent,
   BatCaveConfig,
   SessionSummary,

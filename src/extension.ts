@@ -13,6 +13,7 @@
 import * as vscode from "vscode";
 import { ActivityMonitor } from "./activity-monitor";
 import { OtelMonitor } from "./otel-monitor";
+import { ChainMonitor } from "./chain-monitor";
 import { EventMerger } from "./event-merger";
 import {
   BatCaveEvent,
@@ -52,9 +53,11 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
   private webviewReady = false;
   private monitor: ActivityMonitor;
   private otelMonitor: OtelMonitor | null = null;
+  private chainMonitor: ChainMonitor | null = null;
   private merger: EventMerger;
   private eventQueue: BatCaveEvent[] = [];
   private globalState: vscode.Memento;
+  private chainStatusBar?: vscode.StatusBarItem;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -97,6 +100,27 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
       );
     }
 
+    // Chain monitor — Scacchiera chains in the active workspace.
+    if (!this.chainMonitor) {
+      const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      this.chainMonitor = new ChainMonitor(
+        workspaceRoot,
+        (event) => {
+          this.merger.push(event);
+          if (
+            event.type === "chain_created" ||
+            event.type === "chain_updated" ||
+            event.type === "chain_archived"
+          ) {
+            this.refreshChainStatusBar();
+          }
+        },
+        (msg) => console.log(`[batcave] ${msg}`),
+      );
+    }
+    this.chainMonitor.start();
+    this.refreshChainStatusBar();
+
     const otelAvailable = this.otelMonitor.isAvailable();
     const useOtel =
       mode === "otel" || mode === "both" || (mode === "auto" && otelAvailable);
@@ -117,6 +141,60 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
   private stopMonitors(): void {
     this.monitor.stop();
     this.otelMonitor?.stop();
+    this.chainMonitor?.stop();
+  }
+
+  /** Set (or replace) the status bar item that displays active chain count. */
+  setChainStatusBar(item: vscode.StatusBarItem): void {
+    this.chainStatusBar = item;
+    this.refreshChainStatusBar();
+  }
+
+  private refreshChainStatusBar(): void {
+    if (!this.chainStatusBar) return;
+    const count = this.chainMonitor?.getActiveCount() ?? 0;
+    if (count === 0) {
+      this.chainStatusBar.text = "$(link) 0 chains";
+      this.chainStatusBar.tooltip =
+        "No active Scacchiera chains. Start one with /marshal <chain>: <goal>.";
+    } else {
+      this.chainStatusBar.text = `$(link) ${count} chain${count === 1 ? "" : "s"}`;
+      const chains = this.chainMonitor?.getActiveChains() ?? [];
+      this.chainStatusBar.tooltip = chains
+        .map(
+          (c) =>
+            `${c.chainType} · ${c.target} · ${c.step.current}/${c.step.total} · ${c.currentAgent || "—"}`,
+        )
+        .join("\n");
+    }
+    this.chainStatusBar.command = "batcave.openChainStatus";
+    this.chainStatusBar.show();
+  }
+
+  /** Quick pick to open a chain status.md in the editor. */
+  async openChainStatus(): Promise<void> {
+    const chains = this.chainMonitor?.getActiveChains() ?? [];
+    const chainsDir = this.chainMonitor?.getChainsDir();
+    if (chains.length === 0) {
+      vscode.window.showInformationMessage(
+        "Bat Cave: no active Scacchiera chains. Start one with /marshal.",
+      );
+      return;
+    }
+    const picked = await vscode.window.showQuickPick(
+      chains.map((c) => ({
+        label: `$(link) ${c.chainId}`,
+        description: `${c.step.current}/${c.step.total} · ${c.currentAgent || "—"}`,
+        detail: `${c.chainType} · ${c.target} · flag: ${c.flag}`,
+        chainId: c.chainId,
+      })),
+      { placeHolder: "Open chain status" },
+    );
+    if (!picked || !chainsDir) return;
+    const statusFile = vscode.Uri.file(
+      `${chainsDir}/${picked.chainId}/status.md`,
+    );
+    vscode.window.showTextDocument(statusFile, { preview: true });
   }
 
   resolveWebviewView(
@@ -562,6 +640,20 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand("batcave.enterKonami", () => {
       provider.sendToWebview({ command: "trigger-konami" });
+    }),
+  );
+
+  // Status bar item: Scacchiera chains active count.
+  const chainBar = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Left,
+    50,
+  );
+  context.subscriptions.push(chainBar);
+  provider.setChainStatusBar(chainBar);
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("batcave.openChainStatus", () => {
+      provider.openChainStatus();
     }),
   );
 

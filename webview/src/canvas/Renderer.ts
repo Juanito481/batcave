@@ -8,6 +8,7 @@ import { CaveLayout, getLayout } from "./layout";
 import { drawCaveEnvironment } from "./layers/CaveLayer";
 import { drawAllFurniture } from "./layers/FurnitureLayer";
 import { drawOverlay } from "./layers/HudLayer";
+import { drawMissionBoard } from "./layers/MissionBoardLayer";
 
 /**
  * Canvas 2D renderer — thin orchestrator.
@@ -218,6 +219,9 @@ export class Renderer {
 
     // Layer 0: Cave environment (floor, walls, stalactites, stalagmites).
     drawCaveEnvironment(rc);
+
+    // Layer 0.25: Mission board (wall-mounted, behind ambient + characters).
+    drawMissionBoard(rc);
 
     // Layer 0.5: Ambient (bats, drips, dust, spiders, fireflies).
     this.world.getAmbient().draw(rc.ctx, zoom);
