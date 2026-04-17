@@ -215,11 +215,15 @@ export class BatCaveWorld {
   // Per-agent stats — enterprise observability.
   private agentStats = new Map<string, AgentSessionStats>();
 
-  // Cost estimation — token-based pricing.
-  private static readonly COST_PER_INPUT_TOKEN = 15 / 1_000_000; // $15/M input tokens (Opus)
-  private static readonly COST_PER_OUTPUT_TOKEN = 75 / 1_000_000; // $75/M output tokens (Opus)
+  // Token estimation ratios (used by getSessionTokenEstimate).
   private static readonly EST_INPUT_RATIO = 0.7; // ~70% of tokens are input (context, tools)
   private static readonly EST_OUTPUT_RATIO = 0.3; // ~30% are output (responses)
+
+  // Tool failure tracking — rolling window for Director's Failure Governor (v5.1, issue #12).
+  // Replaces the old Cost Governor which was a No Cost Metrics violation.
+  // Only OTel-sourced events contribute (they carry a reliable success boolean).
+  private toolResultWindow: boolean[] = []; // true = success, false = failure
+  private static readonly TOOL_WINDOW_SIZE = 20; // rolling window size
 
   // Git activity — for wall monitor.
   private gitLog: {
@@ -462,7 +466,12 @@ export class BatCaveWorld {
     h: number,
     wallH: number,
     verticalMode = false,
-    layoutMode: "placeholder" | "compact" | "narrow" | "normal" | "wide" = "normal",
+    layoutMode:
+      | "placeholder"
+      | "compact"
+      | "narrow"
+      | "normal"
+      | "wide" = "normal",
   ): void {
     this.worldWidth = w;
     this.worldHeight = h;
@@ -477,7 +486,16 @@ export class BatCaveWorld {
 
     // Single source of truth for all furniture positions.
     const upgrades = new Set(this.progression.getUnlockedUpgrades());
-    const L = getLayout(w, h, this._zoom, this._zt, wallH, upgrades, layoutMode, verticalMode);
+    const L = getLayout(
+      w,
+      h,
+      this._zoom,
+      this._zt,
+      wallH,
+      upgrades,
+      layoutMode,
+      verticalMode,
+    );
     this._layout = L;
 
     // Build obstacle rects from centralized layout.
@@ -812,6 +830,11 @@ export class BatCaveWorld {
 
       case "tool_end":
         this.logEvent("tool_end", (event.toolName as string) || "?");
+        // Track OTel-sourced success signal for Director's Failure Governor.
+        // success is undefined for JSONL events (unknown) — only count explicit booleans.
+        if (typeof event.success === "boolean") {
+          this.trackToolResult(event.success);
+        }
         break;
 
       case "usage_update":
@@ -1204,7 +1227,8 @@ export class BatCaveWorld {
       cx <= L.bcX + screenGap + L.screenW &&
       cy >= L.bcY &&
       cy <= L.bcY + L.bcH
-    ) return { kind: "screen-files" };
+    )
+      return { kind: "screen-files" };
 
     // Center Batcomputer screen.
     if (
@@ -1212,7 +1236,8 @@ export class BatCaveWorld {
       cx <= L.bcX + screenGap + L.screenW * 2 + screenGap &&
       cy >= L.bcY &&
       cy <= L.bcY + L.bcH
-    ) return { kind: "screen-stats" };
+    )
+      return { kind: "screen-stats" };
 
     // Right Batcomputer screen.
     if (
@@ -1220,7 +1245,8 @@ export class BatCaveWorld {
       cx <= L.bcX + L.bcW - screenGap &&
       cy >= L.bcY &&
       cy <= L.bcY + L.bcH
-    ) return { kind: "screen-agents" };
+    )
+      return { kind: "screen-agents" };
 
     // Whiteboard.
     if (
@@ -1228,7 +1254,8 @@ export class BatCaveWorld {
       cx <= L.whiteboardX + L.whiteboardW &&
       cy >= L.whiteboardY &&
       cy <= L.whiteboardY + L.whiteboardH
-    ) return { kind: "whiteboard" };
+    )
+      return { kind: "whiteboard" };
 
     // Trophy case.
     const tc = L.trophyCase;
@@ -1237,7 +1264,8 @@ export class BatCaveWorld {
       cx <= tc.caseX + tc.caseW &&
       cy >= tc.caseY &&
       cy <= tc.caseY + tc.caseH
-    ) return { kind: "trophy" };
+    )
+      return { kind: "trophy" };
 
     // Alfred.
     const hitSize = 16 * zoom;
@@ -1262,7 +1290,12 @@ export class BatCaveWorld {
       if (!agent.visible) continue;
       const ax = agent.x - agentHitSize / 2;
       const ay = agent.y - agentHitSize;
-      if (cx >= ax && cx <= ax + agentHitSize && cy >= ay && cy <= ay + agentHitSize)
+      if (
+        cx >= ax &&
+        cx <= ax + agentHitSize &&
+        cy >= ay &&
+        cy <= ay + agentHitSize
+      )
         return { kind: "agent", id: agentId };
     }
 
@@ -1383,7 +1416,11 @@ export class BatCaveWorld {
       const screenCx = L.bcX + screenGap + Math.floor(L.screenW / 2);
       const screenCy = L.bcY + Math.floor(L.bcH / 2);
       for (let i = 0; i < 7; i++) {
-        bus.emit("particle:spawn", { preset: "tool-spark", x: screenCx + (i - 3) * zoom * 2, y: screenCy });
+        bus.emit("particle:spawn", {
+          preset: "tool-spark",
+          x: screenCx + (i - 3) * zoom * 2,
+          y: screenCy,
+        });
       }
       this.setExpandedPanel("files");
       return;
@@ -1396,10 +1433,15 @@ export class BatCaveWorld {
       cy <= L.bcY + L.bcH
     ) {
       this._hasClickedBatcomputer = true;
-      const screenCx = L.bcX + screenGap + L.screenW + screenGap + Math.floor(L.screenW / 2);
+      const screenCx =
+        L.bcX + screenGap + L.screenW + screenGap + Math.floor(L.screenW / 2);
       const screenCy = L.bcY + Math.floor(L.bcH / 2);
       for (let i = 0; i < 7; i++) {
-        bus.emit("particle:spawn", { preset: "tool-spark", x: screenCx + (i - 3) * zoom * 2, y: screenCy });
+        bus.emit("particle:spawn", {
+          preset: "tool-spark",
+          x: screenCx + (i - 3) * zoom * 2,
+          y: screenCy,
+        });
       }
       this.setExpandedPanel("stats");
       return;
@@ -1412,10 +1454,18 @@ export class BatCaveWorld {
       cy <= L.bcY + L.bcH
     ) {
       this._hasClickedBatcomputer = true;
-      const screenCx = L.bcX + (screenGap + L.screenW) * 2 + screenGap + Math.floor(L.screenW / 2);
+      const screenCx =
+        L.bcX +
+        (screenGap + L.screenW) * 2 +
+        screenGap +
+        Math.floor(L.screenW / 2);
       const screenCy = L.bcY + Math.floor(L.bcH / 2);
       for (let i = 0; i < 7; i++) {
-        bus.emit("particle:spawn", { preset: "tool-spark", x: screenCx + (i - 3) * zoom * 2, y: screenCy });
+        bus.emit("particle:spawn", {
+          preset: "tool-spark",
+          x: screenCx + (i - 3) * zoom * 2,
+          y: screenCy,
+        });
       }
       this.setExpandedPanel("agents");
       return;
@@ -1545,7 +1595,12 @@ export class BatCaveWorld {
       if (!agent.visible) continue;
       const ax = agent.x - agentHitSize / 2;
       const ay = agent.y - agentHitSize;
-      if (cx >= ax && cx <= ax + agentHitSize && cy >= ay && cy <= ay + agentHitSize) {
+      if (
+        cx >= ax &&
+        cx <= ax + agentHitSize &&
+        cy >= ay &&
+        cy <= ay + agentHitSize
+      ) {
         // Agent reacts to being clicked (turns, quips, emotion).
         this.behaviorSystem.clickAgent(agentId, this.agents);
         this.selectedAgentId = agentId;
@@ -1643,12 +1698,11 @@ export class BatCaveWorld {
     return a.progress(ctx);
   }
 
-  /** Estimated session cost based on token usage. */
-  getSessionCost(): {
+  /** Estimated session token usage. v5.1+: cost field removed (No Cost Metrics). */
+  getSessionTokenEstimate(): {
     totalTokens: number;
     inputTokens: number;
     outputTokens: number;
-    costUsd: number;
   } {
     const stats = this.usageStats;
     const msgs = stats?.messagesThisSession ?? 0;
@@ -1658,20 +1712,27 @@ export class BatCaveWorld {
     const outputTokens = Math.round(
       totalTokens * BatCaveWorld.EST_OUTPUT_RATIO,
     );
-    const costUsd =
-      inputTokens * BatCaveWorld.COST_PER_INPUT_TOKEN +
-      outputTokens * BatCaveWorld.COST_PER_OUTPUT_TOKEN;
-    return {
-      totalTokens,
-      inputTokens,
-      outputTokens,
-      costUsd: Math.round(costUsd * 100) / 100,
-    };
+    return { totalTokens, inputTokens, outputTokens };
   }
 
-  /** Cost budget — 0 means no limit configured. */
-  getCostBudget(): number {
-    return 0;
+  /** Record a tool_end success/failure for the Failure Governor rolling window. */
+  trackToolResult(success: boolean): void {
+    this.toolResultWindow.push(success);
+    if (this.toolResultWindow.length > BatCaveWorld.TOOL_WINDOW_SIZE) {
+      this.toolResultWindow.shift();
+    }
+  }
+
+  /** Failure rate over the rolling window (0-1). Returns 0 when empty. */
+  getToolFailureRate(): number {
+    if (this.toolResultWindow.length === 0) return 0;
+    const failures = this.toolResultWindow.filter((s) => !s).length;
+    return failures / this.toolResultWindow.length;
+  }
+
+  /** Number of tool results currently in the rolling window. */
+  getToolSampleSize(): number {
+    return this.toolResultWindow.length;
   }
 
   /** Set session history from extension host. */
@@ -1690,7 +1751,7 @@ export class BatCaveWorld {
   getSessionSummary(): import("../../../shared/types").SessionSummary | null {
     const stats = this.usageStats;
     if (!stats) return null;
-    const cost = this.getSessionCost();
+    const tokens = this.getSessionTokenEstimate();
     const agentSummaries = this.getAllAgentStats().map((a) => ({
       agentId: a.agentId,
       agentName: a.agentName,
@@ -1713,8 +1774,15 @@ export class BatCaveWorld {
       toolCalls: stats.toolCallsThisSession,
       agentsSpawned: stats.agentsSpawnedThisSession,
       contextPeakPct: this.contextPeakPct,
-      estimatedTokens: cost.totalTokens,
-      estimatedCostUsd: cost.costUsd,
+      estimatedTokens: tokens.totalTokens,
+      toolFailureRate:
+        this.toolResultWindow.length > 0
+          ? this.getToolFailureRate()
+          : undefined,
+      toolSampleSize:
+        this.toolResultWindow.length > 0
+          ? this.toolResultWindow.length
+          : undefined,
       toolBreakdown: { ...this.toolBreakdown },
       agentSummaries,
       model: stats.activeModel,
@@ -2291,7 +2359,9 @@ export class BatCaveWorld {
     // Restore ProgressionSystem XP/level/upgrades.
     if (state.progression && typeof state.progression === "object") {
       this.progression.restoreState(
-        state.progression as Parameters<typeof this.progression.restoreState>[0],
+        state.progression as Parameters<
+          typeof this.progression.restoreState
+        >[0],
       );
     }
   }

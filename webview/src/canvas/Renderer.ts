@@ -23,7 +23,8 @@ export class Renderer {
   private width = 0;
   private height = 0;
   private layout: CaveLayout | null = null;
-  private layoutMode: "placeholder" | "compact" | "narrow" | "normal" | "wide" = "normal";
+  private layoutMode: "placeholder" | "compact" | "narrow" | "normal" | "wide" =
+    "normal";
   private verticalMode = false;
 
   private static readonly TILE = 16;
@@ -80,7 +81,16 @@ export class Renderer {
     const wallRows = height > zt * 10 ? 3 : 2;
     const wallH = wallRows * zt;
     const upgrades = new Set(this.world.getProgression().getUnlockedUpgrades());
-    this.layout = getLayout(width, height, zoom, zt, wallH, upgrades, layoutMode, verticalMode);
+    this.layout = getLayout(
+      width,
+      height,
+      zoom,
+      zt,
+      wallH,
+      upgrades,
+      layoutMode,
+      verticalMode,
+    );
     this.layoutMode = layoutMode;
     this.verticalMode = verticalMode;
     this.world.setDimensions(width, height, wallH, verticalMode, layoutMode);
@@ -100,11 +110,10 @@ export class Renderer {
     // Director evaluates rules periodically.
     if (this.director.isEnabled() && !this.replay.isActive()) {
       const stats = this.world.getUsageStats();
-      const cost = this.world.getSessionCost();
       const decisions = this.director.update(deltaMs, {
         toolCount: stats?.toolCallsThisSession ?? 0,
-        costUsd: cost.costUsd,
-        costBudget: this.world.getCostBudget(),
+        toolFailureRate: this.world.getToolFailureRate(),
+        toolSampleSize: this.world.getToolSampleSize(),
         contextPct: stats?.contextFillPct ?? 0,
         activeAgentIds: this.world.getActiveAgentNames(),
         sessionDurationMs: Date.now() - (stats?.sessionStartedAt ?? Date.now()),
@@ -142,7 +151,9 @@ export class Renderer {
     const wallRows = this.height > zt * 10 ? 3 : 2;
     // Recompute layout if not yet initialized (shouldn't happen, but safe fallback).
     if (!this.layout) {
-      const upgrades = new Set(this.world.getProgression().getUnlockedUpgrades());
+      const upgrades = new Set(
+        this.world.getProgression().getUnlockedUpgrades(),
+      );
       this.layout = getLayout(
         this.width,
         this.height,
