@@ -1121,6 +1121,9 @@ export class BatCaveWorld {
     const updated: string[] = [];
     await Promise.all(
       ids.map(async (id) => {
+        // Giovanni keeps the procedural Batman sprite (cowl ears, white eyes,
+        // gold belt, cape). The composed PNG recolor loses all Batman cues.
+        if (id === "giovanni") return;
         const sheet = await loadAgentSheet(baseUri, id);
         if (sheet) {
           this.sprites.set(id, sheet);
