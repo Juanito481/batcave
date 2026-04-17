@@ -37,8 +37,22 @@
           "id": "batcave.mainView",
           "name": "Bat Cave"
         }
+      ],
+      "explorer": [
+        {
+          "id": "batcave.chainsView",
+          "name": "Scacchiera Chains",
+          "icon": "$(link)",
+          "contextualTitle": "Scacchiera Chains"
+        }
       ]
     },
+    "viewsWelcome": [
+      {
+        "view": "batcave.chainsView",
+        "contents": "No active Scacchiera chains.\n\nStart one with `/marshal build: <goal>` in Claude Code, or [open the Bat Cave](command:batcave.show) to see agents.\n\n[Refresh](command:batcave.refreshChains)"
+      }
+    ],
     "commands": [
       {
         "command": "batcave.show",
@@ -67,8 +81,22 @@
       {
         "command": "batcave.openChainStatus",
         "title": "Bat Cave: Open Chain Status"
+      },
+      {
+        "command": "batcave.refreshChains",
+        "title": "Bat Cave: Refresh Chains",
+        "icon": "$(refresh)"
       }
     ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "batcave.refreshChains",
+          "when": "view == batcave.chainsView",
+          "group": "navigation"
+        }
+      ]
+    },
     "configuration": {
       "title": "Bat Cave",
       "properties": {

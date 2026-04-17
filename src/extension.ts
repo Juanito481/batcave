@@ -14,6 +14,7 @@ import * as vscode from "vscode";
 import { ActivityMonitor } from "./activity-monitor";
 import { OtelMonitor } from "./otel-monitor";
 import { ChainMonitor } from "./chain-monitor";
+import { ChainsTreeProvider, ChainViewState } from "./chains-tree-provider";
 import { EventMerger } from "./event-merger";
 import {
   BatCaveEvent,
@@ -58,6 +59,7 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
   private eventQueue: BatCaveEvent[] = [];
   private globalState: vscode.Memento;
   private chainStatusBar?: vscode.StatusBarItem;
+  private chainsTreeProvider?: ChainsTreeProvider;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -113,6 +115,7 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
             event.type === "chain_archived"
           ) {
             this.refreshChainStatusBar();
+            this.chainsTreeProvider?.refresh();
           }
         },
         (msg) => console.log(`[batcave] ${msg}`),
@@ -120,6 +123,7 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
     }
     this.chainMonitor.start();
     this.refreshChainStatusBar();
+    this.chainsTreeProvider?.refresh();
 
     const otelAvailable = this.otelMonitor.isAvailable();
     const useOtel =
@@ -148,6 +152,21 @@ class BatCaveViewProvider implements vscode.WebviewViewProvider {
   setChainStatusBar(item: vscode.StatusBarItem): void {
     this.chainStatusBar = item;
     this.refreshChainStatusBar();
+  }
+
+  /** Wire the tree view provider so chain events trigger refresh. */
+  setChainsTreeProvider(p: ChainsTreeProvider): void {
+    this.chainsTreeProvider = p;
+  }
+
+  /** Tree view data source: active chains. */
+  getActiveChains(): ChainViewState[] {
+    return this.chainMonitor?.getActiveChains() ?? [];
+  }
+
+  /** Tree view data source: chains directory. */
+  getChainsDir(): string | null {
+    return this.chainMonitor?.getChainsDir() ?? null;
   }
 
   private refreshChainStatusBar(): void {
@@ -654,6 +673,25 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand("batcave.openChainStatus", () => {
       provider.openChainStatus();
+    }),
+  );
+
+  // Tree view: Scacchiera Chains in Explorer sidebar.
+  const chainsTreeProvider = new ChainsTreeProvider({
+    getActiveChains: () => provider.getActiveChains(),
+    getChainsDir: () => provider.getChainsDir(),
+  });
+  provider.setChainsTreeProvider(chainsTreeProvider);
+  context.subscriptions.push(
+    vscode.window.registerTreeDataProvider(
+      "batcave.chainsView",
+      chainsTreeProvider,
+    ),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("batcave.refreshChains", () => {
+      chainsTreeProvider.refresh();
     }),
   );
 

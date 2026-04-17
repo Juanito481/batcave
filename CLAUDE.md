@@ -132,6 +132,17 @@ The cave communicates Claude's state through environment, not UI overlays:
 
 Activity monitor scans all `~/.claude/projects/*/` directories. Sessions active within the last 5 minutes are tracked and displayed as indicators in the HUD. The current session is highlighted green.
 
+## Chains Visualizer (v5.4.0)
+
+Batcave watches `.claude/chains/active/` in the active workspace for Scacchiera Marshal chains (see workspace ADR 0002 and this repo's `docs/decisions/0004-chain-consumer.md`).
+
+- **src/chain-monitor.ts** — polls `.claude/chains/active/*/status.md` every 1000ms. Parses the status front matter and emits `chain_created` / `chain_updated` / `chain_archived` `ChainEvent`s into the event bus alongside OTel and JSONL streams.
+- **webview/src/canvas/layers/MissionBoardLayer.ts** — wall-mounted cork mission board on the upper-left wall. Up to 4 visible quest cards with type-letter badge (B/S/R/Q/D/V/I/O/A), filled progress dots, flag-colored border (green=clean, yellow=warn, red=block), 1.2s brightness pulse on update. Overflow badge when 5+ chains are active.
+- **webview/src/world/BatCave.ts** — handleEvent cases for chain lifecycle. New chain spawns `agent-enter` particles and an `agent-chime`. Updates spawn `tool-spark`. Archive spawns `agent-exit`.
+- **src/extension.ts** — status bar item `$(link) N chains` (left, priority 50), bound to command `batcave.openChainStatus` which opens a QuickPick of active chains and reveals the selected `status.md`. Custom Tree View `Scacchiera Chains` in the Explorer sidebar lists active chains with progress + flag icons; click opens `status.md`.
+
+Parseable chain-id schema: `<chain-type>-<repo>-<slug>-<YYYYMMDD>`. The monitor auto-discovers the workspace chains dir and stays silent when it doesn't exist (activates on first Marshal chain).
+
 ## Context Estimation
 
 Weighted formula: `(msgs * 2000 + tools * 1500) / 500_000 * 100`. Budget assumes ~500k effective tokens (1M context minus system prompt/memory overhead).
