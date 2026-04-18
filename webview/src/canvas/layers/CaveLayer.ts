@@ -270,40 +270,40 @@ function drawWallDetails(
   now: number,
   world: RenderContext["world"],
 ): void {
-  // Horizontal pipe running along the wall.
+  // Horizontal pipe running along the wall — Signal Room cable conduit.
   const pipeY = wallH - Math.floor(zt * 0.3);
-  ctx.fillStyle = "#141428";
+  ctx.fillStyle = P.SURFACE;
   ctx.fillRect(0, pipeY, width, zoom * 2);
   // Pipe highlight (top edge).
   ctx.fillStyle = P.HIGHLIGHT;
   ctx.fillRect(0, pipeY, width, Math.max(1, Math.floor(zoom / 2)));
   // Pipe shadow (bottom edge).
-  ctx.fillStyle = "#0a0a18";
+  ctx.fillStyle = P.OUTLINE;
   ctx.fillRect(0, pipeY + zoom * 2, width, Math.max(1, Math.floor(zoom / 2)));
 
   // Pipe brackets every few tiles.
   for (let x = zt * 2; x < width - zt; x += zt * 3) {
-    ctx.fillStyle = "#1a1a2e";
+    ctx.fillStyle = P.BG_RAISED;
     ctx.fillRect(x, pipeY - zoom, zoom * 2, zoom * 4);
     ctx.fillStyle = P.OUTLINE;
     ctx.fillRect(x, pipeY - zoom, zoom * 2, Math.max(1, Math.floor(zoom / 2)));
   }
 
-  // LED strip along wall bottom — state-reactive + repo-themed. (P0: brighter per state)
+  // LED strip along wall bottom — state-reactive (Signal Room palette).
   const ledY = wallH - zoom * 2;
   const state = world.getAlfredState();
   const stateColor =
     state === "thinking"
-      ? "#1E7FD8"  // full accent blue
+      ? P.ACCENT     // Fox blue
       : state === "writing"
-        ? "#2ECC71"  // green
-        : "#1E5A9A"; // idle — muted blue
+        ? P.SUCCESS  // success green
+        : P.ACCENT_SEC; // idle — accent-secondary muted
   const stateDim =
     state === "thinking"
-      ? "#0e2440"
+      ? "#0a2040"
       : state === "writing"
-        ? "#0e2a16"
-        : "#0e1e30";
+        ? "#0a2016"
+        : "#08141e";
 
   // Cave reaction: wall flash overrides LED strip color.
   const reactions = world.getCaveReactions();
@@ -347,18 +347,18 @@ function drawWallDetails(
   const font = `"DM Mono", monospace`;
   const smallFont = Math.max(8, zoom * 2.5);
 
-  // Bezel.
-  ctx.fillStyle = "#0a0a14";
+  // Bezel — Signal Room surface.
+  ctx.fillStyle = P.BG_RAISED;
   ctx.fillRect(monX - zoom, monY - zoom, monW + zoom * 2, monH + zoom * 2);
   // Screen.
-  ctx.fillStyle = "#060610";
+  ctx.fillStyle = P.OUTLINE;
   ctx.fillRect(monX, monY, monW, monH);
-  // Content background — dark green terminal.
+  // Content background — dark blue-green CRT.
   const monPulse = Math.sin(now / 1500 + 3);
-  ctx.fillStyle = monPulse > 0 ? "#0a2a0a" : "#081e08";
+  ctx.fillStyle = monPulse > 0 ? "#081828" : "#060e18";
   ctx.fillRect(monX + zoom, monY + zoom, monW - zoom * 2, monH - zoom * 2);
-  // Scanlines — 1px pitch per zoom unit for crisp pixel-art density.
-  ctx.fillStyle = "#040408";
+  // CRT scanlines.
+  ctx.fillStyle = "#040810";
   for (let sl = 0; sl < monH; sl += zoom) {
     ctx.fillRect(monX, monY + sl, monW, Math.max(1, Math.floor(zoom / 2)));
   }
@@ -367,7 +367,7 @@ function drawWallDetails(
   const gitLog = world.getGitLog();
   ctx.font = `${smallFont}px ${font}`;
   ctx.textAlign = "left";
-  ctx.fillStyle = "#335533";
+  ctx.fillStyle = P.TEXT_MUTED;
   ctx.fillText("GIT", monX + zoom * 2, monY + zoom * 3);
 
   if (gitLog.length > 0) {
@@ -380,7 +380,7 @@ function drawWallDetails(
     for (let g = 0; g < visible.length; g++) {
       const entry = visible[g];
       const gy = monY + zoom * 5 + g * lineH;
-      ctx.fillStyle = entry.type === "commit" ? "#2ECC71" : "#F39C12";
+      ctx.fillStyle = entry.type === "commit" ? P.SUCCESS : P.WARN;
       const prefix = entry.type === "commit" ? "\u25CF " : "\u25B2 ";
       const maxChars = Math.max(
         6,
@@ -393,18 +393,47 @@ function drawWallDetails(
       ctx.fillText(prefix + msg, monX + zoom * 2, gy);
     }
   } else {
-    ctx.fillStyle = "#1a3a1a";
+    ctx.fillStyle = P.TEXT_MUTED;
     ctx.fillText("no commits", monX + zoom * 2, monY + zoom * 7);
   }
 
   // Mount bracket.
-  ctx.fillStyle = "#141428";
+  ctx.fillStyle = P.SURFACE;
   ctx.fillRect(
     monX + Math.floor(monW / 2) - zoom,
     monY + monH,
     zoom * 2,
     zoom * 2,
   );
+
+  // ── CRT static flicker — 1-2 wall pixels flash #c8ddef every 8-12 frames ──
+  // Uses the seeded noise table so flicker positions are deterministic per frame,
+  // but the frame index advances deterministically via now-bucket (no setTimeout).
+  const flickerBucket = Math.floor(now / 120); // ~8 frames at 60fps
+  if (flickerBucket % 10 < 2) { // on for ~2 out of 10 buckets
+    const fw1 = seed(flickerBucket * 3 + 1);
+    const fw2 = seed(flickerBucket * 3 + 2);
+    const fw3 = seed(flickerBucket * 3 + 7);
+    const fw4 = seed(flickerBucket * 3 + 11);
+    const flickerColor = "#c8ddef"; // Fox text — cold white CRT interference
+    ctx.fillStyle = flickerColor;
+    // Flicker pixel 1 — random position on wall area.
+    ctx.fillRect(
+      Math.floor(fw1 * width),
+      Math.floor(fw2 * wallH),
+      Math.max(1, zoom),
+      Math.max(1, zoom),
+    );
+    // Flicker pixel 2 (second one for "1-2 pixels" spec).
+    if (flickerBucket % 10 < 1) {
+      ctx.fillRect(
+        Math.floor(fw3 * width),
+        Math.floor(fw4 * wallH),
+        Math.max(1, zoom),
+        Math.max(1, zoom),
+      );
+    }
+  }
 }
 
 // ── Wall torches ───────────────────────────────────────

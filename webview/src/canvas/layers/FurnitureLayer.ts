@@ -37,17 +37,17 @@ function drawBatcomputer(
   ctx.fillRect(x, y, totalW, totalH);
   ctx.fillStyle = P.HIGHLIGHT;
   ctx.fillRect(x, y, totalW, zoom);
-  ctx.fillStyle = "#141422";
+  ctx.fillStyle = P.OUTLINE;
   ctx.fillRect(x, y + totalH - zoom, totalW, zoom);
-  outlineRect(ctx, x, y, totalW, totalH, zoom, P.FURNITURE_OUTLINE); // P0: furniture outline
-  // P1: top-edge highlight bar.
-  ctx.fillStyle = "#3a4a5a";
+  outlineRect(ctx, x, y, totalW, totalH, zoom, P.FURNITURE_OUTLINE);
+  // Top-edge highlight bar.
+  ctx.fillStyle = P.ACCENT_SEC;
   ctx.fillRect(x, y, totalW, Math.max(1, zoom));
-  // P1: static label above furniture.
+  // Static label above furniture.
   const _labelFont = Math.max(7, zoom * 2);
   ctx.font = `${_labelFont}px "DM Mono", monospace`;
   ctx.textAlign = "center";
-  ctx.fillStyle = "#334455";
+  ctx.fillStyle = P.TEXT_MUTED;
   ctx.fillText("BAT", x + Math.floor(totalW / 2), y - Math.max(2, zoom));
 
   // 3 screens.
@@ -56,12 +56,13 @@ function drawBatcomputer(
   const sw = Math.floor(screenAreaW / 3);
   const sh = totalH - gap * 2;
 
+  // Signal Room screen colors: thinking=blue/blue/dim, writing=dark-green/success/dark-green.
   const screenColors =
     state === "thinking"
-      ? [P.ACCENT, P.ACCENT, "#1a3a5a"]
+      ? [P.ACCENT, P.ACCENT, P.ACCENT_SEC]
       : state === "writing"
-        ? ["#1a3a1a", "#2ECC71", "#1a3a1a"]
-        : ["#1e2438", "#222840", "#1e2438"];
+        ? [darken(P.SUCCESS, 0.5), P.SUCCESS, darken(P.SUCCESS, 0.5)]
+        : [P.BG_RAISED, P.SURFACE, P.BG_RAISED];
 
   const tremor =
     state === "writing" ? Math.floor(Math.sin(now / 80) * zoom * 0.5) : 0;
@@ -76,11 +77,11 @@ function drawBatcomputer(
     const sx = x + gap + i * (sw + gap);
     const isHovered = hoveredScreen === screenKinds[i];
 
-    // Bezel.
-    ctx.fillStyle = "#0a0a14";
+    // Bezel — Signal Room bg-raised.
+    ctx.fillStyle = P.BG_RAISED;
     ctx.fillRect(sx - zoom, y + gap - zoom, sw + zoom * 2, sh + zoom * 2);
-    // Screen surface.
-    ctx.fillStyle = "#060610";
+    // Screen surface — deep dark.
+    ctx.fillStyle = P.OUTLINE;
     ctx.fillRect(sx, y + gap, sw, sh);
     // Screen glow — +20% brightness when hovered (P0).
     const phase = Math.sin(now / 800 + i * 2.1);
@@ -97,10 +98,22 @@ function drawBatcomputer(
       sw - zoom * 2,
       sh - zoom * 2,
     );
-    // Scanlines — 1px pitch per zoom unit for crisp pixel-art density.
-    ctx.fillStyle = "#040408";
+    // CRT scanlines — 1px pitch per zoom unit.
+    ctx.fillStyle = "#040810";
     for (let sl = 0; sl < sh; sl += zoom) {
       ctx.fillRect(sx, y + gap + sl, sw, zoom);
+    }
+
+    // Signal sweep — 1px horizontal line traversing the screen every 4-6s
+    // during thinking state (radar-sweep effect). Uses delta-time bucket, no setTimeout.
+    if (state === "thinking") {
+      const sweepPeriod = 5000; // ms per full sweep cycle
+      const sweepPos = (now % sweepPeriod) / sweepPeriod; // 0..1
+      const sweepY = Math.floor(y + gap + sweepPos * sh);
+      if (sweepY >= y + gap && sweepY < y + gap + sh) {
+        ctx.fillStyle = P.ACCENT; // #1E7FD8
+        ctx.fillRect(sx, sweepY, sw, Math.max(1, zoom));
+      }
     }
     // Hover outline — 1px P.ACCENT border on hovered screen (P0).
     if (isHovered) {
@@ -124,7 +137,7 @@ function drawBatcomputer(
   ctx.textAlign = "left";
 
   // Screen header.
-  ctx.fillStyle = "#8888AA";
+  ctx.fillStyle = P.TEXT_MUTED;
   ctx.fillText("FILES", leftX + zoom * 2, screenY + zoom * 3);
 
   if (files.length > 0) {
@@ -145,10 +158,10 @@ function drawBatcomputer(
           : "other";
       ctx.fillStyle =
         toolCat === "write"
-          ? "#2ECC71"
+          ? P.SUCCESS
           : toolCat === "read"
-            ? "#5a8ab8"
-            : "#888899";
+            ? P.ACCENT
+            : P.TEXT_MUTED;
       // Truncate filename.
       const maxChars = Math.max(
         6,
@@ -161,7 +174,7 @@ function drawBatcomputer(
       ctx.fillText(display, leftX + zoom * 2, fy);
     }
   } else {
-    ctx.fillStyle = "#333348";
+    ctx.fillStyle = P.ACCENT_SEC;
     ctx.fillText("no files", leftX + zoom * 2, screenY + zoom * 7);
   }
 
@@ -174,10 +187,10 @@ function drawBatcomputer(
   ctx.textAlign = "center";
   ctx.fillStyle =
     state === "thinking"
-      ? "#3399EE"
+      ? P.ACCENT
       : state === "writing"
-        ? "#33DD88"
-        : "#778899";
+        ? P.SUCCESS
+        : P.TEXT_MUTED;
   ctx.fillText(
     activeData.state,
     centerX + sw / 2 + tremor,
@@ -186,7 +199,7 @@ function drawBatcomputer(
 
   // Current tool name.
   ctx.font = `${smallFont}px ${font}`;
-  ctx.fillStyle = "#888899";
+  ctx.fillStyle = P.TEXT_MUTED;
   const toolDisplay =
     activeData.tool.length > 10
       ? activeData.tool.slice(0, 9) + "\u2026"
@@ -198,7 +211,7 @@ function drawBatcomputer(
   );
 
   // Divider line.
-  ctx.fillStyle = "#1a1a30";
+  ctx.fillStyle = P.ACCENT_SEC;
   ctx.fillRect(
     centerX + zoom * 2,
     screenY + Math.floor(sh * 0.62),
@@ -209,7 +222,7 @@ function drawBatcomputer(
   // Active agents count.
   const agentCount = world.getActiveAgentNames().length;
   if (agentCount > 0) {
-    ctx.fillStyle = "#2ECC71";
+    ctx.fillStyle = P.SUCCESS;
     ctx.fillText(
       `${agentCount} agent${agentCount > 1 ? "s" : ""}`,
       centerX + sw / 2,
@@ -225,40 +238,40 @@ function drawBatcomputer(
   ctx.textAlign = "left";
 
   // Header.
-  ctx.fillStyle = "#8888AA";
+  ctx.fillStyle = P.TEXT_MUTED;
   ctx.fillText("AGENTS", rightX + zoom * 2, screenY + zoom * 3);
 
   if (activeAgentNames.length > 0) {
     const lineH = Math.max(zoom * 3, smallFont + zoom);
     for (let a = 0; a < activeAgentNames.length && a < 4; a++) {
       const ay = screenY + zoom * 5 + a * lineH;
-      ctx.fillStyle = "#2ECC71";
+      ctx.fillStyle = P.SUCCESS;
       ctx.fillRect(rightX + zoom * 2, ay, zoom, zoom);
-      ctx.fillStyle = "#AAAACC";
+      ctx.fillStyle = P.TEXT;
       ctx.fillText(activeAgentNames[a], rightX + zoom * 4, ay + zoom);
     }
   } else {
-    ctx.fillStyle = "#333348";
+    ctx.fillStyle = P.ACCENT_SEC;
     ctx.fillText("idle", rightX + zoom * 2, screenY + zoom * 7);
   }
 
   // Desk legs.
-  ctx.fillStyle = "#141424";
+  ctx.fillStyle = P.SURFACE;
   const legW = zoom * 2;
   ctx.fillRect(x + gap, y + totalH, legW, zoom * 3);
   ctx.fillRect(x + totalW - gap - legW, y + totalH, legW, zoom * 3);
 
   // Desk surface items — keyboard and coffee mug.
   const deskSurfaceY = y + totalH - zoom * 2;
-  // Keyboard (row of alternating light/dark keys).
-  ctx.fillStyle = "#1e1e30";
+  // Keyboard (row of alternating signal-room keys).
+  ctx.fillStyle = P.BG_RAISED;
   ctx.fillRect(x + zoom * 4, deskSurfaceY, zoom * 8, zoom);
   for (let k = 0; k < 4; k++) {
-    ctx.fillStyle = k % 2 === 0 ? "#2a2a40" : "#222238";
+    ctx.fillStyle = k % 2 === 0 ? P.SURFACE : P.BG_RAISED;
     ctx.fillRect(x + zoom * 4 + k * zoom * 2, deskSurfaceY, zoom * 2, zoom);
   }
   // Coffee mug (2x3 with handle).
-  ctx.fillStyle = "#2a2030";
+  ctx.fillStyle = P.SURFACE;
   ctx.fillRect(
     x + totalW - zoom * 6,
     deskSurfaceY - zoom * 2,

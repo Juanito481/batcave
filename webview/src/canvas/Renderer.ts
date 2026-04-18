@@ -30,6 +30,9 @@ export class Renderer {
   private verticalMode = false;
 
   private static readonly TILE = 16;
+  // Sprites are 24×48px and must render at exactly zoom×2 to hit the target
+  // 48×96px on-screen footprint. Tile zoom may be higher on wide canvases.
+  private static readonly SPRITE_ZOOM = 2;
 
   constructor(
     ctx: CanvasRenderingContext2D,
@@ -242,9 +245,13 @@ export class Renderer {
       ...(francesco ? [francesco] : []),
     ].sort((a, b) => a.y - b.y);
 
+    // Sprites are fixed at 24×48px rendered at SPRITE_ZOOM (always 2) → 48×96px.
+    // Tile zoom may be larger on wide canvases; sprites stay at the intended footprint.
+    const spriteZoom = Renderer.SPRITE_ZOOM;
+
     // Layer 1: Shadows (all characters, before furniture).
     for (const char of allChars) {
-      char.drawShadow(rc.ctx, zoom);
+      char.drawShadow(rc.ctx, spriteZoom);
     }
 
     // Layer 2: Furniture and floor objects.
@@ -252,7 +259,7 @@ export class Renderer {
 
     // Layer 3: Characters (Y-sorted sprites, no shadow).
     for (const char of allChars) {
-      char.draw(rc.ctx, zoom);
+      char.draw(rc.ctx, spriteZoom);
     }
 
     // Layer 3.5: Particles.

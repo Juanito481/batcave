@@ -14,23 +14,23 @@
 import { RenderContext, P, outlineRect } from "./render-context";
 import { ChainCardState } from "../../world/BatCave";
 
-// Board palette (wood + cork).
+// Board palette — Signal Room version: dark metal frame, CRT-green status.
 const C = {
-  FRAME_DARK: "#3a2418",
-  FRAME_LIGHT: "#5a3828",
-  CORK_DARK: "#6b4a2c",
-  CORK_MID: "#8a6038",
-  CORK_SPECK: "#4a3420",
-  PIN_RED: "#c93838",
-  PIN_BRASS: "#b8883a",
-  CARD_BG: "#f0ead6",
-  CARD_LINE: "#c8c0a8",
-  CARD_TEXT: "#1a1a1a",
-  FLAG_CLEAN: "#2ECC71",
-  FLAG_WARN: "#F39C12",
-  FLAG_BLOCK: "#E74C3C",
-  HEADER_BG: "#2a1a10",
-  HEADER_TEXT: "#d4a860",
+  FRAME_DARK: "#0c1624",   // bg-raised
+  FRAME_LIGHT: "#162030",  // surface
+  CORK_DARK: "#1a2838",    // floor-b
+  CORK_MID: "#1e3040",     // floor-speck
+  CORK_SPECK: "#0c1624",   // bg-raised
+  PIN_RED: "#c0392b",      // danger
+  PIN_BRASS: "#b07d20",    // warn
+  CARD_BG: "#162030",      // surface
+  CARD_LINE: "#1e3040",    // highlight
+  CARD_TEXT: "#c8ddef",    // text
+  FLAG_CLEAN: "#1fa35c",   // success
+  FLAG_WARN: "#b07d20",    // warn
+  FLAG_BLOCK: "#c0392b",   // danger
+  HEADER_BG: "#0c1624",    // bg-raised
+  HEADER_TEXT: "#1E7FD8",  // accent
 } as const;
 
 // Type letter mapping — one glyph per chain type.

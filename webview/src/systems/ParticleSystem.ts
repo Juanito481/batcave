@@ -28,13 +28,15 @@ interface ParticlePreset {
   gravity: number;
 }
 
+// Signal Room palette — matches P constants in render-context.ts.
 const PRESETS: Record<string, ParticlePreset> = {
   "tool-spark": {
     count: 6,
     lifetime: [200, 400],
     speed: [0.02, 0.06],
     spread: Math.PI,
-    colors: ["#F39C12", "#E74C3C", "#D4830A"],
+    // warn amber + danger red — tool activation spark
+    colors: ["#b07d20", "#c0392b", "#8a6010"],
     size: [1, 2],
     gravity: 0.0001,
   },
@@ -43,7 +45,8 @@ const PRESETS: Record<string, ParticlePreset> = {
     lifetime: [300, 600],
     speed: [0.01, 0.04],
     spread: Math.PI * 2,
-    colors: ["#2ECC71", "#27AE60", "#1E8C51"],
+    // success green tones — agent arrival
+    colors: ["#1fa35c", "#178045", "#0f5c30"],
     size: [1, 2],
     gravity: -0.00003,
   },
@@ -52,7 +55,8 @@ const PRESETS: Record<string, ParticlePreset> = {
     lifetime: [200, 500],
     speed: [0.01, 0.03],
     spread: Math.PI * 2,
-    colors: ["#E74C3C", "#C0392B", "#922B21"],
+    // danger red tones — agent departure
+    colors: ["#c0392b", "#922b21", "#601c16"],
     size: [1, 2],
     gravity: 0.00005,
   },
@@ -61,7 +65,8 @@ const PRESETS: Record<string, ParticlePreset> = {
     lifetime: [400, 800],
     speed: [0.005, 0.015],
     spread: Math.PI / 2,
-    colors: ["#2ECC71", "#27AE60"],
+    // success green — write activity glow
+    colors: ["#1fa35c", "#178045"],
     size: [1, 2],
     gravity: -0.00005,
   },
@@ -70,7 +75,8 @@ const PRESETS: Record<string, ParticlePreset> = {
     lifetime: [500, 900],
     speed: [0.003, 0.01],
     spread: Math.PI,
-    colors: ["#1E7FD8", "#1565B0"],
+    // accent blue — thinking pulse
+    colors: ["#1E7FD8", "#0f4a80"],
     size: [1, 2],
     gravity: -0.00003,
   },

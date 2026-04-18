@@ -750,32 +750,28 @@ export class Ambient {
   }
 
   private drawFireflies(ctx: CanvasRenderingContext2D, zoom: number): void {
-    const px = Math.max(1, Math.floor(zoom * 0.3));
+    // Signal Room: render old firefly slots as LED indicator pixels on cave walls.
+    // 3-color palette: success green / accent blue / warn amber — all opaque.
+    const px = Math.max(1, Math.floor(zoom * 0.4));
+    const LED_COLORS = ["#1fa35c", "#1E7FD8", "#b07d20"] as const;
 
-    // Opaque glow steps (warm yellow-green, no rgba).
-    const GLOW_DIM = "#283818";
-    const GLOW_MID = "#3a5a20";
-    const GLOW_BRIGHT = "#5a8a30";
-
-    for (const ff of this.fireflies) {
+    for (let i = 0; i < this.fireflies.length; i++) {
+      const ff = this.fireflies[i];
       const fx = Math.round(ff.x);
       const fy = Math.round(ff.y);
+      const color = LED_COLORS[i % 3];
 
-      if (ff.brightness > 0.7) {
-        // Bright: glow halo + core.
-        ctx.fillStyle = GLOW_DIM;
-        ctx.fillRect(fx - px, fy - px, px * 3, px * 3);
-        ctx.fillStyle = GLOW_BRIGHT;
+      if (ff.brightness > 0.6) {
+        // LED on — small bright pixel.
+        ctx.fillStyle = color;
         ctx.fillRect(fx, fy, px, px);
-      } else if (ff.brightness > 0.3) {
-        // Medium: small glow.
-        ctx.fillStyle = GLOW_MID;
-        ctx.fillRect(fx, fy, px, px);
-      } else {
-        // Dim: barely visible.
-        ctx.fillStyle = GLOW_DIM;
+      } else if (ff.brightness > 0.2) {
+        // LED half — very dim, barely visible (simulates LED off with slight glow).
+        // Darken: use a muted wall color so the "off" state is almost invisible.
+        ctx.fillStyle = "#162030"; // surface — blends into wall
         ctx.fillRect(fx, fy, px, px);
       }
+      // < 0.2: fully off — draw nothing (saves a fillRect)
     }
   }
 

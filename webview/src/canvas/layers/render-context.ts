@@ -29,28 +29,53 @@ export interface RenderContext {
   verticalMode: boolean;
 }
 
-// ── Shared palette (opaque, no transparency) ─────────────
+// ── Shared palette — Signal Room (Fox tokens, opaque only) ──────────────────
+// These hex values are canonical. Do not hardcode hex in layers — reference P.
 
 export const P = {
-  BG: "#101820",
-  FLOOR_A: "#1A1A2E",
-  FLOOR_B: "#16213E",
-  FLOOR_DARK: "#0e1418",
-  FLOOR_SPECK: "#1e2830",
-  FLOOR_RIVET: "#0F3460",
-  WALL_TOP: "#0A0A14",
-  WALL_MID: "#12121E",
-  WALL_BOT: "#1A1A28",
-  WALL_DARK: "#060810",
-  WALL_LIGHT: "#1e1e2e",
-  WALL_EDGE: "#1e2830",
-  ACCENT: "#1E7FD8",
-  OUTLINE: "#060a10",
-  HIGHLIGHT: "#2a3240",
-  LED_COLORS: ["#2ECC71", "#1E7FD8", "#E74C3C", "#F39C12", "#2ECC71"],
-  // Herald visibility — furniture chrome.
-  FURNITURE_OUTLINE: "#0f3f6c", // accent at ~50% for furniture outlines
-  FURNITURE_BG: "#141428",      // one step above BG for furniture fills (P2)
+  // Base surfaces
+  BG: "#101820",          // Fox black — cave background
+  BG_RAISED: "#0c1624",   // Muro sfondo, leggermente più blu
+  SURFACE: "#162030",     // Furniture fill, server rack panels
+
+  // Floor tiles (derived from BG family)
+  FLOOR_A: "#162030",     // Even tile (was 1A1A2E — now signal-room surface tone)
+  FLOOR_B: "#1a2838",     // Odd tile
+  FLOOR_DARK: "#0c1624",  // Dark specks
+  FLOOR_SPECK: "#1e3040", // Mineral speck
+  FLOOR_RIVET: "#0f4a80", // accent-secondary at floor rivets
+
+  // Wall tiles (cave rock in bg-raised family)
+  WALL_TOP: "#0c1624",    // Top wall row
+  WALL_MID: "#101820",    // Mid wall row
+  WALL_BOT: "#162030",    // Bottom wall row (near floor)
+  WALL_DARK: "#080e18",   // Shadow pixel in rock texture
+  WALL_LIGHT: "#1e3040",  // Highlight pixel in rock texture
+  WALL_EDGE: "#1a2838",   // Seam / edge color
+
+  // Accent
+  ACCENT: "#1E7FD8",      // Fox blue — primary accent
+  ACCENT_SEC: "#0f4a80",  // Fox blue attenuato — furniture outline, inactive
+
+  // Text
+  TEXT: "#c8ddef",        // Cold white — CRT read color
+  TEXT_MUTED: "#4a6a88",  // Secondary, caption, label spenti
+
+  // Semantic
+  SUCCESS: "#1fa35c",     // Verde — agent-enter, writing state
+  DANGER: "#c0392b",      // Rosso — alert, Bat Signal at 100%
+  WARN: "#b07d20",        // Ambra — warning only
+
+  // Outline / chrome
+  OUTLINE: "#060a10",     // Near-black with cool cave tint
+  HIGHLIGHT: "#1e3040",   // Subtle surface lift
+
+  // LED strip preset — green / blue / red / amber (opaque)
+  LED_COLORS: ["#1fa35c", "#1E7FD8", "#c0392b", "#b07d20", "#1fa35c"],
+
+  // Furniture chrome (P2 Herald visibility)
+  FURNITURE_OUTLINE: "#0f4a80", // accent-secondary for furniture outlines
+  FURNITURE_BG: "#162030",      // surface tone for furniture fills
 } as const;
 
 // ── Seeded random (deterministic procedural detail) ──────
@@ -97,10 +122,10 @@ export function contactShadow(
 ): void {
   const brd = Math.max(1, Math.round(zoom * 0.5));
   // Primary dark strip.
-  ctx.fillStyle = "#060a10";
+  ctx.fillStyle = P.OUTLINE;
   ctx.fillRect(x, baseY, w, brd);
   // Softer secondary strip below.
-  ctx.fillStyle = "#0a1018";
+  ctx.fillStyle = P.BG_RAISED;
   ctx.fillRect(
     x + brd,
     baseY + brd,
@@ -124,10 +149,10 @@ export function castShadow(
   const offX = Math.round(w * 0.15);
   const brd = Math.max(1, Math.round(zoom * 0.5));
   // Outer shadow (larger, lighter).
-  ctx.fillStyle = "#0a0e14";
+  ctx.fillStyle = P.BG_RAISED;
   ctx.fillRect(x + offX, baseY - brd, shadowW, shadowH + brd);
   // Inner shadow (darker core).
-  ctx.fillStyle = "#060a10";
+  ctx.fillStyle = P.OUTLINE;
   ctx.fillRect(
     x + offX + brd,
     baseY,

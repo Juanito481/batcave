@@ -344,9 +344,9 @@ export class Character {
     const labelBoxW = Math.round(labelW + labelPad * 2);
     const labelBoxH = Math.round(labelFont + labelPad);
     const brd = Math.max(1, Math.floor(zoom / 2));
-    // P0: pill backdrop — border #2a2a4a, fill #06060c.
+    // Name label pill — Signal Room surface + accent-secondary border.
     // Border.
-    ctx.fillStyle = "#2a2a4a";
+    ctx.fillStyle = "#0f4a80"; // accent-secondary
     ctx.fillRect(
       labelX - brd,
       labelY - brd,
@@ -354,10 +354,10 @@ export class Character {
       labelBoxH + brd * 2,
     );
     // Background.
-    ctx.fillStyle = "#06060c";
+    ctx.fillStyle = "#0c1624"; // bg-raised
     ctx.fillRect(labelX, labelY, labelBoxW, labelBoxH);
     // Text.
-    ctx.fillStyle = "#B0B0CC";
+    ctx.fillStyle = "#c8ddef"; // Fox text
     ctx.fillText(this.name, Math.round(this.x), labelY + Math.round(labelFont));
 
     // Emotion bubble — pixel-art symbol above the head, no globalAlpha.

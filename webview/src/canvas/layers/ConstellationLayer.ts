@@ -14,29 +14,29 @@
 import { RenderContext, P, seed, outlineRect } from "./render-context";
 import { OracleGodNodeState } from "../../world/BatCave";
 
-// Shared palette used by the knowledge map.
+// Shared palette — Signal Room tones.
 const C = {
-  FRAME_DARK: "#0a1822",
-  FRAME_LIGHT: "#14283a",
-  STAR_CORE: "#e8f0ff",
-  STAR_DIM: "#6a8bb5",
-  LINE_DIM: "#1e3a5a",
-  LINE_LIT: "#2a70c0",
-  BADGE_BG: "#1a2838",
-  BADGE_TEXT: "#7fb8ff",
-  PULSE_TINT: "#1E7FD8",
+  FRAME_DARK: "#0c1624",   // bg-raised
+  FRAME_LIGHT: "#162030",  // surface
+  STAR_CORE: "#c8ddef",    // Fox text — cold white
+  STAR_DIM: "#4a6a88",     // text-muted
+  LINE_DIM: "#0f4a80",     // accent-secondary
+  LINE_LIT: "#1E7FD8",     // accent
+  BADGE_BG: "#162030",     // surface
+  BADGE_TEXT: "#c8ddef",   // text
+  PULSE_TINT: "#1E7FD8",   // accent
 } as const;
 
-// Distinct hues used to color-code community cluster.
+// Distinct community hues — Signal Room semantic colors.
 const COMMUNITY_HUES = [
-  "#1E7FD8",
-  "#2ECC71",
-  "#E74C3C",
-  "#F39C12",
-  "#9B59B6",
-  "#E67E22",
-  "#F1C40F",
-  "#1ABC9C",
+  "#1E7FD8",  // accent
+  "#1fa35c",  // success
+  "#c0392b",  // danger
+  "#b07d20",  // warn
+  "#7a40b0",  // purple
+  "#18a080",  // teal
+  "#c8a820",  // gold
+  "#c0186a",  // hot-pink
 ];
 
 export function drawConstellation(rc: RenderContext): void {

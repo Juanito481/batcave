@@ -1,5 +1,5 @@
 import { darken } from "../../helpers/color";
-import { RenderContext, outlineRect } from "./render-context";
+import { RenderContext, P, outlineRect } from "./render-context";
 import { AGENTS } from "../../../../shared/types";
 import { PanelCtx } from "./panels/FilesPanel";
 import { drawFilesPanel } from "./panels/FilesPanel";
@@ -37,37 +37,41 @@ function drawToolIcon(rc: RenderContext): void {
 
   // Icon background bubble.
   const iconBrd = Math.max(1, Math.floor(zoom / 2));
-  ctx.fillStyle = "#0c0c1a";
+  ctx.fillStyle = P.BG_RAISED;
   ctx.fillRect(iconX - s, iy - s, s * 6, s * 6);
-  ctx.fillStyle = "#2a2a4a";
+  ctx.fillStyle = P.ACCENT_SEC;
   ctx.fillRect(iconX - s, iy - s, s * 6, iconBrd); // accent top
-  outlineRect(ctx, iconX - s, iy - s, s * 6, s * 6, iconBrd);
+  outlineRect(ctx, iconX - s, iy - s, s * 6, s * 6, iconBrd, P.FURNITURE_OUTLINE);
 
   // Draw tool-specific pixel icon.
   const cat = toolCategory(tool);
   const theme = world.getRepoTheme();
 
   if (cat === "read") {
-    ctx.fillStyle = "#1a3a5a";
+    // Book icon — Signal Room blues.
+    ctx.fillStyle = P.ACCENT_SEC;
     ctx.fillRect(iconX, iy, s * 4, s * 3);
-    ctx.fillStyle = "#2a5a8a";
+    ctx.fillStyle = P.ACCENT;
     ctx.fillRect(iconX, iy, s * 2, s * 3);
-    ctx.fillStyle = "#8aa0c0";
+    ctx.fillStyle = P.TEXT;
     ctx.fillRect(iconX + s, iy + s, s * 2, Math.max(1, Math.floor(zoom / 2)));
   } else if (cat === "write") {
-    ctx.fillStyle = "#F39C12";
+    // Pencil icon — warn amber.
+    ctx.fillStyle = P.WARN;
     ctx.fillRect(iconX + s, iy, s, s * 3);
-    ctx.fillStyle = "#E74C3C";
+    ctx.fillStyle = P.DANGER;
     ctx.fillRect(iconX + s, iy + s * 3, s, s);
-    ctx.fillStyle = "#DDD";
+    ctx.fillStyle = P.TEXT;
     ctx.fillRect(iconX + s, iy - s, s, s);
   } else if (cat === "bash") {
-    ctx.fillStyle = "#2ECC71";
+    // Terminal chevron — success green.
+    ctx.fillStyle = P.SUCCESS;
     ctx.fillRect(iconX, iy, s, s);
     ctx.fillRect(iconX + s, iy + s, s, s);
-    ctx.fillStyle = "#555570";
+    ctx.fillStyle = P.SURFACE;
     ctx.fillRect(iconX + s * 2, iy + s * 2, s * 2, s);
   } else if (cat === "web") {
+    // Globe — accent blue.
     ctx.fillStyle = theme.accent;
     ctx.fillRect(iconX + s, iy, s * 2, s);
     ctx.fillRect(iconX, iy + s, s * 4, s * 2);
@@ -75,13 +79,15 @@ function drawToolIcon(rc: RenderContext): void {
     ctx.fillStyle = darken(theme.accent, 0.3);
     ctx.fillRect(iconX + s * 2, iy + s, s, s * 2);
   } else if (cat === "agent") {
-    ctx.fillStyle = "#9B59B6";
+    // Agent silhouette — purple/oracle.
+    ctx.fillStyle = "#7a40b0";
     ctx.fillRect(iconX + s, iy, s * 2, s);
     ctx.fillRect(iconX, iy + s, s * 4, s);
     ctx.fillRect(iconX + s, iy + s * 2, s * 2, s);
     ctx.fillRect(iconX, iy + s * 3, s * 4, s);
   } else {
-    ctx.fillStyle = "#555570";
+    // Generic tool — text muted.
+    ctx.fillStyle = P.TEXT_MUTED;
     ctx.fillRect(iconX + s, iy, s * 2, s * 4);
     ctx.fillRect(iconX, iy + s, s * 4, s * 2);
   }
@@ -166,86 +172,92 @@ function drawBubble(
   const by = Math.floor(y - bh);
   const brd = Math.max(1, Math.floor(zoom / 2));
 
-  // Bubble body.
-  ctx.fillStyle = "#0c0c1a";
+  // Bubble body — Signal Room surface.
+  ctx.fillStyle = P.BG_RAISED;
   ctx.fillRect(bx, by, bw, bh);
-  // Subtle top accent line.
-  ctx.fillStyle = "#2a2a4a";
+  // Accent top strip.
+  ctx.fillStyle = P.ACCENT_SEC;
   ctx.fillRect(bx, by, bw, brd);
-  // Side + bottom borders.
-  outlineRect(ctx, bx, by, bw, bh, brd);
+  // Borders — radius 0px (Fox rule).
+  outlineRect(ctx, bx, by, bw, bh, brd, P.FURNITURE_OUTLINE);
   // Tail.
-  ctx.fillStyle = "#0c0c1a";
+  ctx.fillStyle = P.BG_RAISED;
   ctx.fillRect(Math.floor(x - zoom), by + bh, zoom * 2, zoom);
   ctx.fillRect(Math.floor(x), by + bh + zoom, zoom, zoom);
 
-  // Text.
-  ctx.fillStyle = "#AAAACC";
+  // Text — Fox text color.
+  ctx.fillStyle = P.TEXT;
   ctx.textAlign = "center";
   ctx.fillText(text, x, by + fontSize + pad - zoom);
 }
 
-// ── Overlay HUD (gaming-style, no sidebar) ────────────
+// ── Signal Room HUD — the protagonist of the minigioco ────────────────────
+//
+// Layout (all radius 0px — Fox rule):
+//   Context bar      full-width top strip, 4px, #1fa35c→#b07d20→#c0392b
+//   State chip       top-left: [dot] IDLE|THINKING|WRITING  DM Mono 11px
+//   Info chip        top-right: repo · model · 00:00
+//   Pace indicator   below info chip: tools/min + trend
+//   Agent roster     right panel: 21 Scacchiera agents with status
+//   Chain panel      below agent roster: active chains
+//   Oracle panel     bottom-right: graph stats
+//   XP bar           below context bar (retained from v4)
+//   Session dots     multiple sessions indicator
+//   Alerts           inline below state chip
 
 function drawOverlayHud(rc: RenderContext): void {
   const { ctx, world, width, height, now } = rc;
   const zoom = rc.zoom;
   const theme = world.getRepoTheme();
   const stats = world.getUsageStats();
-  const font = `"DM Mono", monospace`;
-  const brd = Math.max(1, Math.floor(zoom / 2));
-  const pad = zoom * 3;
+  const font  = `"DM Mono", "SF Mono", "Menlo", monospace`;
+  const brd   = Math.max(1, Math.floor(zoom / 2));
+  const pad   = zoom * 3;
 
-  // ── 1. Context bar (top, full width, thicker) ──
-  const ctxBarH = zoom * 4;
+  // ── 1. Context bar — 4px, full width ─────────────────────────────────────
+  const ctxBarH = Math.max(4, zoom * 2);
   const pct = stats ? stats.contextFillPct / 100 : 0;
-  const barColor = pct < 0.5 ? "#2ECC71" : pct < 0.8 ? "#F39C12" : "#E74C3C";
+  // Signal Room gradient: green → amber → danger.
+  const barColor = pct < 0.5 ? P.SUCCESS : pct < 0.8 ? P.WARN : P.DANGER;
 
-  ctx.fillStyle = "#06060c";
+  ctx.fillStyle = P.OUTLINE;
   ctx.fillRect(0, 0, width, ctxBarH + brd);
   ctx.fillStyle = barColor;
-  ctx.fillRect(0, 0, width * pct, ctxBarH);
-  // Quarter marks.
-  ctx.fillStyle = "#06060c";
+  ctx.fillRect(0, 0, Math.floor(width * pct), ctxBarH);
+  // Quarter tick marks at 25/50/75%.
+  ctx.fillStyle = P.OUTLINE;
   for (const mark of [0.25, 0.5, 0.75]) {
-    ctx.fillRect(Math.floor(width * mark), 0, brd, ctxBarH);
+    ctx.fillRect(Math.floor(width * mark), 0, Math.max(1, brd), ctxBarH);
   }
-  // Context % label embedded in bar.
-  const pctVal0 = stats?.contextFillPct ?? 0;
-  if (pctVal0 > 0) {
-    ctx.font = `bold ${Math.max(8, zoom * 2.5)}px ${font}`;
-    ctx.fillStyle = "#FFFFFF";
+  // Percentage label right-aligned inside bar.
+  const pctVal = stats?.contextFillPct ?? 0;
+  if (pctVal > 0) {
+    ctx.font = `bold ${Math.max(8, zoom * 2)}px ${font}`;
+    ctx.fillStyle = P.TEXT;
     ctx.textAlign = "right";
-    ctx.fillText(`${pctVal0}%`, width - zoom * 2, ctxBarH - zoom);
+    ctx.fillText(`${pctVal}%`, width - zoom, ctxBarH - 1);
     ctx.textAlign = "left";
   }
 
-  // ── 1b. XP bar (under context bar) ──
-  const prog = world.getProgression();
-  const xpBarH = Math.max(2, Math.floor(zoom * 1.2));
-  const xpBarY = ctxBarH + brd;
-  const xpProgress = prog.getLevelProgress();
+  // ── 1b. XP bar ───────────────────────────────────────────────────────────
+  const prog    = world.getProgression();
+  const xpBarH  = Math.max(2, Math.floor(zoom * 1.2));
+  const xpBarY  = ctxBarH + brd;
   const xpLevel = prog.getLevel();
 
-  // Track background.
-  ctx.fillStyle = "#08080e";
+  ctx.fillStyle = P.BG_RAISED;
   ctx.fillRect(0, xpBarY, width, xpBarH);
-  // XP fill — accent colored.
   ctx.fillStyle = theme.accent;
-  ctx.fillRect(0, xpBarY, width * xpProgress, xpBarH);
-  // Level badge — hidden in compact mode (bar alone is enough feedback).
+  ctx.fillRect(0, xpBarY, Math.floor(width * prog.getLevelProgress()), xpBarH);
+
   if (rc.layoutMode !== "compact") {
     ctx.font = `bold ${Math.max(7, zoom * 2)}px ${font}`;
-    ctx.fillStyle = "#CCCCDD";
+    ctx.fillStyle = P.TEXT_MUTED;
     ctx.textAlign = "left";
-    ctx.fillText(
-      `Lv.${xpLevel}`,
-      zoom * 2,
-      xpBarY + xpBarH + Math.max(7, zoom * 2),
-    );
+    ctx.fillText(`Lv.${xpLevel}`, zoom * 2, xpBarY + xpBarH + Math.max(7, zoom * 2));
   }
 
-  // ── 1c. Floating "+N XP" on gain ──
+  // Floating "+N XP" on gain.
   const xpGain = prog.getRecentXpGain();
   if (xpGain) {
     const fadeRatio = xpGain.timer / 800;
@@ -254,141 +266,109 @@ function drawOverlayHud(rc: RenderContext): void {
     ctx.fillStyle = theme.accent;
     ctx.font = `bold ${Math.max(8, zoom * 2.5)}px ${font}`;
     ctx.textAlign = "right";
-    // Float upward as timer decays.
     const floatY = xpBarY + xpBarH + zoom * 2 - (1 - fadeRatio) * zoom * 4;
     ctx.fillText(`+${xpGain.amount} XP`, width - zoom * 2, floatY);
     ctx.restore();
   }
 
-  // ── 2. Top-left chip: state + cost ──
+  // ── 2. State chip — top-left ──────────────────────────────────────────────
   const state = world.getAlfredState();
-  const stateColor: Record<string, string> = {
-    idle: "#778899",
-    thinking: "#3399EE",
-    writing: "#33DD88",
+  const STATE_COLORS: Record<string, string> = {
+    idle:     P.TEXT_MUTED,
+    thinking: P.ACCENT,
+    writing:  P.SUCCESS,
   };
   const smallFont = Math.max(9, zoom * 3);
+  const chipY     = xpBarY + xpBarH + brd + pad;
+  const chipX     = pad;
 
-  // chipY accounts for both context bar and XP bar heights.
-  const chipY = ctxBarH + xpBarH + brd + pad;
-  const chipX = pad;
-
-  // Chip background pill.
   const stateLabel = state.toUpperCase();
   ctx.font = `bold ${smallFont}px ${font}`;
-  const pace = world.getPace();
-  const paceText = pace.current > 0 ? `  ${pace.current}/min` : "";
-  const chipTextW = ctx.measureText(stateLabel + paceText).width;
-  const dotSize = zoom * 3; // P2: state dot size increased from zoom*2 to zoom*3
-  const chipPillW = dotSize + zoom * 3 + chipTextW + zoom * 2;
-  const chipPillH = dotSize + zoom * 2;
-  ctx.fillStyle = "#080c12";
-  ctx.fillRect(chipX - zoom, chipY - zoom, chipPillW, chipPillH);
+  const dotSize    = zoom * 3;
+  const chipPillH  = dotSize + zoom * 2;
+  const pace       = world.getPace();
+  const paceStr    = pace.current > 0 ? `  ${pace.current}/m` : "";
+  const chipPillW  = dotSize + zoom * 2 + ctx.measureText(stateLabel + paceStr).width + zoom * 2;
+
+  // Chip bg — surface with accent-secondary border.
+  ctx.fillStyle = P.SURFACE;
+  ctx.fillRect(chipX - brd, chipY - brd, chipPillW + brd * 2, chipPillH + brd * 2);
+  ctx.fillStyle = P.ACCENT_SEC;
+  ctx.fillRect(chipX - brd, chipY - brd, chipPillW + brd * 2, brd); // top border
 
   // State dot.
-  ctx.fillStyle = stateColor[state] || "#555566";
+  ctx.fillStyle = STATE_COLORS[state] || P.TEXT_MUTED;
   ctx.fillRect(chipX, chipY, dotSize, dotSize);
 
   // Pulse ring when active.
   if (state !== "idle") {
     const pulse = Math.sin(now / 300) * 0.5 + 0.5;
-    const ringSize = dotSize + Math.floor(pulse * zoom * 2);
+    const ringSize   = dotSize + Math.floor(pulse * zoom * 2);
     const ringOffset = Math.floor((ringSize - dotSize) / 2);
-    ctx.fillStyle = state === "thinking" ? "#0e2040" : "#0e2a0e";
+    ctx.fillStyle = state === "thinking" ? P.ACCENT_SEC : darken(P.SUCCESS, 0.5);
     ctx.fillRect(chipX - ringOffset, chipY - ringOffset, ringSize, ringSize);
-    ctx.fillStyle = stateColor[state];
+    ctx.fillStyle = STATE_COLORS[state];
     ctx.fillRect(chipX, chipY, dotSize, dotSize);
   }
 
-  // State label.
-  ctx.fillStyle = "#CCCCDD";
+  // State label + pace.
+  ctx.fillStyle = P.TEXT;
   ctx.font = `bold ${smallFont}px ${font}`;
   ctx.textAlign = "left";
-  ctx.fillText(
-    state.toUpperCase(),
-    chipX + dotSize + zoom * 2,
-    chipY + dotSize - brd,
-  );
+  const labelX = chipX + dotSize + zoom * 2;
+  ctx.fillText(stateLabel, labelX, chipY + dotSize - brd);
 
-  // Pace next to state (tools/min).
   if (pace.current > 0) {
-    const stateTextW = ctx.measureText(state.toUpperCase()).width;
-    const trendColor =
-      pace.trend === "up"
-        ? "#2ECC71"
-        : pace.trend === "down"
-          ? "#E74C3C"
-          : "#888899";
+    const labelW = ctx.measureText(stateLabel).width;
+    const trendColor = pace.trend === "up" ? P.SUCCESS : pace.trend === "down" ? P.DANGER : P.TEXT_MUTED;
     ctx.fillStyle = trendColor;
     ctx.font = `${smallFont}px ${font}`;
-    const trendArrow =
-      pace.trend === "up" ? "\u25B2" : pace.trend === "down" ? "\u25BC" : "";
-    ctx.fillText(
-      `${pace.current}/min ${trendArrow}`,
-      chipX + dotSize + zoom * 2 + stateTextW + zoom * 3,
-      chipY + dotSize - brd,
-    );
+    const trendArrow = pace.trend === "up" ? "\u25B2" : pace.trend === "down" ? "\u25BC" : "";
+    ctx.fillText(`${pace.current}/m${trendArrow}`, labelX + labelW + zoom, chipY + dotSize - brd);
   }
 
-  // ── 3. Top-right chip: model + session duration + repo ──
-  // compact → duration only; narrow → no repo label; normal/wide → full.
-  const rightX = width - pad;
-
-  // Model badge.
-  const modelText = stats?.activeModel || "opus-4-6";
+  // ── 3. Info chip — top-right ──────────────────────────────────────────────
+  const rightX     = width - pad;
+  const modelText  = stats?.activeModel || "sonnet-4-6";
   const modelShort = modelText.replace("claude-", "");
+  const sessionStart = stats?.sessionStartedAt ?? now;
+  const elapsed    = now - sessionStart;
+  const mins       = Math.floor(elapsed / 60_000);
+  const secs       = Math.floor((elapsed % 60_000) / 1000);
+  const durStr     = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+
+  const showModel    = rc.layoutMode !== "compact";
+  const showRepoLabel = rc.layoutMode === "normal" || rc.layoutMode === "wide";
+
   ctx.font = `${smallFont}px ${font}`;
   ctx.textAlign = "right";
 
-  // Session duration.
-  const sessionStart = stats?.sessionStartedAt ?? now;
-  const elapsed = now - sessionStart;
-  const mins = Math.floor(elapsed / 60_000);
-  const secs = Math.floor((elapsed % 60_000) / 1000);
-  const durStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
-
-  const showModel = rc.layoutMode !== "compact";
-  const showRepoLabel = rc.layoutMode !== "compact" && rc.layoutMode !== "narrow" && theme.label !== "---";
-
-  // Measure right chip total width for background pill.
-  const durW = ctx.measureText(durStr).width;
-  ctx.fillStyle = "#444458";
+  const durW   = ctx.measureText(durStr).width;
   const modelW = showModel ? ctx.measureText(modelShort).width : 0;
   ctx.font = `bold ${smallFont}px ${font}`;
-  const labelW = showRepoLabel
+  const labelW2 = showRepoLabel && theme.label !== "---"
     ? ctx.measureText(theme.label).width + zoom * 3
     : 0;
-  const rightTotalW =
-    durW +
-    (showModel ? zoom * 3 + modelW : 0) +
-    (showRepoLabel ? labelW : 0) +
-    zoom * 2;
-
-  // Right chip background pill.
+  const rightTotalW = durW + (showModel ? zoom * 3 + modelW : 0) + labelW2 + zoom * 2;
   const rightY = chipY + dotSize - brd;
-  ctx.save();
-  ctx.fillStyle = "#06060c";
-  ctx.globalAlpha = 0.75;
-  ctx.fillRect(
-    rightX - rightTotalW,
-    chipY - zoom,
-    rightTotalW + zoom,
-    chipPillH,
-  );
-  ctx.restore();
 
-  // Compose right chip: "HARRIET  opus-4-6  5m 42s" (fields omitted by mode).
+  // Right chip bg.
+  ctx.fillStyle = P.SURFACE;
+  ctx.fillRect(rightX - rightTotalW - brd, chipY - brd, rightTotalW + brd * 2, chipPillH + brd * 2);
+  ctx.fillStyle = P.ACCENT_SEC;
+  ctx.fillRect(rightX - rightTotalW - brd, chipY - brd, rightTotalW + brd * 2, brd);
+
   ctx.font = `${smallFont}px ${font}`;
   ctx.textAlign = "right";
-  ctx.fillStyle = "#555566";
+  ctx.fillStyle = P.TEXT_MUTED;
   ctx.fillText(durStr, rightX, rightY);
 
   if (showModel) {
-    ctx.fillStyle = "#444458";
+    ctx.fillStyle = P.TEXT_MUTED;
     ctx.fillText(modelShort, rightX - durW - zoom * 3, rightY);
   }
 
-  if (showRepoLabel) {
+  if (showRepoLabel && theme.label !== "---") {
     ctx.fillStyle = theme.accent;
     ctx.font = `bold ${smallFont}px ${font}`;
     ctx.fillText(
@@ -398,127 +378,236 @@ function drawOverlayHud(rc: RenderContext): void {
     );
   }
 
-  // ── 4. Active agents indicator (top-left, below state) ──
-  const activeNames = world.getActiveAgentNames();
-  if (activeNames.length > 0) {
-    const agentY = chipY + dotSize + zoom * 3;
-    let agentX = chipX;
-    const agentDot = Math.max(2, zoom);
-    const agentFontSize = Math.max(8, zoom * 2.5);
-    ctx.font = `${agentFontSize}px ${font}`;
-
-    // Cap visible dots to half the canvas width; show +N badge for overflow.
-    const maxVisible = Math.max(1, Math.floor((width / 2) / (agentDot + zoom * 5)));
-    const visibleNames = activeNames.slice(0, maxVisible);
-    const overflowCount = activeNames.length - visibleNames.length;
-
-    for (let i = 0; i < visibleNames.length; i++) {
-      const name = visibleNames[i];
-      // Find agent meta for emoji.
-      const agentEntries = Object.entries(AGENTS);
-      const meta = agentEntries.find(([_, a]) => a.name === name);
-
-      // Green dot.
-      ctx.fillStyle = "#2ECC71";
-      ctx.fillRect(agentX, agentY + zoom, agentDot, agentDot);
-
-      // Agent label.
-      ctx.fillStyle = "#777790";
-      ctx.font = `${agentFontSize}px ${font}`;
-      ctx.textAlign = "left";
-      const label = meta ? meta[1].emoji : name.slice(0, 3);
-      ctx.fillText(label, agentX + agentDot + zoom, agentY + zoom + agentDot);
-      agentX += ctx.measureText(label).width + agentDot + zoom * 4;
-    }
-
-    // Overflow badge.
-    if (overflowCount > 0) {
-      ctx.fillStyle = "#444458";
-      ctx.font = `${agentFontSize}px ${font}`;
-      ctx.textAlign = "left";
-      ctx.fillText(`+${overflowCount}`, agentX, agentY + zoom + agentDot);
-    }
+  // ── 4. Agent Roster — right panel ─────────────────────────────────────────
+  // Only rendered in normal/wide modes where there's enough horizontal space.
+  // Panel is on the right side and shows all 21 Scacchiera agents.
+  if (rc.layoutMode === "normal" || rc.layoutMode === "wide") {
+    drawAgentRoster(rc, font, smallFont, chipY + chipPillH + pad * 2);
   }
 
-  // ── 4b. Streak badge ──
-  const streak = prog.getStreak();
-  if (streak.currentStreak >= 2) {
-    const streakY = chipY + dotSize + zoom * (activeNames.length > 0 ? 6 : 3);
-    ctx.fillStyle =
-      streak.currentStreak >= 7
-        ? "#FFD700"
-        : streak.currentStreak >= 3
-          ? "#F39C12"
-          : "#555566";
-    ctx.font = `bold ${Math.max(8, zoom * 2.5)}px ${font}`;
-    ctx.textAlign = "left";
-    // Render without emoji (pixel font can't render emoji) — use text only.
-    ctx.fillText(`${streak.currentStreak}d streak`, chipX, streakY + zoom * 2);
-  }
-
-  // (Pace now shown in state chip — section 5 removed)
-
-  // ── 7. Activity heatmap — 40 slots along bottom of context bar ──
+  // ── 5. Heatmap — below context bar ───────────────────────────────────────
   const heatSlots = world.getHeatmapSlots();
-  const maxHeat = Math.max(1, ...heatSlots);
-  const slotW = Math.max(1, Math.floor(width / heatSlots.length));
-  const heatY = ctxBarH + brd;
-  const heatH = Math.max(1, Math.floor(zoom * 0.8));
+  const maxHeat   = Math.max(1, ...heatSlots);
+  const slotW     = Math.max(1, Math.floor(width / heatSlots.length));
+  const heatY     = ctxBarH + brd;
+  const heatH     = Math.max(1, Math.floor(zoom * 0.8));
   for (let i = 0; i < heatSlots.length; i++) {
     if (heatSlots[i] === 0) continue;
     const intensity = heatSlots[i] / maxHeat;
-    // Color gradient: dark indigo → bright cyan.
-    const r = Math.floor(20 + intensity * 10);
-    const g = Math.floor(30 + intensity * 150);
-    const b = Math.floor(60 + intensity * 180);
+    const r = Math.floor(15 + intensity * 10);
+    const g = Math.floor(120 + intensity * 100);
+    const b = Math.floor(200 + intensity * 55);
     ctx.fillStyle = `rgb(${r},${g},${b})`;
     ctx.fillRect(i * slotW, heatY, slotW - (slotW > 2 ? 1 : 0), heatH);
   }
 
-  // ── 7. Smart alerts (below agents row) ──
+  // ── 6. Streak badge ───────────────────────────────────────────────────────
+  const streak = prog.getStreak();
+  if (streak.currentStreak >= 2) {
+    const streakY = chipY + chipPillH + pad;
+    ctx.fillStyle =
+      streak.currentStreak >= 7 ? "#c8a820"
+      : streak.currentStreak >= 3 ? P.WARN
+      : P.TEXT_MUTED;
+    ctx.font = `bold ${Math.max(8, zoom * 2.5)}px ${font}`;
+    ctx.textAlign = "left";
+    ctx.fillText(`${streak.currentStreak}d`, chipX, streakY + zoom * 2);
+  }
+
+  // ── 7. Smart alerts ────────────────────────────────────────────────────────
   const alerts = world.getSmartAlerts();
   if (alerts.length > 0) {
-    const alertY = chipY + dotSize + zoom * 6;
     const latestAlert = alerts[alerts.length - 1];
     const alertAge = now - latestAlert.timestamp;
     if (alertAge < 15000) {
-      // show for 15s
       const alertAlpha = alertAge < 12000 ? 1 : 1 - (alertAge - 12000) / 3000;
       const sevColors: Record<string, string> = {
-        info: "#1E7FD8",
-        warning: "#F39C12",
-        critical: "#E74C3C",
+        info: P.ACCENT, warning: P.WARN, critical: P.DANGER,
       };
       ctx.save();
       ctx.globalAlpha = alertAlpha;
-      // Alert pill background — truncate text in compact mode.
       ctx.font = `bold ${Math.max(8, zoom * 2.5)}px ${font}`;
       const alertFull = `${latestAlert.severity === "critical" ? "!" : "i"} ${latestAlert.title}: ${latestAlert.detail}`;
-      const maxAlertChars =
-        rc.layoutMode === "compact"
-          ? Math.floor(width / (zoom * 2.5))
-          : alertFull.length;
-      const alertText =
-        alertFull.length > maxAlertChars
-          ? alertFull.slice(0, maxAlertChars - 1) + "…"
-          : alertFull;
+      const maxChars  = Math.floor(width / (zoom * 2.5));
+      const alertText = alertFull.length > maxChars ? alertFull.slice(0, maxChars - 1) + "…" : alertFull;
       const alertTextW = ctx.measureText(alertText).width;
-      ctx.fillStyle = "#06060c";
-      ctx.fillRect(
-        chipX - zoom,
-        alertY - zoom,
-        alertTextW + zoom * 4,
-        zoom * 5,
-      );
-      // Alert text.
-      ctx.fillStyle = sevColors[latestAlert.severity] || "#888899";
+      const alertY = chipY + chipPillH + pad + (streak.currentStreak >= 2 ? zoom * 5 : 0);
+      ctx.fillStyle = P.SURFACE;
+      ctx.fillRect(chipX - brd, alertY - brd, alertTextW + zoom * 4 + brd * 2, zoom * 5);
+      ctx.fillStyle = P.ACCENT_SEC;
+      ctx.fillRect(chipX - brd, alertY - brd, alertTextW + zoom * 4 + brd * 2, brd);
+      ctx.fillStyle = sevColors[latestAlert.severity] || P.TEXT_MUTED;
       ctx.textAlign = "left";
-      ctx.fillText(alertText, chipX, alertY + zoom * 2.5);
+      ctx.fillText(alertText, chipX, alertY + zoom * 3);
       ctx.restore();
     }
   }
 
-  // (Cave depth + achievements removed — decorative, low value)
+  ctx.textAlign = "left";
+}
+
+// ── Agent Roster panel — Signal Room protagonist ──────────────────────────
+//
+// Shows all 21 Scacchiera agents as a panel on the right edge.
+// Active agents: highlighted in SUCCESS green with tool-call count.
+// Idle: dimmed in TEXT_MUTED.
+// Compact line: [dot] NAME  status  count
+
+function drawAgentRoster(
+  rc: RenderContext,
+  font: string,
+  fontSize: number,
+  startY: number,
+): void {
+  const { ctx, world, width, now } = rc;
+  const zoom = rc.zoom;
+  const brd  = Math.max(1, Math.floor(zoom / 2));
+  const pad  = zoom * 2;
+
+  const rosterW  = Math.min(180, Math.floor(width * 0.28));
+  const rosterX  = width - rosterW - zoom;
+  const lineH    = Math.max(fontSize + zoom * 2, 14);
+
+  // All 21 agents from AGENTS map.
+  const agentEntries = Object.entries(AGENTS);
+  const activeNames  = new Set(world.getActiveAgentNames().map((n) => n.toLowerCase()));
+
+  // Compute how many fit in the remaining canvas height.
+  const maxLines    = Math.floor((rc.height - startY - zoom * 8) / lineH);
+  const visibleRows = Math.min(agentEntries.length, maxLines);
+  if (visibleRows <= 0) return;
+
+  const panelH = visibleRows * lineH + pad * 2 + fontSize + pad;
+
+  // Panel background.
+  ctx.fillStyle = P.SURFACE;
+  ctx.fillRect(rosterX - brd, startY - brd, rosterW + brd * 2, panelH + brd * 2);
+  // Accent-secondary top border.
+  ctx.fillStyle = P.ACCENT_SEC;
+  ctx.fillRect(rosterX - brd, startY - brd, rosterW + brd * 2, brd);
+
+  // Header.
+  ctx.fillStyle = P.TEXT_MUTED;
+  ctx.font = `bold ${Math.max(7, fontSize - 1)}px ${font}`;
+  ctx.textAlign = "left";
+  ctx.fillText("SCACCHIERA", rosterX + pad, startY + pad + fontSize);
+
+  let ry = startY + pad + fontSize + pad;
+
+  for (let i = 0; i < visibleRows; i++) {
+    const [agentId, agentMeta] = agentEntries[i];
+    const isActive = activeNames.has(agentId.toLowerCase())
+      || activeNames.has(agentMeta.name.toLowerCase());
+
+    // Dot color — active=SUCCESS, idle=MUTED.
+    const dotColor = isActive ? P.SUCCESS : P.TEXT_MUTED;
+    const dotSize  = Math.max(2, Math.floor(zoom * 0.8));
+
+    // Active row highlight bg.
+    if (isActive) {
+      ctx.fillStyle = P.BG_RAISED;
+      ctx.fillRect(rosterX, ry - 1, rosterW, lineH - 1);
+      // Left accent bar.
+      ctx.fillStyle = P.SUCCESS;
+      ctx.fillRect(rosterX, ry - 1, brd, lineH - 1);
+    }
+
+    // Status dot.
+    ctx.fillStyle = dotColor;
+    ctx.fillRect(rosterX + pad, ry + Math.floor(lineH / 2) - Math.floor(dotSize / 2), dotSize, dotSize);
+
+    // Agent name.
+    ctx.fillStyle = isActive ? P.TEXT : P.TEXT_MUTED;
+    ctx.font = `${Math.max(7, fontSize - 1)}px ${font}`;
+    ctx.textAlign = "left";
+    const name = agentMeta.name;
+    ctx.fillText(name, rosterX + pad + dotSize + zoom, ry + Math.floor(lineH / 2) + Math.floor(fontSize / 3));
+
+    // If active: show pulse + "active" label right-aligned.
+    if (isActive) {
+      const pulse = Math.sin(now / 400 + i) > 0 ? P.SUCCESS : darken(P.SUCCESS, 0.3);
+      ctx.fillStyle = pulse;
+      ctx.font = `${Math.max(6, fontSize - 2)}px ${font}`;
+      ctx.textAlign = "right";
+      ctx.fillText("ACT", rosterX + rosterW - pad, ry + Math.floor(lineH / 2) + Math.floor(fontSize / 3));
+    }
+
+    ry += lineH;
+  }
+
+  // Overflow badge if more agents than fit.
+  if (agentEntries.length > visibleRows) {
+    ctx.fillStyle = P.TEXT_MUTED;
+    ctx.font = `${Math.max(7, fontSize - 1)}px ${font}`;
+    ctx.textAlign = "center";
+    ctx.fillText(`+${agentEntries.length - visibleRows} more`, rosterX + rosterW / 2, ry + fontSize);
+  }
+
+  // ── Oracle stats — bottom of roster panel ─────────────────────────────
+  const oracleStats = world.getOracleStats();
+  if (oracleStats) {
+    const oracleY = startY + panelH + brd + zoom * 2;
+    const oraclePanelH = fontSize * 2 + pad * 3;
+    ctx.fillStyle = P.SURFACE;
+    ctx.fillRect(rosterX - brd, oracleY - brd, rosterW + brd * 2, oraclePanelH + brd * 2);
+    ctx.fillStyle = P.ACCENT_SEC;
+    ctx.fillRect(rosterX - brd, oracleY - brd, rosterW + brd * 2, brd);
+
+    ctx.font = `${Math.max(7, fontSize - 1)}px ${font}`;
+    ctx.fillStyle = P.TEXT_MUTED;
+    ctx.textAlign = "left";
+    ctx.fillText("ORACLE", rosterX + pad, oracleY + pad + fontSize - 2);
+    ctx.fillStyle = P.TEXT;
+    const nodeStr = `${oracleStats.totalNodes}n · ${oracleStats.communities}c`;
+    ctx.fillText(nodeStr, rosterX + pad, oracleY + pad + fontSize * 2);
+  }
+
+  // ── Chain panel — above roster if chains exist ─────────────────────────
+  const chains = world.getChainCards();
+  if (chains.length > 0) {
+    const chainPanelH = Math.min(chains.length, 4) * lineH + pad * 2 + fontSize + pad;
+    const chainY = startY - chainPanelH - brd - zoom * 2;
+    if (chainY > 0) {
+      ctx.fillStyle = P.SURFACE;
+      ctx.fillRect(rosterX - brd, chainY - brd, rosterW + brd * 2, chainPanelH + brd * 2);
+      ctx.fillStyle = P.WARN;
+      ctx.fillRect(rosterX - brd, chainY - brd, rosterW + brd * 2, brd);
+
+      ctx.fillStyle = P.TEXT_MUTED;
+      ctx.font = `bold ${Math.max(7, fontSize - 1)}px ${font}`;
+      ctx.textAlign = "left";
+      ctx.fillText("CHAINS", rosterX + pad, chainY + pad + fontSize);
+
+      let cy2 = chainY + pad + fontSize + pad;
+      const visibleChains = chains.slice(0, 4);
+      for (const chain of visibleChains) {
+        const flagColor = chain.flag === "clean" ? P.SUCCESS
+          : chain.flag === "warn" ? P.WARN
+          : P.DANGER;
+        // Flag dot.
+        ctx.fillStyle = flagColor;
+        ctx.fillRect(rosterX + pad, cy2 + Math.floor(lineH / 2) - 2, 3, 3);
+        // Chain ID truncated.
+        ctx.fillStyle = P.TEXT;
+        ctx.font = `${Math.max(6, fontSize - 2)}px ${font}`;
+        ctx.textAlign = "left";
+        const idShort = chain.chainId.length > 14 ? chain.chainId.slice(-14) : chain.chainId;
+        ctx.fillText(idShort, rosterX + pad + 6, cy2 + Math.floor(lineH / 2) + Math.floor(fontSize / 3));
+        // Progress right-aligned (current/total).
+        const progressStr = `${chain.step.current}/${chain.step.total}`;
+        ctx.fillStyle = P.TEXT_MUTED;
+        ctx.textAlign = "right";
+        ctx.fillText(progressStr, rosterX + rosterW - pad, cy2 + Math.floor(lineH / 2) + Math.floor(fontSize / 3));
+        cy2 += lineH;
+      }
+      if (chains.length > 4) {
+        ctx.fillStyle = P.TEXT_MUTED;
+        ctx.font = `${Math.max(6, fontSize - 2)}px ${font}`;
+        ctx.textAlign = "center";
+        ctx.fillText(`+${chains.length - 4}`, rosterX + rosterW / 2, cy2 + fontSize);
+      }
+    }
+  }
 
   ctx.textAlign = "left";
 }
@@ -585,10 +674,10 @@ function drawExpandedPanel(rc: RenderContext): void {
   const smallFont = Math.max(8, zoom * 2.5);
   const pad = zoom * 4;
 
-  // Semi-transparent backdrop.
+  // Backdrop — Signal Room surface.
   ctx.save();
-  ctx.fillStyle = "#101820";
-  ctx.globalAlpha = 0.92;
+  ctx.fillStyle = P.BG;
+  ctx.globalAlpha = 0.95;
   const panelW = Math.min(width * 0.7, 440);
   const panelH = Math.min(height * 0.7, 360);
   const px = Math.floor((width - panelW) / 2);
@@ -596,12 +685,12 @@ function drawExpandedPanel(rc: RenderContext): void {
   ctx.fillRect(px, py, panelW, panelH);
   ctx.restore();
 
-  // Border — accent top, subtle sides/bottom.
+  // Border — accent top, accent-secondary sides/bottom. radius 0px.
   const theme = world.getRepoTheme();
   const brdW = Math.max(1, zoom);
   ctx.fillStyle = theme.accent;
   ctx.fillRect(px, py, panelW, brdW * 2); // thicker accent top
-  ctx.fillStyle = "#1a1a2e";
+  ctx.fillStyle = P.ACCENT_SEC;
   ctx.fillRect(px, py + panelH - brdW, panelW, brdW);
   ctx.fillRect(px, py, brdW, panelH);
   ctx.fillRect(px + panelW - brdW, py, brdW, panelH);
@@ -634,7 +723,7 @@ function drawExpandedPanel(rc: RenderContext): void {
 
   // Header separator line.
   const sepY = py + pad + fontSize + Math.floor(pad * 0.6);
-  ctx.fillStyle = "#1a1a2e";
+  ctx.fillStyle = P.ACCENT_SEC;
   ctx.fillRect(
     px + pad,
     sepY,
@@ -688,7 +777,7 @@ function drawReplayTimeline(rc: RenderContext): void {
 
   // Dark backdrop.
   ctx.save();
-  ctx.fillStyle = "#06060c";
+  ctx.fillStyle = P.BG_RAISED;
   ctx.globalAlpha = 0.9;
   ctx.fillRect(0, y - pad, width, barH + pad * 2);
   ctx.restore();
@@ -699,7 +788,7 @@ function drawReplayTimeline(rc: RenderContext): void {
   const trackY = y + barH / 2 - zoom;
   const trackH = zoom * 2;
 
-  ctx.fillStyle = "#1a1a2e";
+  ctx.fillStyle = P.SURFACE;
   ctx.fillRect(trackX, trackY, trackW, trackH);
 
   // Progress fill.
@@ -714,7 +803,7 @@ function drawReplayTimeline(rc: RenderContext): void {
   ctx.fillRect(scrubX - zoom, trackY - zoom, zoom * 2, Math.max(1, zoom / 2));
 
   // Play/pause indicator (left).
-  ctx.fillStyle = snap.state === "playing" ? "#2ECC71" : "#F39C12";
+  ctx.fillStyle = snap.state === "playing" ? P.SUCCESS : P.WARN;
   ctx.font = `bold ${fontSize}px ${font}`;
   ctx.textAlign = "left";
   const stateIcon =
@@ -722,7 +811,7 @@ function drawReplayTimeline(rc: RenderContext): void {
   ctx.fillText(stateIcon, pad, y + barH / 2 + fontSize * 0.35);
 
   // "REPLAY" label.
-  ctx.fillStyle = "#E74C3C";
+  ctx.fillStyle = P.DANGER;
   ctx.font = `bold ${smallFont}px ${font}`;
   const replayAlpha =
     snap.state === "playing" ? Math.sin(now / 400) * 0.4 + 0.6 : 1;
@@ -736,7 +825,7 @@ function drawReplayTimeline(rc: RenderContext): void {
   const durSec = Math.floor(snap.durationMs / 1000);
   const posStr = `${Math.floor(posSec / 60)}:${String(posSec % 60).padStart(2, "0")}`;
   const durStr = `${Math.floor(durSec / 60)}:${String(durSec % 60).padStart(2, "0")}`;
-  ctx.fillStyle = "#888899";
+  ctx.fillStyle = P.TEXT_MUTED;
   ctx.font = `${smallFont}px ${font}`;
   ctx.textAlign = "right";
   ctx.fillText(
@@ -746,7 +835,7 @@ function drawReplayTimeline(rc: RenderContext): void {
   );
 
   // Speed badge.
-  ctx.fillStyle = snap.speed !== 1 ? "#F39C12" : "#555566";
+  ctx.fillStyle = snap.speed !== 1 ? P.WARN : P.TEXT_MUTED;
   ctx.fillText(`${snap.speed}x`, width - pad, y + barH / 2 + smallFont * 0.35);
 
   // Current event detail (above the bar).
@@ -769,7 +858,7 @@ function drawReplayTimeline(rc: RenderContext): void {
   }
 
   // Entry counter.
-  ctx.fillStyle = "#444458";
+  ctx.fillStyle = P.TEXT_MUTED;
   ctx.font = `${smallFont}px ${font}`;
   ctx.textAlign = "left";
   ctx.fillText(`${snap.cursor}/${snap.totalEntries}`, trackX, y - pad);
@@ -811,7 +900,7 @@ function drawAchievementPopup(rc: RenderContext): void {
   ctx.globalAlpha = alpha;
 
   // Background.
-  ctx.fillStyle = "#0a0c14";
+  ctx.fillStyle = P.BG;
   ctx.fillRect(popupX, popupY, popupW, popupH);
 
   // Tier-colored border.
@@ -893,7 +982,7 @@ function drawLevelUpPopup(rc: RenderContext): void {
   ctx.globalAlpha = alpha;
 
   // Background.
-  ctx.fillStyle = "#0a0c14";
+  ctx.fillStyle = P.BG;
   ctx.fillRect(popupX, popupY, popupW, popupH);
   // Gold border.
   const brd = Math.max(1, Math.floor(zoom / 2));
