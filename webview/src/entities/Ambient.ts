@@ -6,6 +6,7 @@
  */
 
 import { bus } from "../systems/EventBus";
+import { P } from "../canvas/layers/render-context";
 
 // --- Flying bats ---
 
@@ -150,7 +151,14 @@ export class Ambient {
     }
     // Pre-allocate rat pool.
     for (let i = 0; i < Ambient.MAX_RATS; i++) {
-      this.ratPool.push({ x: 0, y: 0, speedX: 0, frame: 0, frameTimer: 0, active: false });
+      this.ratPool.push({
+        x: 0,
+        y: 0,
+        speedX: 0,
+        frame: 0,
+        frameTimer: 0,
+        active: false,
+      });
     }
   }
 
@@ -375,11 +383,12 @@ export class Ambient {
       this.dripTimer = 0;
 
       // Find a dead drip in the pool to recycle.
-      const drip = this.dripPool.find(d => d.splashTimer === -2);
+      const drip = this.dripPool.find((d) => d.splashTimer === -2);
       if (drip) {
         const numSlots = Math.max(1, Math.floor(this.wW / 48));
         const slot = Math.floor(Math.random() * numSlots);
-        drip.x = (slot + 0.5) * (this.wW / numSlots) + (Math.random() - 0.5) * 4;
+        drip.x =
+          (slot + 0.5) * (this.wW / numSlots) + (Math.random() - 0.5) * 4;
         drip.y = this.wallH + Math.random() * 10;
         drip.velocityY = 0.04;
         drip.splashTimer = -1; // -1 = falling, -2 = dead/available
@@ -622,12 +631,15 @@ export class Ambient {
   private updateRats(dt: number): void {
     // Spawn timer — use counter instead of .filter() (O(1) vs O(n)).
     this.ratSpawnTimer += dt;
-    if (this.ratSpawnTimer >= this.ratSpawnThreshold && this.activeRatCount < 2) {
+    if (
+      this.ratSpawnTimer >= this.ratSpawnThreshold &&
+      this.activeRatCount < 2
+    ) {
       this.ratSpawnTimer = 0;
       this.ratSpawnThreshold = 20000 + Math.random() * 25000;
 
       // Find a dead rat in the pool to recycle.
-      const rat = this.ratPool.find(r => !r.active);
+      const rat = this.ratPool.find((r) => !r.active);
       if (rat) {
         const goingRight = Math.random() > 0.5;
         rat.x = goingRight ? -10 : this.wW + 10;
@@ -753,7 +765,7 @@ export class Ambient {
     // Signal Room: render old firefly slots as LED indicator pixels on cave walls.
     // 3-color palette: success green / accent blue / warn amber — all opaque.
     const px = Math.max(1, Math.floor(zoom * 0.4));
-    const LED_COLORS = ["#1fa35c", "#1E7FD8", "#b07d20"] as const;
+    const LED_COLORS = [P.SUCCESS, P.ACCENT, P.WARN] as const;
 
     for (let i = 0; i < this.fireflies.length; i++) {
       const ff = this.fireflies[i];

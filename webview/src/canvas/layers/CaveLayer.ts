@@ -294,9 +294,9 @@ function drawWallDetails(
   const state = world.getAlfredState();
   const stateColor =
     state === "thinking"
-      ? P.ACCENT     // Fox blue
+      ? P.ACCENT // Fox blue
       : state === "writing"
-        ? P.SUCCESS  // success green
+        ? P.SUCCESS // success green
         : P.ACCENT_SEC; // idle — accent-secondary muted
   const stateDim =
     state === "thinking"
@@ -307,8 +307,10 @@ function drawWallDetails(
 
   // Cave reaction: wall flash overrides LED strip color.
   const reactions = world.getCaveReactions();
-  let ledColor = stateColor;
-  let ledDim = stateDim;
+  // `P` entries are `as const` literal types; widen to string so wallFlashColor
+  // (runtime hex) can be assigned without casting.
+  let ledColor: string = stateColor;
+  let ledDim: string = stateDim;
   if (reactions.wallFlashColor) {
     ledColor = reactions.wallFlashColor;
     ledDim = darken(reactions.wallFlashColor, 0.5);
@@ -410,7 +412,8 @@ function drawWallDetails(
   // Uses the seeded noise table so flicker positions are deterministic per frame,
   // but the frame index advances deterministically via now-bucket (no setTimeout).
   const flickerBucket = Math.floor(now / 120); // ~8 frames at 60fps
-  if (flickerBucket % 10 < 2) { // on for ~2 out of 10 buckets
+  if (flickerBucket % 10 < 2) {
+    // on for ~2 out of 10 buckets
     const fw1 = seed(flickerBucket * 3 + 1);
     const fw2 = seed(flickerBucket * 3 + 2);
     const fw3 = seed(flickerBucket * 3 + 7);
@@ -471,7 +474,8 @@ function drawTorch(
   const poolW = Math.floor(zoom * 8 * torchBoost);
   // P1: thinking state pool is taller by zoom*2.
   const basePoolH = Math.floor(zoom * 3 * torchBoost);
-  const poolH = alfredState === "thinking" ? basePoolH + Math.floor(zoom * 2) : basePoolH;
+  const poolH =
+    alfredState === "thinking" ? basePoolH + Math.floor(zoom * 2) : basePoolH;
   const poolX = tx - Math.floor(poolW / 2);
   const poolY = floorY - poolH;
   ctx.fillStyle = torchBoost > 1.2 ? "#2a2a48" : "#222238"; // P1: boosted → #2a2a48, normal → #222238
@@ -554,7 +558,16 @@ function drawTorches(
 
   for (let i = 0; i < torchXPositions.length; i++) {
     const frame = (baseFrame + i * 7) % 3; // offset each torch by 7 frames
-    drawTorch(ctx, torchXPositions[i], wallH, zoom, frame, floorY, torchBoost, alfredState);
+    drawTorch(
+      ctx,
+      torchXPositions[i],
+      wallH,
+      zoom,
+      frame,
+      floorY,
+      torchBoost,
+      alfredState,
+    );
   }
 }
 

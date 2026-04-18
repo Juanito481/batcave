@@ -57,7 +57,7 @@ describe("palette P", () => {
     const hexPattern = /^#[0-9a-fA-F]{6}$/;
     for (const [key, value] of Object.entries(P)) {
       if (key === "LED_COLORS") {
-        for (const c of value as string[]) {
+        for (const c of value as unknown as readonly string[]) {
           expect(c).toMatch(hexPattern);
         }
       } else {

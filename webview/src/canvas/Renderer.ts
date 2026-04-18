@@ -230,7 +230,7 @@ export class Renderer {
     // Layer 0.3: Constellation / knowledge map on the opposite wall.
     drawConstellation(rc);
 
-    // Layer 0.5: Ambient (bats, drips, dust, spiders, fireflies).
+    // Layer 0.5: Ambient (bats, drips, dust, spiders, LED wall blinks).
     this.world.getAmbient().draw(rc.ctx, zoom);
 
     // Collect all characters for shadow + sprite passes.
