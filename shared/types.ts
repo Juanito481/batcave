@@ -19,6 +19,57 @@ export interface UsageStats {
   sessionStartedAt: number;
   /** Estimated context window fill percentage (0-100). */
   contextFillPct: number;
+  /** Last delegated worker in this session, if any. v5.6+. */
+  activeWorker?: WorkerId;
+}
+
+/** Delegable workers tracked by the bishop-benchmark pipeline. v5.6+. */
+export type WorkerId =
+  | "kimi"
+  | "deepseek-chat"
+  | "deepseek-reasoner"
+  | "haiku"
+  | "sonnet"
+  | "opus";
+
+/** Task tassonomy for worker benchmark. v5.6+. */
+export type TaskType =
+  | "mechanical-edit"
+  | "boilerplate"
+  | "bug-fix-local"
+  | "refactor-multi-file"
+  | "test-generation"
+  | "copy-rewrite"
+  | "arch-reasoning";
+
+/** Worker invocation event — emitted by worker-telemetry hook on mcp__kimi__/mcp__deepseek__/SubagentStop. v5.6+. */
+export interface WorkerEvent {
+  type: "worker_call" | "worker_done";
+  worker: WorkerId;
+  /** Orchestrator model at time of call (e.g. "Claude Opus 4.7"). */
+  model: string;
+  taskType: TaskType;
+  /** Chain id if the call happened inside a Marshal chain. */
+  chainId?: string;
+  sessionId: string;
+  durationMs?: number;
+  timestamp: number;
+  source?: "hook";
+}
+
+/** Bishop verdict event — emitted when a bishop review concludes. v5.6+. */
+export interface BishopEvent {
+  type: "bishop_verdict";
+  flag: "clean" | "warn" | "block";
+  /** Worker attributed to the reviewed diff, if correlatable. */
+  worker?: WorkerId;
+  /** Orchestrator model at time of the reviewed work. */
+  model?: string;
+  taskType?: TaskType;
+  chainId?: string;
+  sessionId: string;
+  timestamp: number;
+  source?: "hook" | "chains";
 }
 
 export interface AgentEvent {
@@ -168,7 +219,9 @@ export type BatCaveEvent =
   | PromptStartEvent
   | PluginInstalledEvent
   | ChainEvent
-  | OracleEvent;
+  | OracleEvent
+  | WorkerEvent
+  | BishopEvent;
 
 export interface BatCaveConfig {
   activeRepo: string;
